@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Channel — dev: timestamp-suffix version, npm dist-tag dev, no GitHub Release. release: cli/package.json version, npm dist-tag latest, git tag v<version> + GitHub Release with binary archives.'
+        type: choice
+        options:
+          - dev
+          - release
+        default: dev
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      npm_tag: ${{ steps.compute.outputs.npm_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: compute
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          base="$(node -p "require('./npm/cli/package.json').version")"
+          if [[ "$CHANNEL" == "dev" ]]; then
+            # A dev build never carries a bare release version — the timestamp
+            # suffix keeps @dev installs strictly newer and never collides with
+            # a real release on the registry.
+            version="${base%%-*}-dev.$(date -u +%Y%m%d%H%M%S)"
+            npm_tag="dev"
+          else
+            version="$base"
+            npm_tag="latest"
+          fi
+          {
+            echo "version=$version"
+            echo "npm_tag=$npm_tag"
+          } >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC token for npm provenance attestations (Sigstore); required by
+      # `npm publish --provenance`.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Cross-compile binaries + build npm packages
+        env:
+          PAWL_VERSION: ${{ needs.prepare.outputs.version }}
+          PAWL_ARCHIVES: '1'
+        run: node npm/build.js
+
+      - name: Publish to npm
+        env:
+          NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node npm/publish.js
+
+      - name: Upload archives for the release job
+        if: inputs.channel == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pawl-archives
+          path: npm/dist/archives/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: inputs.channel == 'release'
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pawl-archives
+          path: archives
+
+      - name: Create tag + GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          if git rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::tag $tag already exists — bump npm/cli/package.json version before a release run."
+            exit 1
+          fi
+          git tag "$tag"
+          git push origin "$tag"
+
+          last="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          if [[ -n "$last" ]] && git rev-parse --verify "refs/tags/$last" >/dev/null 2>&1; then
+            notes="$(git log --pretty=format:'- %s (%h)' "${last}..HEAD")"
+            header="## Changes since \`${last}\`"
+          else
+            notes="$(git log --pretty=format:'- %s (%h)' --max-count=20)"
+            header="## Recent commits"
+          fi
+          [[ -z "$notes" ]] && notes="_No new commits._"
+          printf '%s — \`npm i -D @pawl-tools/cli@%s\`\n\n%s\n\n%s\n' \
+            "$header" "$VERSION" "Prebuilt binaries are attached below." "$notes" > /tmp/notes.md
+
+          gh release create "$tag" --title "$tag" --notes-file /tmp/notes.md archives/*

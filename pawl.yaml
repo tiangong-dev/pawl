@@ -1,0 +1,35 @@
+# pawl gates its own Go source — the ratchet dogfoods itself in CI (`pawl check`
+# runs in .github/workflows/ci.yml). Zero-dependency primitives only, so the
+# self-check needs nothing but the repo, matching pawl's own self-contained ethos.
+snapshot: "pawl.snapshot.json"
+
+dimensions:
+  - id: "file-length"
+    title: "Go files over 500 lines"
+    direction: "lower-is-better"
+    gate: "total"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*.go"]
+
+  # pawl reports failures as error returns, never panics; the one legitimate
+  # invariant panic (json.Marshal of a string) holds the baseline at 1.
+  - id: "panics"
+    title: "panic() calls in non-test code"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "pattern-count"
+    options:
+      pattern: 'panic\('
+      include: ["**/*.go"]
+      exclude: ["**/*_test.go"]
+
+  - id: "todo-markers"
+    title: "TODO / FIXME markers"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "pattern-count"
+    options:
+      pattern: 'TODO|FIXME'
+      include: ["**/*.go"]

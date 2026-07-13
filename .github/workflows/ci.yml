@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  # Upsert the ratchet + release-path summary comment on the PR.
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # baseline-guard compares the PR's snapshot against origin/main.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo '::error::run gofmt'; exit 1; }
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: node distribution tests
+        run: node --test npm/cli/test/*.test.js
+      # pawl gates its own Go source (dogfooding — the self-closed loop).
+      - name: Build pawl
+        run: go build -o /tmp/pawl ./cmd/pawl
+      - name: Self-check (pawl on pawl)
+        run: |
+          set -o pipefail
+          /tmp/pawl check | tee /tmp/pawl-check.txt
+      - name: Guard pawl's own baseline
+        if: github.event_name == 'pull_request'
+        run: /tmp/pawl baseline-guard origin/main
+      # Validate the whole release path on the PR — a publish-time break
+      # (e.g. a non-package dir under dist/) then fails here, before merge,
+      # instead of on the release run after it.
+      - name: Validate npm release path (build + dry-run publish)
+        id: releasepath
+        if: github.event_name == 'pull_request'
+        run: |
+          PAWL_ARCHIVES=1 node npm/build.js
+          PAWL_DRY_RUN=1 node npm/publish.js
+      - name: Comment ratchet + release-path summary on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          RELEASE_OUTCOME: ${{ steps.releasepath.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pawl-ci -->';
+            const table = fs.existsSync('/tmp/pawl-check.txt')
+              ? fs.readFileSync('/tmp/pawl-check.txt', 'utf8').trim()
+              : '(self-check produced no output)';
+            const outcome = process.env.RELEASE_OUTCOME;
+            const releaseLine =
+              outcome === 'success' ? '✅ npm release path validated (build + dry-run publish)'
+              : outcome === 'failure' ? '❌ npm release path is broken — a real publish would fail'
+              : `⏭️ npm release path not validated (${outcome || 'skipped'})`;
+            const body = [
+              marker,
+              `## pawl CI · \`${context.sha.slice(0, 7)}\``,
+              '',
+              '### Quality ratchet (pawl on pawl)',
+              '```',
+              table,
+              '```',
+              '',
+              releaseLine,
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

@@ -1,0 +1,56 @@
+name: 'setup-pawl'
+description: 'Install the pawl quality ratchet and put it on PATH (prebuilt binary, no Go or Node required).'
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  version:
+    description: 'Release to install: a tag like v0.1.0, or "latest".'
+    required: false
+    default: 'latest'
+
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash
+      env:
+        PAWL_VERSION: ${{ inputs.version }}
+        # Authenticated API calls avoid the unauthenticated rate limit when
+        # resolving "latest"; github.token is always available in a workflow.
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux)   plat=linux;  ext=tar.gz; bin=pawl ;;
+          macOS)   plat=darwin; ext=tar.gz; bin=pawl ;;
+          Windows) plat=win32;  ext=zip;    bin=pawl.exe ;;
+          *) echo "::error::setup-pawl: unsupported runner OS '$RUNNER_OS'"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64)   arch=x64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::setup-pawl: unsupported runner arch '$RUNNER_ARCH'"; exit 1 ;;
+        esac
+
+        ver="$PAWL_VERSION"
+        if [ "$ver" = latest ]; then
+          ver="$(gh release view --repo tiangong-dev/pawl --json tagName --jq .tagName)"
+        fi
+        num="${ver#v}"
+        asset="pawl-${num}-${plat}-${arch}.${ext}"
+        url="https://github.com/tiangong-dev/pawl/releases/download/${ver}/${asset}"
+
+        dest="${RUNNER_TEMP}/pawl-bin"
+        mkdir -p "$dest"
+        echo "setup-pawl: downloading $asset ($ver)"
+        curl -fsSL "$url" -o "${RUNNER_TEMP}/${asset}"
+        if [ "$ext" = zip ]; then
+          unzip -oq "${RUNNER_TEMP}/${asset}" -d "$dest"
+        else
+          tar -xzf "${RUNNER_TEMP}/${asset}" -C "$dest"
+        fi
+        chmod +x "${dest}/${bin}" 2>/dev/null || true
+        echo "$dest" >> "$GITHUB_PATH"
+        echo "setup-pawl: installed pawl $ver to $dest"

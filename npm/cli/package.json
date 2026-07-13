@@ -1,0 +1,29 @@
+{
+  "name": "@pawl-tools/cli",
+  "version": "0.1.2",
+  "description": "pawl — language-agnostic anti-regression quality ratchet (prebuilt binary distribution)",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tiangong-dev/pawl.git"
+  },
+  "bin": {
+    "pawl": "bin/pawl.js"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@pawl-tools/cli-darwin-arm64": "0.1.2",
+    "@pawl-tools/cli-darwin-x64": "0.1.2",
+    "@pawl-tools/cli-linux-arm64": "0.1.2",
+    "@pawl-tools/cli-linux-x64": "0.1.2",
+    "@pawl-tools/cli-win32-arm64": "0.1.2",
+    "@pawl-tools/cli-win32-x64": "0.1.2"
+  }
+}
