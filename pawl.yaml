@@ -1,4 +1,4 @@
-# pawl gates its own Go source — the ratchet dogfoods itself in CI (`pawl check`
+# pawl gates its own Go source — the gate dogfoods itself in CI (`pawl check`
 # runs in .github/workflows/ci.yml). Zero-dependency primitives only, so the
 # self-check needs nothing but the repo, matching pawl's own self-contained ethos.
 snapshot: "pawl.snapshot.json"

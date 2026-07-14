@@ -1,10 +1,10 @@
 # pawl
 
-**一个语言无关的「防劣化」质量棘轮(anti-regression quality ratchet)。**
+**一个语言无关的防劣化质量门禁(anti-regression quality gate)。**
 
 English docs: [README.md](./README.md) · 完整行为契约见 [SPEC.md](./SPEC.md)。
 
-每个**维度(dimension)** 测量一个数字——超长文件数、重复代码行、超过复杂度阈值的函数、测试覆盖率……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就让 CI 失败**。数字只能持平或变好——棘轮永不倒退。
+每个**维度(dimension)** 测量一个数字——超长文件数、重复代码行、超过复杂度阈值的函数、测试覆盖率……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就让 CI 失败**。数字只能持平或变好——门禁永不倒退。
 
 ```bash
 pawl record                     # 测量全部维度,写入基线
@@ -17,9 +17,9 @@ pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 
 ---
 
-## 为什么用棘轮?
+## 为什么用质量门禁?
 
-一刀切的阈值("覆盖率必须 ≥ 80%")要么第一天就把团队卡死,要么松到永远不触发。棘轮换个思路:锁定**你今天所在的位置**,只允许变好——加了 600 行的文件、多了一个 `as any`、覆盖率下降的 PR 会失败;删掉它们的 PR 则把基线重新压低。你单调地偿还技术债,却从不用去拍一个魔法数字。
+一刀切的阈值("覆盖率必须 ≥ 80%")要么第一天就把团队卡死,要么松到永远不触发。防劣化质量门禁换个思路:锁定**你今天所在的位置**,只允许变好——加了 600 行的文件、多了一个 `as any`、覆盖率下降的 PR 会失败;删掉它们的 PR 则把基线重新压低。你单调地偿还技术债,却从不用去拍一个魔法数字。
 
 pawl 守护的不只是数字,还有**诚实性**:
 
@@ -66,7 +66,7 @@ dimensions:
 
 ```bash
 pawl record
-git add pawl.yaml pawl.snapshot.json && git commit -m "chore: 接入 pawl 棘轮"
+git add pawl.yaml pawl.snapshot.json && git commit -m "chore: 接入 pawl 门禁"
 ```
 
 **3. 门禁每个 PR**——有维度回归时 `pawl check` 退出码 `1`:
@@ -188,7 +188,7 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 经 npm 用 `npx` 跑(或下载 release 二进制):
 
 ```yaml
-ratchet:
+quality-gate:
   image: node:22
   script:
     - npx -y @pawl-tools/cli@0.1.2 check
@@ -200,7 +200,7 @@ ratchet:
 
 ## 边界(设计决策)
 
-pawl 是**棘轮 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./SPEC.md)。
+pawl 是**质量门禁 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./SPEC.md)。
 
 ## 许可证
 

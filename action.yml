@@ -1,5 +1,5 @@
 name: 'setup-pawl'
-description: 'Install the pawl quality ratchet and put it on PATH (prebuilt binary, no Go or Node required).'
+description: 'Install the pawl quality gate and put it on PATH (prebuilt binary, no Go or Node required).'
 branding:
   icon: 'check-circle'
   color: 'green'

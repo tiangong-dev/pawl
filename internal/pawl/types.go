@@ -1,4 +1,4 @@
-// Package pawl is a language-agnostic anti-regression quality ratchet: each
+// Package pawl is a language-agnostic anti-regression quality gate: each
 // dimension measures one number, record snapshots the numbers, check fails when
 // any dimension regresses against the snapshot. See SPEC.md for the frozen
 // behavioral contract this package implements.
