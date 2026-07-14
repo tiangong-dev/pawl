@@ -1,6 +1,7 @@
 # pawl gates its own Go source — the gate dogfoods itself in CI (`pawl check`
-# runs in .github/workflows/ci.yml). Zero-dependency primitives only, so the
-# self-check needs nothing but the repo, matching pawl's own self-contained ethos.
+# runs in .github/workflows/ci.yml). Zero external dependencies (built-in
+# primitives plus a POSIX-grep exec adapter that dogfoods the extract layer), so
+# the self-check needs nothing but the repo, matching pawl's self-contained ethos.
 snapshot: "pawl.snapshot.json"
 
 dimensions:
@@ -33,3 +34,16 @@ dimensions:
     options:
       pattern: 'TODO|FIXME'
       include: ["**/*.go"]
+
+  # An exec adapter dogfooding the declarative `extract` layer: no wrapper
+  # script, just a POSIX grep whose `path:line` output the regex turns into a
+  # per-file-count breakdown. Guards an architectural invariant — pawl writes
+  # through the injected io.Writer, so a bare fmt.Print* to stdout (which bypasses
+  # testable output) must not creep in. Baseline is 0.
+  - id: "stray-prints"
+    title: "Bare fmt.Print* (write via the injected io.Writer instead)"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    command: "grep -rnE 'fmt\\.Print(ln|f)?\\(' internal cmd --include='*.go' | grep -v _test.go || true"
+    extract:
+      regex: '^(?P<path>[^:]+):(?P<line>\d+):'
