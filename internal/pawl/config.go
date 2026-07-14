@@ -14,7 +14,8 @@ const defaultSnapshotName = "pawl.snapshot.json"
 const defaultTimeout = 10 * time.Minute
 
 // Dimension is one configured quality dimension, validated and ready to
-// measure. Exactly one of Command / Builtin is set.
+// measure. Exactly one of Command / Builtin is set. Extract is set only on a
+// Command dimension that derives its measurement from raw output declaratively.
 type Dimension struct {
 	ID        string
 	Title     string
@@ -25,6 +26,7 @@ type Dimension struct {
 	Command   string
 	Builtin   string
 	Options   map[string]any
+	Extract   *ExtractSpec
 }
 
 // GateSpecOf is the dimension's comparison contract for RegressionsOf.
@@ -60,6 +62,7 @@ type dimensionConfig struct {
 	Command   string         `yaml:"command"`
 	Builtin   string         `yaml:"builtin"`
 	Options   map[string]any `yaml:"options"`
+	Extract   any            `yaml:"extract"`
 }
 
 // LoadConfig reads and validates a pawl.yaml. Every validation failure is an
@@ -148,6 +151,17 @@ func validateDimension(index int, d dimensionConfig) (Dimension, error) {
 			return fail("%s", err)
 		}
 	}
+	var extract *ExtractSpec
+	if d.Extract != nil {
+		if d.Builtin != "" {
+			return fail("extract is an exec-adapter feature and cannot be set on a builtin dimension")
+		}
+		spec, err := parseExtract(d.Extract)
+		if err != nil {
+			return fail("extract: %s", err)
+		}
+		extract = spec
+	}
 	return Dimension{
 		ID:        d.ID,
 		Title:     d.Title,
@@ -158,6 +172,7 @@ func validateDimension(index int, d dimensionConfig) (Dimension, error) {
 		Command:   d.Command,
 		Builtin:   d.Builtin,
 		Options:   d.Options,
+		Extract:   extract,
 	}, nil
 }
 

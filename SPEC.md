@@ -33,7 +33,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>]
 
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
@@ -45,6 +45,12 @@ pawl [command] [-c <config>]
 
 - No command defaults to `check`.
 - `-c <path>` selects the config file; default `./pawl.yaml`.
+- `--format <text|json>` selects the output format of `record`/`check`/`diff`;
+  default `text`. `json` is specified in [§ Machine-readable output](#machine-readable-output).
+  `baseline-guard` ignores `--format` (its output is not tabular).
+- `--since <ref>` scopes `check` (only) to lines changed since `<ref>`, specified
+  in [§ Diff-scoped checking](#diff-scoped-checking). `--since` on any command
+  other than `check` is a usage error (exit 2).
 - Unknown command → stderr message naming valid commands, exit 2.
 - `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
   stdout and exit 0 **without reading any config file** — they must work in a
@@ -91,6 +97,9 @@ dimensions:
 Validation errors (all exit 2): missing/duplicate `id`, missing `title`, missing or
 invalid `direction`, invalid `gate`, both or neither of `command`/`builtin`, unknown
 `builtin` name, invalid builtin options (bad regexp, missing `include`, …),
+`extract` set on a `builtin` dimension (extract is an exec-adapter feature),
+unknown `extract` form, an `extract` object with neither/both of `regex`/`json_path`,
+an uncompilable `extract.regex`, an empty `extract.json_path`,
 zero dimensions, unparseable YAML, config file not found.
 
 ## Exec adapter contract
@@ -113,6 +122,103 @@ zero dimensions, unparseable YAML, config file not found.
   must never be conflated.
 - All dimensions are measured concurrently. A progress line `  measuring <id>…`
   is written to stderr as each measurement starts.
+
+## Declarative extract layer
+
+The raw exec contract demands the command emit `{value,unit,breakdown}` JSON —
+so measuring anything trivial (a line count, a grep tally, one number in a JSON
+report) forces a wrapper script whose only job is to reformat. The optional
+`extract` field removes that wrapper: the command emits its tool's **raw
+output**, and pawl derives the measurement from it declaratively.
+
+- `extract` is valid **only** on a `command` dimension (never `builtin`). A
+  `command` dimension with no `extract` keeps the raw JSON contract above,
+  unchanged.
+- The command runs under the same execution environment as an exec adapter
+  (`sh -c`, config-dir cwd, `PAWL_ROOT`, stderr passthrough, timeout).
+- **The command must exit 0.** A non-zero exit, a timeout, or output that
+  cannot be extracted per the declared form is a *measurement failure* (exit 2,
+  naming the dimension) — never a silent zero. (Note: tools like `grep` exit 1
+  when they find nothing; wrap such a command so it exits 0, e.g.
+  `grep -c foo || true`, or the empty result reads as a failure.)
+- The extracted `unit` defaults to `"count"`. The object forms
+  (`regex`/`json_path`) accept an optional `unit` string.
+
+Four forms — the scalar forms are a bare YAML string, the object forms a map:
+
+### `extract: number`
+
+The command's trimmed stdout must be exactly one finite number → `value`.
+No breakdown. Stdout that is empty, non-numeric, or more than one token is a
+measurement failure.
+
+```yaml
+- id: todo-count
+  command: "grep -rc TODO src | awk -F: '{s+=$2} END{print s+0}'"
+  direction: "lower-is-better"
+  extract: number
+```
+
+### `extract: lines`
+
+`value` = the number of **non-empty** lines on stdout (a line is empty if it is
+blank after trimming trailing `\r`/whitespace). No breakdown. Intended for
+"count the matches this command printed".
+
+```yaml
+- id: nolint
+  command: "grep -rn nolint src || true"
+  direction: "lower-is-better"
+  extract: lines
+```
+
+### `extract: { regex: "<Go regexp>", unit?: "<unit>" }`
+
+The regexp is applied to each **non-empty** stdout line.
+- **Every non-empty line must match**, or the run is a measurement failure —
+  this is the honesty guard: a mistyped regexp that matches nothing would
+  otherwise report `value = 0` and lie. Filter summary/noise lines out in the
+  command so only findings reach pawl.
+- `value` = the number of matching lines.
+- If the regexp declares a named capture group `path`, a breakdown is built:
+  key = `"<path>:<line>"` where `<line>` is the `line` named group if present
+  (else `0`), and each matching line contributes `+1` to its key. With no
+  `path` group, `breakdown` is null (scalar-only).
+- v1 does **not** sum a numeric capture group into `value` (no second numeric
+  semantics) and does **not** offer an "ignore unmatched lines" escape hatch.
+
+```yaml
+- id: golangci
+  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  extract:
+    regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
+```
+
+### `extract: { json_path: "<dotted path>", unit?: "<unit>" }`
+
+The command's stdout is parsed as JSON; the dotted `json_path` (e.g.
+`total.lines.pct`) is navigated to a finite number → `value`. No breakdown.
+A malformed document, a missing key, a non-object midway, or a non-numeric leaf
+is a measurement failure — never a silent zero. This covers the "read one
+number from a tool's stdout JSON" case; it does **not** replace the `json-value`
+builtin's `file`/stale-artifact-protection semantics.
+
+```yaml
+- id: coverage
+  command: "go test -coverprofile=c.out ./... >/dev/null && gocov ..."
+  direction: "higher-is-better"
+  extract:
+    json_path: "total.lines.pct"
+    unit: "%"
+```
+
+Extract is a strictly additive convenience over the exec contract: the same
+concurrency, `PAWL_ROOT`, timeout, and fail-loud rules apply, and the six
+built-in adapters are **not** deprecated — they carry tool-specific exit-code
+handling, stale-report protection, path relativization, and threshold semantics
+that a raw regexp cannot.
 
 ## Built-in adapters
 
@@ -303,6 +409,20 @@ improves, file B worsens, total unchanged).
   breakdown are ignored (removal is legitimate); keys new in current are ignored
   (they had no baseline).
 
+**Known limits (choose the gate accordingly).** `per-file-count` is the strong
+net-zero defense for *issue-count* dimensions: swapping a fix in file A for a new
+offender in file B fails because B's per-file count rose. It is deliberately
+lenient *within* one file — if a file drops one offender and gains another, its
+count is unchanged and the gate passes (offenders moving inside a file is
+expected churn, not regression). `per-key-value` only guards keys that exist in
+the baseline: a brand-new key elsewhere that a deletion nets to zero on the total
+is not caught by the per-key check (only the scalar total would, and only if it
+rose). And because keys are `"path:line"`, a pure line-number shift changes a
+key's identity — so `per-key-value` is a fit for **stable-key numeric**
+dimensions (a fixed set of keys whose *values* move), while `per-file-count` is
+the fit for **issue-count** dimensions (offenders coming and going). Neither gate
+is a total net-zero proof; they are targeted defenses for their intended shape.
+
 Regression detail lines (exact formats, `<n>` in minimal decimal notation):
 
 - scalar: `total <base> → <cur>`
@@ -379,6 +499,138 @@ file-length          3          4      +1  ❌ worse
   `::error title=pawl: <id>::<title> regressed: <base> → <cur>`. Annotations are
   additive — the human-readable `❌ regressions:` block always prints too.
 - `record` prints the table, writes the snapshot, prints `📸 snapshot written to <path>`.
+
+## Machine-readable output
+
+`--format json` makes `record`/`check`/`diff` print **exactly one JSON object**
+to stdout and nothing else (no table, no `❌ regressions:` block, no emoji, and
+— because stdout must stay pure JSON — no `::error::`/`::notice::` GitHub
+annotations). stderr (the `measuring <id>…` progress lines) is unchanged. The
+exit code is identical to text mode. This is pawl's own stable verdict schema —
+deliberately not rdjson, which cannot express a scalar total, an improvement, or
+a `--since` suppression.
+
+```json
+{
+  "schema_version": 1,
+  "command": "check",
+  "mode": "full",
+  "since": null,
+  "exit_code": 1,
+  "metrics": [
+    {
+      "id": "eslint",
+      "title": "ESLint issues",
+      "direction": "lower-is-better",
+      "gate": "per-file-count",
+      "unit": "issues",
+      "base": 10,
+      "current": 12,
+      "status": "worse",
+      "improved": false,
+      "regressions": [
+        {
+          "kind": "per-file-count",
+          "key": "src/a.ts:5",
+          "path": "src/a.ts",
+          "line": 5,
+          "base": 0,
+          "current": 1,
+          "message": "src/a.ts  0 → 1",
+          "suppressed": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+- Top level: `schema_version` (int, currently `1`), `command`
+  (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
+  when `mode` is `since`, else `null`), `exit_code` (the process exit code), and
+  `metrics` — an array **sorted by `id`**.
+- Each metric: `id`, `title`, `direction`, `gate` (`total` when unset), `unit`,
+  `base` (the baseline value, `null` when the dimension is new), `current` (the
+  measured value), `status` (`new`/`worse`/`within-tolerance`/`better`/`same`,
+  the emoji-free form of the table status), `improved` (bool — scalar strictly
+  improved), and `regressions` (array, empty when none).
+- Each regression: `kind` (`total`/`per-file-count`/`per-key-value`), `key`
+  (the breakdown key, `null` for a `total` regression), `path` and `line`
+  (parsed from `key`; both `null` for `total`, `line` `null` when the key has no
+  numeric line), `base` and `current` (the two compared numbers — for `total`
+  the scalar values, for `per-file-count` the offender counts, for
+  `per-key-value` the key's values), `message` (the exact text-mode detail line),
+  and `suppressed` (bool — `true` only in `--since` mode when this regression was
+  exempted for falling outside the changed lines; always `false` in `full` mode).
+- Regressions within a metric are ordered as in text mode; `suppressed` ones are
+  still listed (so the JSON is a faithful record) but do not affect `exit_code`.
+
+## Diff-scoped checking
+
+`pawl check --since <ref>` runs the normal gate — measure every dimension,
+compare against the snapshot — then **scopes the verdict to lines changed since
+`<ref>`**, so pre-existing debt does not block a PR while new regressions still
+fail. It is the gate narrowed to new code, **not** a standalone new-code
+scanner: it still requires the snapshot (missing snapshot → exit 2, like
+`check`). `--since` is valid only on `check`.
+
+**Changed-line set.** `git merge-base <ref> HEAD` (in `cfg.Dir`), then
+`git diff --unified=0 --no-ext-diff <merge-base>..HEAD`; the added (`+`) lines
+give `map[repo-relative path]set<new line number>`. Breakdown keys are
+config-dir-relative, git paths are repo-toplevel-relative, so keys are converted
+to repo-relative via `cfg.Dir`'s position under `git rev-parse --show-toplevel`
+before intersecting. Failure to resolve the ref, compute a merge-base (e.g. a
+shallow clone with no common ancestor), or run the diff is a measurement-style
+failure → exit 2 (never a silent "nothing changed").
+
+**Scoping rule, per dimension.** The 1-vs-2 exit split is preserved (measurement
+failures are still exit 2).
+
+Only `per-file-count` is diff-scoped; the others are enforced in full. This
+keeps `--since` **exactly the full-mode verdict, narrowed to added lines** —
+never inventing a regression full mode wouldn't raise, never dropping one it
+would.
+
+- **`total` and `per-key-value` dimensions** — enforced **at full strength** (the
+  normal verdict, unscoped). A scalar total has no line to attribute; a
+  `per-key-value` scalar is not a sum of its breakdown and its gate ignores new
+  keys, so scoping it would diverge from full mode. Both are *not* silently
+  exempted — the output lists them as "enforced in full". A `per-file-count`
+  dimension with **no breakdown** is treated the same way.
+- **`per-file-count` dimension (with a breakdown)** — its scalar is the count /
+  sum of a `path:line` breakdown, so every contributor to a regression has a
+  line and can be scoped. The verdict is **re-derived from the breakdown against
+  the added lines**: a key is a *worse* offender when it is new, or when its
+  value grew on an already-present key (a line edited to carry more offenders) —
+  direction-agnostic, exactly what moves the full-mode count/scalar. A worse key
+  is a **live** regression if its `"path:line"` lies on an added line, and
+  `suppressed` (exempted) if on an unchanged line.
+  - A worse key that is **not line-addressable** (`line` 0, no line, or a
+    file-only key) cannot be proven pre-existing, so it is counted **live**
+    (conservative — when in doubt, gate) and noted as an unscopeable offender.
+  - The scalar total is **not** re-counted here (the per-key pass accounts for
+    every contributor), but if it regressed it is still **listed** as a
+    `suppressed` regression so the JSON stays a faithful record that the total
+    moved.
+
+**Line-based approximation.** Scoping is by line number, not content hash, so it
+inherits `git diff`'s notion of a changed line (as do reviewdog, diff-cover, and
+Sonar's clean-as-you-code). Two consequences: a pre-existing offender whose line
+content is unchanged but shifts position is tracked by git as context and is
+**not** flagged (ordinary code motion doesn't trip the gate); but an offender on
+a line whose content genuinely changed is flagged even if it "morally" moved
+there — pawl cannot tell "moved" from "new" without hashing. This errs on the
+safe side (it never under-reports a changed line) and is why `--since` is
+line-precise rather than the full mode's per-file key count. It also assumes the
+adapter's breakdown fully accounts for its scalar; a deliberately partial
+breakdown could hide a scalar rise the per-key pass never sees.
+
+**Output.** Text mode prints a banner naming the mode, the `<ref>`, the resolved
+merge-base short SHA, the dimensions scoped vs. enforced-in-full, and the count
+of pre-existing regressions exempted. `--format json` sets `mode: "since"`,
+`since: "<ref>"`, and carries `suppressed: true` on each exempted regression.
+The exit code is 1 iff any live (non-suppressed) regression remains — including
+a full-strength `total` regression — else 0.
 
 ## Public Go API (package `pawl`)
 

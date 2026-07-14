@@ -21,6 +21,8 @@ var Version = "dev"
 func RunCLI(args []string, stdout, stderr io.Writer) int {
 	command := ""
 	configPath := "pawl.yaml"
+	format := "text"
+	since := ""
 	versionRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -32,6 +34,20 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
+		case args[i] == "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--format requires a value (text|json)\n")
+				return 2
+			}
+			i++
+			format = args[i]
+		case args[i] == "--since":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--since requires a git ref\n")
+				return 2
+			}
+			i++
+			since = args[i]
 		case args[i] == "--version":
 			versionRequested = true
 		case strings.HasPrefix(args[i], "-"):
@@ -40,6 +56,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		default:
 			positional = append(positional, args[i])
 		}
+	}
+	if format != "text" && format != "json" {
+		fmt.Fprintf(stderr, "--format must be text or json, got %q\n", format)
+		return 2
 	}
 	if len(positional) > 0 {
 		command = positional[0]
@@ -58,6 +78,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | version\n", command)
 		return 2
 	}
+	if since != "" && command != "check" {
+		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
+		return 2
+	}
 
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -72,10 +96,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
 	}
-	return runMeasureCommand(cfg, command, stdout, stderr)
+	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
 }
 
-func runMeasureCommand(cfg *Config, command string, stdout, stderr io.Writer) int {
+func runMeasureCommand(cfg *Config, command, format, since string, stdout, stderr io.Writer) int {
 	baseline, parsedBaseline, err := ReadSnapshotFile(cfg.SnapshotPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -111,15 +135,67 @@ func runMeasureCommand(cfg *Config, command string, stdout, stderr io.Writer) in
 	}
 
 	if command == "record" {
-		printTable(stdout, cfg, baseline, current, nil)
-		if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
+		return finishRecord(cfg, format, baseline, current, stdout, stderr)
+	}
+
+	// check / diff. The report is the machine-readable and diff-scoped source of
+	// truth; the legacy text path stays the byte-for-byte human default.
+	rep := buildReport(command, cfg, baseline, current)
+	var scope *sinceScope
+	if since != "" {
+		s, code := applySinceScope(cfg, rep, baseline, current, since, stderr)
+		if code != 0 {
+			return code
+		}
+		scope = s
+	}
+	exit := 0
+	if command == "check" && hasLiveRegression(rep) {
+		exit = 1
+	}
+	rep.ExitCode = exit
+
+	if format == "json" {
+		if err := renderReportJSON(stdout, rep); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		fmt.Fprintf(stdout, "📸 snapshot written to %s\n", displayPath(cfg.SnapshotPath))
+		return exit
+	}
+	if since != "" {
+		renderSinceText(stdout, rep, scope)
+		return exit
+	}
+	return renderCheckTextLegacy(cfg, command, baseline, current, stdout)
+}
+
+// finishRecord writes the snapshot, then prints either the human table + 📸 line
+// or, under --format json, the verdict object. The snapshot write happens BEFORE
+// any stdout so a write failure exits 2 without having already emitted an
+// `exit_code: 0` verdict it can't take back.
+func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[string]Metric, stdout, stderr io.Writer) int {
+	if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if format == "json" {
+		rep := buildReport("record", cfg, baseline, current)
+		rep.ExitCode = 0
+		if err := renderReportJSON(stdout, rep); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
 		return 0
 	}
+	printTable(stdout, cfg, baseline, current, nil)
+	fmt.Fprintf(stdout, "📸 snapshot written to %s\n", displayPath(cfg.SnapshotPath))
+	return 0
+}
 
+// renderCheckTextLegacy is the byte-for-byte human default output for
+// non-diff-scoped check/diff: the table, the regression block, the improvement
+// hint, and (for check under CI) the GitHub annotations and notice.
+func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, current map[string]Metric, stdout io.Writer) int {
 	type regression struct {
 		dim    Dimension
 		detail []string
