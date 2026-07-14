@@ -1,6 +1,6 @@
 {
   "name": "@pawl-tools/cli",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "pawl — language-agnostic anti-regression quality gate (prebuilt binary distribution)",
   "license": "MIT",
   "type": "module",
@@ -19,11 +19,11 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@pawl-tools/cli-darwin-arm64": "0.1.2",
-    "@pawl-tools/cli-darwin-x64": "0.1.2",
-    "@pawl-tools/cli-linux-arm64": "0.1.2",
-    "@pawl-tools/cli-linux-x64": "0.1.2",
-    "@pawl-tools/cli-win32-arm64": "0.1.2",
-    "@pawl-tools/cli-win32-x64": "0.1.2"
+    "@pawl-tools/cli-darwin-arm64": "0.2.0",
+    "@pawl-tools/cli-darwin-x64": "0.2.0",
+    "@pawl-tools/cli-linux-arm64": "0.2.0",
+    "@pawl-tools/cli-linux-x64": "0.2.0",
+    "@pawl-tools/cli-win32-arm64": "0.2.0",
+    "@pawl-tools/cli-win32-x64": "0.2.0"
   }
 }

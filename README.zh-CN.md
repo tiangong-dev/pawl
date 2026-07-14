@@ -89,6 +89,8 @@ pawl check
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令**不会**默认成 `check`。
 
+**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。
+
 ### 退出码
 
 | 码 | 含义 |
@@ -157,6 +159,26 @@ dimensions:
 
 > 任何项目迁移到 pawl 都靠这个——不需要 pawl 理解它的工具:把现有测量包成一条打印上述 JSON 的命令即可。
 
+### 免写 wrapper:`extract`
+
+当工具本身就打印数字(或一列可 grep 的发现)时,在 `command` 维度上声明 `extract`,pawl 直接派生测量——不用再写只为拼 JSON 的 wrapper 脚本。四种形态:
+
+```yaml
+- id: todos
+  command: "grep -rn TODO src || true"
+  direction: "lower-is-better"
+  extract: lines            # value = 非空行数
+
+- id: golangci
+  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  extract:
+    regex: '^(?P<path>[^:]+):(?P<line>\d+):'   # value = 匹配数;path/line → breakdown
+```
+
+另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:非 0 退出、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。细节见 [SPEC.md § Declarative extract layer](./SPEC.md)。
+
 ## gate 模式
 
 标量总数**始终**会被检查(带 `tolerance`)。在其之上再叠一层 per-breakdown 检查,防止局部回归躲在净零总数背后(文件 A 变好、文件 B 变差、总数不变):
@@ -167,6 +189,8 @@ dimensions:
 
 `tolerance` 是向变差方向的绝对容差;正好卡在边界上算通过。`higher-is-better` 与 `lower-is-better` 会把比较方向反过来。
 
+按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./SPEC.md#gate-modes) 写清了各自的边界。
+
 ## CI 集成
 
 pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
@@ -174,9 +198,9 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 ### GitHub Actions
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.1.2   # 把 pawl 二进制放进 PATH——无需 Go/Node
+- uses: tiangong-dev/pawl@v0.2.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
-    version: v0.1.2                # 可选;默认取最新 release
+    version: v0.2.0                # 可选;默认取最新 release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # PR 上跑
 ```
@@ -191,12 +215,24 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.1.2 check
+    - npx -y @pawl-tools/cli@0.2.0 check
 ```
 
 ### 防篡改
 
 `pawl check` 只证明磁盘上的快照与一次新鲜测量一致——不证明快照的历史是诚实的。`pawl baseline-guard <base-ref>` 把已提交的快照与 PR 目标分支对比,若被手改成更差的值就失败。在 PR 上与 `check` 一起跑。
+
+## diff 收窄检查
+
+`pawl check --since <ref>` 保留完整门禁,但**只对相对 `<ref>` 改动的行上引入的回归失败**——未触碰行上的存量债务被豁免,于是庞大的历史基线不会卡住每个 PR,而新代码依然不能回归。它仍然需要快照(是"收窄到新代码的门禁",不是独立的新代码扫描器)。
+
+```bash
+pawl check --since origin/main        # PR 上:只对改动行门禁
+```
+
+`per-file-count` 维度(breakdown key 是 `"path:line"`、标量=offender 计数)会被收窄到新增行;`total` 与 `per-key-value` 维度无法忠实按行归属,**按全量强制**(会被显式标注,绝不静默跳过)——这样 `--since` 恰好是"full-mode 裁决收窄到改动行",不多不少。输出会报告 merge-base、哪些维度被全量强制、以及有多少条存量回归被豁免;加 `--format json` 得到机器可读形式(`mode: "since"`,每条被豁免的回归标 `suppressed`)。
+
+作用域按**行号**(与 reviewdog / Sonar clean-as-you-code 同):内容未变、只是位置移动的存量 offender 不会被 flag,但落在**内容真正改动的行**上的 offender 即使"是移过来的"也会计入——它从不漏报改动行。细节见 [SPEC.md](./SPEC.md#diff-scoped-checking)。
 
 ## 边界(设计决策)
 

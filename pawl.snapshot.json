@@ -14,6 +14,12 @@
         "internal/pawl/snapshot.go:119": 1
       }
     },
+    "stray-prints": {
+      "direction": "lower-is-better",
+      "value": 0,
+      "unit": "count",
+      "breakdown": {}
+    },
     "todo-markers": {
       "direction": "lower-is-better",
       "value": 0,

@@ -82,6 +82,9 @@ func measureOne(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, er
 	if dim.Builtin != "" {
 		return measureBuiltin(cfg, dim, stderr)
 	}
+	if dim.Extract != nil {
+		return measureExtract(cfg, dim, stderr)
+	}
 	return measureExec(cfg, dim, stderr)
 }
 

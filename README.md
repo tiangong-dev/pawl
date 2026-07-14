@@ -107,6 +107,11 @@ pawl check
 `-c <path>` selects the config file (default `./pawl.yaml`). No command defaults
 to `check`.
 
+**Flags.** `--format json` makes `record`/`check`/`diff` print a stable
+machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl stays
+the gate, any reporter consumes the JSON. `check --since <ref>` scopes the gate to
+lines changed since `<ref>` ([clean-as-you-code](#diff-scoped-checking)).
+
 ### Exit codes
 
 | code | meaning |
@@ -189,6 +194,32 @@ keys for `per-file-count`, or named keys (`"pkg-a": 91.2`) for `per-key-value`.
 > This is how any project migrates onto pawl without pawl needing to understand
 > its tools: wrap the existing measurement in a command that prints that JSON.
 
+### Skip the wrapper: `extract`
+
+When the tool already prints the number (or a greppable finding list), declare
+`extract` on the `command` dimension and pawl derives the measurement — no JSON
+wrapper script. Four forms:
+
+```yaml
+- id: todos
+  command: "grep -rn TODO src || true"
+  direction: "lower-is-better"
+  extract: lines            # value = non-empty line count
+
+- id: golangci
+  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  extract:
+    regex: '^(?P<path>[^:]+):(?P<line>\d+):'   # value = matches; path/line → breakdown
+```
+
+Also `extract: number` (stdout is one number) and `extract: { json_path: "a.b.c" }`
+(read one number from the command's stdout JSON). Same honesty rule: a non-zero
+exit, or output that can't be extracted, is a measurement failure (exit 2) — with
+`regex`, every non-empty line must match, so a mistyped pattern can't report a
+silent zero. Details in [SPEC.md § Declarative extract layer](./SPEC.md).
+
 ## Gate modes
 
 The scalar total is **always** checked (with `tolerance`). A per-breakdown check
@@ -207,6 +238,12 @@ improves, file B worsens, total unchanged):
 `tolerance` is absolute slack in the worse direction; a value exactly at the
 boundary passes. `higher-is-better` and `lower-is-better` flip the comparison.
 
+Pick the gate for the shape: `per-file-count` is the strong net-zero defense for
+*issue-count* dimensions (offenders coming and going); `per-key-value` fits
+*stable-key numeric* dimensions (a fixed key set whose values move) and only
+guards keys already in the baseline. Neither is a universal net-zero proof — the
+[SPEC](./SPEC.md#gate-modes) spells out the edges.
+
 ## CI integration
 
 pawl is a single binary — any CI can run it. Two common wirings:
@@ -214,9 +251,9 @@ pawl is a single binary — any CI can run it. Two common wirings:
 ### GitHub Actions
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.1.2   # puts the pawl binary on PATH — no Go/Node
+- uses: tiangong-dev/pawl@v0.2.0   # puts the pawl binary on PATH — no Go/Node
   with:
-    version: v0.1.2                # optional; defaults to the latest release
+    version: v0.2.0                # optional; defaults to the latest release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
 ```
@@ -233,7 +270,7 @@ Install via npm and run through `npx` (or download the release binary):
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.1.2 check
+    - npx -y @pawl-tools/cli@0.2.0 check
 ```
 
 ### Anti-tamper
@@ -242,6 +279,32 @@ quality-gate:
 that the snapshot's history is honest. `pawl baseline-guard <base-ref>` compares
 the committed snapshot against the PR's base branch and fails if it was
 hand-edited to a worse value. Run it on PRs alongside `check`.
+
+## Diff-scoped checking
+
+`pawl check --since <ref>` keeps the full gate but **only fails on regressions
+introduced by lines changed since `<ref>`** — pre-existing debt on untouched lines
+is exempted, so a large legacy baseline doesn't block every PR while new code
+still can't regress. It still needs the snapshot (it's the gate narrowed to new
+code, not a standalone scanner).
+
+```bash
+pawl check --since origin/main        # on a PR: gate only the changed lines
+```
+
+`per-file-count` dimensions (breakdown keyed `"path:line"`, scalar = the offender
+count) are scoped to the added lines; `total` and `per-key-value` dimensions
+have no line to attribute faithfully and are **enforced in full** (loudly
+labelled, never silently skipped), keeping `--since` exactly the full-mode
+verdict narrowed to changed lines. The output reports the merge-base, what was
+enforced in full, and how many pre-existing regressions were exempted; add
+`--format json` for the machine-readable form (`mode: "since"`, each exempted
+regression flagged `suppressed`).
+
+Scoping is line-based (like reviewdog / Sonar clean-as-you-code): a pre-existing
+offender that merely shifts position isn't flagged, but one on a line whose
+content actually changed counts even if it "moved" there — it never
+under-reports a changed line. Details in [SPEC.md](./SPEC.md#diff-scoped-checking).
 
 ## Scope boundary
 

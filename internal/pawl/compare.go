@@ -74,6 +74,96 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 	return out
 }
 
+// Regression is one machine-readable regression detail — the structured form
+// behind a `--format json` verdict and the unit `--since` scopes to changed
+// lines. For a `total` regression Key/Path/Line are nil; for per-file-count /
+// per-key-value they are parsed from the breakdown key. Base/Current are the two
+// compared numbers (scalar values for total, offender counts for per-file-count,
+// the key's values for per-key-value). Message is the exact text-mode detail
+// line. Suppressed is set only by `--since` scoping.
+type Regression struct {
+	Kind       string  `json:"kind"`
+	Key        *string `json:"key"`
+	Path       *string `json:"path"`
+	Line       *int    `json:"line"`
+	Base       float64 `json:"base"`
+	Current    float64 `json:"current"`
+	Message    string  `json:"message"`
+	Suppressed bool    `json:"suppressed"`
+}
+
+// StructuredRegressions is the machine-readable twin of RegressionsOf. It emits
+// one entry per NEW offender key (per-file-count) or worsened baseline key
+// (per-key-value) — the granularity `--since` needs to test each against the
+// changed lines — plus a `total` entry when the scalar regressed. The scalar and
+// per-key predicates match RegressionsOf exactly, so the two views never
+// disagree on whether a dimension regressed.
+func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
+	var out []Regression
+	if Worse(spec.Direction, base.Value, cur.Value, spec.Tolerance) {
+		out = append(out, Regression{
+			Kind:    "total",
+			Base:    base.Value,
+			Current: cur.Value,
+			Message: fmt.Sprintf("total %s → %s", FormatNumber(base.Value), FormatNumber(cur.Value)),
+		})
+	}
+	switch spec.Gate {
+	case GatePerFileCount:
+		b := OffenderCountsByFile(base.Breakdown)
+		c := OffenderCountsByFile(cur.Breakdown)
+		for _, key := range sortedKeys(cur.Breakdown) {
+			file, _, _ := strings.Cut(key, ":")
+			if _, isOld := base.Breakdown[key]; c[file] > b[file] && !isOld {
+				out = append(out, keyRegression("per-file-count", key, float64(b[file]), float64(c[file]),
+					fmt.Sprintf("%s  %d → %d", file, b[file], c[file])))
+			}
+		}
+	case GatePerKeyValue:
+		for _, k := range sortedKeys(base.Breakdown) {
+			if cv, ok := cur.Breakdown[k]; ok && Worse(spec.Direction, base.Breakdown[k], cv, spec.Tolerance) {
+				out = append(out, keyRegression("per-key-value", k, base.Breakdown[k], cv,
+					fmt.Sprintf("%s  %s → %s", k, FormatNumber(base.Breakdown[k]), FormatNumber(cv))))
+			}
+		}
+	}
+	return out
+}
+
+// keyRegression builds a per-key Regression, parsing path and 1-based line from
+// the "path:line" breakdown key (Line stays nil when the key carries no numeric
+// line — a location that `--since` cannot attribute to a changed line).
+func keyRegression(kind, key string, base, cur float64, message string) Regression {
+	file, lineStr, hasLine := strings.Cut(key, ":")
+	r := Regression{Kind: kind, Key: strPtr(key), Path: strPtr(file), Base: base, Current: cur, Message: message}
+	if hasLine && lineStr != "" {
+		if n, err := strconv.Atoi(lineStr); err == nil {
+			r.Line = &n
+		}
+	}
+	return r
+}
+
+// statusName is the emoji-free status word for a dimension — the `--format json`
+// twin of statusOf's decorated table cell.
+func statusName(direction Direction, base *float64, cur, tolerance float64) string {
+	if base == nil {
+		return "new"
+	}
+	if Worse(direction, *base, cur, tolerance) {
+		return "worse"
+	}
+	if Worse(direction, *base, cur, 0) {
+		return "within-tolerance"
+	}
+	if Better(direction, *base, cur) {
+		return "better"
+	}
+	return "same"
+}
+
+func strPtr(s string) *string { return &s }
+
 // OrphanedMetrics returns the sorted ids of baseline metrics that no
 // configured dimension claims. Deleting a dimension must also drop its
 // metric from the snapshot, or a regression could hide behind a vanished
