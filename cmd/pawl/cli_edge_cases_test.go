@@ -1,8 +1,7 @@
 package main
 
-// Regression guards for bugs found in adversarial review of the extract /
-// --format json / --since implementation. Each test pins one fixed hole so it
-// cannot silently reopen.
+// Edge-case contracts for `extract` and `check --since`: the honesty and
+// line-scoping invariants that are subtle enough to regress silently.
 
 import (
 	"path/filepath"
@@ -10,10 +9,10 @@ import (
 	"testing"
 )
 
-// --since must catch a same-key value growth on an EDITED line: per-file-count
-// counts keys, so a line gaining a second marker doesn't change the key count —
-// only the scalar moves, and --since drops the scalar. The fix re-derives the
-// verdict from the breakdown, flagging a key whose value grew on an added line.
+// --since catches a same-key value growth on an EDITED line: a line gaining a
+// second marker leaves the per-file key count unchanged (only the scalar moves),
+// so scoping re-derives the verdict from the breakdown and flags a key whose
+// value grew on an added line.
 func TestSinceValueGrowthOnEditedLineFails(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
@@ -219,13 +218,12 @@ func TestSinceJSONCleanMetricRegressionsIsEmptyArray(t *testing.T) {
 	}
 }
 
-// Line-based scoping, mitigated by git's own diff matching: a pre-existing
-// offender relocated with its LINE CONTENT unchanged is tracked by git as
-// context, not an added line, so --since does NOT flag it. Ordinary code motion
-// therefore doesn't trip the gate — only offenders on genuinely changed/added
-// lines count. This pins the reassuring half of the line-based trade-off; the
-// remaining edge (an offender on a line whose content truly changed is flagged
-// even if "morally" moved) is the documented clean-as-you-code behavior.
+// Line-based scoping leans on git's own diff matching: a pre-existing offender
+// relocated with its LINE CONTENT unchanged is tracked by git as context, not an
+// added line, so --since does not flag it — ordinary code motion doesn't trip the
+// gate. Only offenders on genuinely changed lines count (an offender on a line
+// whose content truly changed is flagged even if "morally" moved — the
+// clean-as-you-code trade-off).
 func TestSincePureRelocationNotFlagged(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
