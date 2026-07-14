@@ -88,3 +88,20 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
+
+  # Dogfood the published GitHub Action: install pawl through `uses: ./` on each
+  # supported runner OS and confirm the binary lands on PATH. This gates the
+  # action definition itself — a broken OS/arch case or download path fails here,
+  # on the PR, instead of in a consumer's workflow. It installs the latest
+  # release (not the PR's build), so it verifies the action, not the PR's pawl.
+  action-smoke:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pawl via its own action
+        uses: ./
+      - name: Confirm pawl is on PATH
+        run: pawl version
