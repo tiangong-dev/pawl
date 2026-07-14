@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  # Upsert the ratchet + release-path summary comment on the PR.
+  # Upsert the quality gate + release-path summary comment on the PR.
   pull-requests: write
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
         run: |
           PAWL_ARCHIVES=1 node npm/build.js
           PAWL_DRY_RUN=1 node npm/publish.js
-      - name: Comment ratchet + release-path summary on PR
+      - name: Comment quality gate + release-path summary on PR
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
@@ -72,7 +72,7 @@ jobs:
               marker,
               `## pawl CI · \`${context.sha.slice(0, 7)}\``,
               '',
-              '### Quality ratchet (pawl on pawl)',
+              '### Quality gate (pawl on pawl)',
               '```',
               table,
               '```',

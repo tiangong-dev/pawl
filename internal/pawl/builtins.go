@@ -171,7 +171,7 @@ func matchesAny(globs []string, rel string) bool {
 	return false
 }
 
-// lineCount mirrors the ratchet line-count contract: an empty file is 0
+// lineCount mirrors the pawl line-count contract: an empty file is 0
 // lines, and a trailing newline does not add a phantom line.
 func lineCount(data []byte) int {
 	if len(data) == 0 {

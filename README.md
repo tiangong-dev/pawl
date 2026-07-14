@@ -1,6 +1,6 @@
 # pawl
 
-**A language-agnostic anti-regression quality ratchet.**
+**A language-agnostic anti-regression quality gate.**
 
 中文文档见 [README.zh-CN.md](./README.zh-CN.md) · Full behavioral contract in [SPEC.md](./SPEC.md).
 
@@ -8,7 +8,7 @@ Each **dimension** measures one number — files over a length limit, duplicated
 lines, functions over a complexity threshold, test coverage, whatever you can
 express as a command that prints a number. `pawl record` snapshots those numbers;
 `pawl check` re-measures and **fails CI when any dimension gets worse**. Numbers
-can only hold or improve — the ratchet never slips backward.
+can only hold or improve — the gate never slips backward.
 
 ```bash
 pawl record                     # measure everything, write the baseline
@@ -23,13 +23,13 @@ adapter command — the baseline and the CI gate stay put.
 
 ---
 
-## Why a ratchet?
+## Why a quality gate?
 
 A one-shot threshold ("coverage must be ≥ 80%") either blocks the team on day one
-or is set so loose it never bites. A ratchet instead locks in *wherever you are
-today* and only lets it improve: a PR that adds a 600-line file, a new `as any`,
-or drops coverage fails; a PR that removes them re-baselines lower. You pay down
-debt monotonically without ever picking a magic number.
+or is set so loose it never bites. An anti-regression quality gate instead locks
+in *wherever you are today* and only lets it improve: a PR that adds a 600-line
+file, a new `as any`, or drops coverage fails; a PR that removes them re-baselines
+lower. You pay down debt monotonically without ever picking a magic number.
 
 pawl also guards **honesty**, not just the numbers:
 
@@ -82,7 +82,7 @@ dimensions:
 
 ```bash
 pawl record
-git add pawl.yaml pawl.snapshot.json && git commit -m "chore: add pawl ratchet"
+git add pawl.yaml pawl.snapshot.json && git commit -m "chore: add pawl gate"
 ```
 
 **3. Gate every PR** — `pawl check` exits `1` if any dimension regressed:
@@ -230,7 +230,7 @@ baseline wasn't re-recorded.
 Install via npm and run through `npx` (or download the release binary):
 
 ```yaml
-ratchet:
+quality-gate:
   image: node:22
   script:
     - npx -y @pawl-tools/cli@0.1.2 check
@@ -245,7 +245,7 @@ hand-edited to a worse value. Run it on PRs alongside `check`.
 
 ## Scope boundary
 
-pawl is a **ratchet + honesty guard, not a code analyzer** — it never parses a
+pawl is a **quality gate + honesty guard, not a code analyzer** — it never parses a
 language. Line counting and regexp matching are Go-native because they need no
 grammar; everything requiring real language semantics (complexity, type escapes)
 is delegated to that language's own best analyzer through an adapter, so the gate

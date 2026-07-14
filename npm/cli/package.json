@@ -1,7 +1,7 @@
 {
   "name": "@pawl-tools/cli",
   "version": "0.1.2",
-  "description": "pawl — language-agnostic anti-regression quality ratchet (prebuilt binary distribution)",
+  "description": "pawl — language-agnostic anti-regression quality gate (prebuilt binary distribution)",
   "license": "MIT",
   "type": "module",
   "repository": {

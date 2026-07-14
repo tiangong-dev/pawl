@@ -1,6 +1,6 @@
 # pawl — engine contract (frozen)
 
-`pawl` is a language-agnostic anti-regression quality ratchet. Each **dimension**
+`pawl` is a language-agnostic anti-regression quality gate. Each **dimension**
 measures one number (plus an optional per-file breakdown). `record` snapshots the
 numbers; `check` re-measures and fails when any dimension regresses against the
 snapshot. The measuring tool is an implementation detail of each dimension —
@@ -12,7 +12,7 @@ its tests are both written against it.
 
 ## Scope boundary (design decision)
 
-pawl is a **ratchet + honesty guard**, not a code analyzer. It never parses a
+pawl is a **quality gate + honesty guard**, not a code analyzer. It never parses a
 language. The line is drawn by the two-tier built-in design:
 
 - **Primitives** (`file-length`, `pattern-count`) are Go-native only because they
