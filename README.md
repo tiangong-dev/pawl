@@ -251,9 +251,9 @@ pawl is a single binary — any CI can run it. Two common wirings:
 ### GitHub Actions
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.1.2   # puts the pawl binary on PATH — no Go/Node
+- uses: tiangong-dev/pawl@v0.2.0   # puts the pawl binary on PATH — no Go/Node
   with:
-    version: v0.1.2                # optional; defaults to the latest release
+    version: v0.2.0                # optional; defaults to the latest release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
 ```
@@ -270,7 +270,7 @@ Install via npm and run through `npx` (or download the release binary):
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.1.2 check
+    - npx -y @pawl-tools/cli@0.2.0 check
 ```
 
 ### Anti-tamper

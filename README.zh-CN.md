@@ -198,9 +198,9 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 ### GitHub Actions
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.1.2   # 把 pawl 二进制放进 PATH——无需 Go/Node
+- uses: tiangong-dev/pawl@v0.2.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
-    version: v0.1.2                # 可选;默认取最新 release
+    version: v0.2.0                # 可选;默认取最新 release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # PR 上跑
 ```
@@ -215,7 +215,7 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.1.2 check
+    - npx -y @pawl-tools/cli@0.2.0 check
 ```
 
 ### 防篡改
