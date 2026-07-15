@@ -46,7 +46,8 @@ jobs:
       # Dogfood --format codeclimate: the findings array must be valid JSON on
       # every PR, so a break in the Code Quality output path fails here.
       - name: Self-check (codeclimate findings are valid JSON)
-        run: /tmp/pawl check --format codeclimate | node -e 'const d=require("fs").readFileSync(0,"utf8");const a=JSON.parse(d);if(!Array.isArray(a))throw new Error("codeclimate output is not an array");console.log(`codeclimate: ${a.length} finding(s)`) '
+        run: |
+          /tmp/pawl check --format codeclimate | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"utf8"));if(!Array.isArray(a))throw new Error("codeclimate output is not an array");console.log(a.length+" codeclimate finding(s)")'
       - name: Guard pawl's own baseline
         if: github.event_name == 'pull_request'
         run: /tmp/pawl baseline-guard origin/main

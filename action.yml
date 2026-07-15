@@ -30,7 +30,7 @@ inputs:
   token:
     description: 'Token used to post the PR comment. Defaults to the workflow token.'
     required: false
-    default: ${{ github.token }}
+    default: ''
 
 runs:
   using: 'composite'
@@ -102,11 +102,12 @@ runs:
       if: ${{ inputs.command != '' && inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.token }}
+        GITHUB_TOKEN: ${{ inputs.token || github.token }}
         PAWL_REPORT: ${{ steps.gate.outputs.report }}
       # The comment is auxiliary — a startup failure (missing node, bad script)
       # must never fail the job and mask the gate verdict enforced next.
-      run: node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs" || echo "::warning::pawl: PR comment step failed to run"
+      run: |
+        node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs" || echo "::warning::pawl: PR comment step failed to run"
 
     - name: Enforce gate verdict
       if: inputs.command != ''
