@@ -210,7 +210,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 传 `command` 时,action 还会跑门禁,并在 pull_request 上把结果渲染成一条 sticky 评论(取自 `--format json` 裁决)回写——不用再手写 `github-script`:
 
 ```yaml
-- run: # 门禁需要的前置步骤,如构建 exec adapter
+# ... 门禁需要的前置步骤,如构建 exec adapter ...
 - uses: tiangong-dev/pawl@v0.3.0
   with:
     command: check

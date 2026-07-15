@@ -267,7 +267,7 @@ one sticky comment with the result (rendered from the `--format json` verdict) â
 no bespoke `github-script` step:
 
 ```yaml
-- run: # any pre-steps the gate needs, e.g. build exec adapters
+# ... your pre-steps here, e.g. build exec adapters ...
 - uses: tiangong-dev/pawl@v0.3.0
   with:
     command: check
