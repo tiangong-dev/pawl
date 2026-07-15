@@ -608,12 +608,14 @@ config has no per-file-count offenders prints `[]` (a valid empty report).
   `description` is the dimension `title` (with ` ×<n>` appended when the offender
   count at that location exceeds 1). `severity` is always `major` (pawl has no
   per-issue severity). `location.path` and `location.lines.begin` come from the
-  breakdown key `path:line`; a key with no numeric line is skipped (Code Quality
-  entries require a line).
-- `fingerprint` is a stable hex digest of `check_name`, `path`, `line`, and
-  `description` — identical inputs yield an identical fingerprint across runs, so
-  GitLab tracks the same issue across commits and never treats a re-measured
-  offender as new.
+  breakdown key `path:line`, split on the **last** colon (so a path that itself
+  contains a colon keeps its line). A key with no colon, a non-numeric line, or a
+  line ≤ 0 (the adapter's "unknown line") is skipped — Code Quality entries need
+  a real line.
+- `fingerprint` is a stable hex digest of `check_name`, `path`, and `line` — not
+  the `description`, which carries the run-varying `×n` count. Identical
+  locations yield an identical fingerprint across runs, so GitLab tracks the same
+  issue across commits and never treats a re-measured offender as new.
 - Entries are sorted by `path`, then `line`, then `check_name` — a deterministic
   array for reproducible artifacts and diffs.
 

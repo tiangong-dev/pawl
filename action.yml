@@ -104,7 +104,9 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
         PAWL_REPORT: ${{ steps.gate.outputs.report }}
-      run: node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs"
+      # The comment is auxiliary — a startup failure (missing node, bad script)
+      # must never fail the job and mask the gate verdict enforced next.
+      run: node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs" || echo "::warning::pawl: PR comment step failed to run"
 
     - name: Enforce gate verdict
       if: inputs.command != ''

@@ -43,14 +43,17 @@ func buildCodeClimate(cfg *Config, current map[string]Metric) []ccEntry {
 			continue
 		}
 		for key, count := range current[dim.ID].Breakdown {
-			path, lineStr, hasLine := strings.Cut(key, ":")
-			if !hasLine || lineStr == "" {
-				continue // Code Quality entries require a line; a bare path has none.
+			// Split on the LAST colon so paths that themselves contain a colon
+			// (e.g. a Windows drive key) keep their line as the final segment.
+			colon := strings.LastIndex(key, ":")
+			if colon < 0 {
+				continue // a bare path has no line; Code Quality entries require one.
 			}
-			line, err := strconv.Atoi(lineStr)
-			if err != nil {
-				continue
+			line, err := strconv.Atoi(key[colon+1:])
+			if err != nil || line <= 0 {
+				continue // non-numeric or line 0 (the adapter's "unknown line") — unplaceable.
 			}
+			path := key[:colon]
 			desc := dim.Title
 			if count > 1 {
 				desc = fmt.Sprintf("%s ×%s", desc, FormatNumber(count))
@@ -58,7 +61,11 @@ func buildCodeClimate(cfg *Config, current map[string]Metric) []ccEntry {
 			entries = append(entries, ccEntry{
 				Description: desc,
 				CheckName:   dim.ID,
-				Fingerprint: ccFingerprint(dim.ID, path, line, desc),
+				// Fingerprint over the location only, NOT the description: the
+				// description carries the ×n count, which varies run-to-run, but
+				// the same offender at one path:line must keep a stable id so
+				// GitLab never re-flags it as new.
+				Fingerprint: ccFingerprint(dim.ID, path, line),
 				Severity:    "major",
 				Location:    ccLocation{Path: path, Lines: ccLines{Begin: line}},
 			})
@@ -79,9 +86,10 @@ func buildCodeClimate(cfg *Config, current map[string]Metric) []ccEntry {
 
 // ccFingerprint is a stable digest identifying one issue across commits so
 // GitLab tracks the same offender rather than re-flagging a re-measured one as
-// new. Fields are NUL-separated so distinct boundaries can't collide.
-func ccFingerprint(checkName, path string, line int, description string) string {
-	sum := md5.Sum([]byte(checkName + "\x00" + path + "\x00" + strconv.Itoa(line) + "\x00" + description))
+// new. Keyed by dimension + location only (never the count-bearing description).
+// Fields are NUL-separated so distinct boundaries can't collide.
+func ccFingerprint(checkName, path string, line int) string {
+	sum := md5.Sum([]byte(checkName + "\x00" + path + "\x00" + strconv.Itoa(line)))
 	return hex.EncodeToString(sum[:])
 }
 

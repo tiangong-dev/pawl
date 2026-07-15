@@ -7,6 +7,7 @@
 
 import fs from 'node:fs'
 import { renderCommentBody, MARKER } from './render-comment.mjs'
+import { upsertComment } from './upsert-comment.mjs'
 
 const token = process.env.GITHUB_TOKEN
 const reportPath = process.env.PAWL_REPORT
@@ -52,18 +53,15 @@ const api = async (method, path, payload) => {
 }
 
 try {
-  const comments = await api(
-    'GET',
-    `/repos/${owner}/${repoName}/issues/${prNumber}/comments?per_page=100`,
-  )
-  const existing = comments.find((c) => c.body && c.body.includes(MARKER))
-  if (existing) {
-    await api('PATCH', `/repos/${owner}/${repoName}/issues/comments/${existing.id}`, { body })
-    console.log('pawl: updated PR comment')
-  } else {
-    await api('POST', `/repos/${owner}/${repoName}/issues/${prNumber}/comments`, { body })
-    console.log('pawl: created PR comment')
-  }
+  const action = await upsertComment({
+    api,
+    owner,
+    repo: repoName,
+    prNumber,
+    body,
+    marker: MARKER,
+  })
+  console.log(`pawl: ${action} PR comment`)
 } catch (e) {
   // Auxiliary output must not mask the gate verdict — warn loudly, exit clean.
   console.log(`::warning::pawl: failed to post PR comment: ${e.message}`)
