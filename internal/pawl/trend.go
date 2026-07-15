@@ -20,6 +20,13 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 	if format == "json" {
 		metaW = stderr
 	}
+	warn := func(msg string) {
+		if onCI() {
+			fmt.Fprintf(metaW, "::warning::%s\n", msg)
+		} else {
+			fmt.Fprintf(metaW, "⚠️  %s\n", msg)
+		}
+	}
 
 	relPath, code := trendSnapshotRelPath(cfg, stderr)
 	if code != 0 {
@@ -62,18 +69,24 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 	latestMeta := map[string]Metric{} // id -> most recent Metric (for direction/unit)
 
 	for _, c := range commits {
-		data, code, _ := gitOutput(cfg.Dir, "show", c.sha+":"+relPath)
+		data, code, gitErr := gitOutput(cfg.Dir, "show", c.sha+":"+relPath)
 		if code != 0 {
-			continue // git log said it touched the path; a show failure is not fatal
+			// The path existed at this commit (git log listed it) but can't be
+			// read now — e.g. it was the commit that deleted the snapshot. That's
+			// a legitimate gap (no value then), but skip it loudly, not silently.
+			warn(fmt.Sprintf("trend: skipping %s — cannot read %s there: %s", shortSHA(c.sha), relPath, gitErr))
+			continue
 		}
-		snap, _, err := ParseSnapshot([]byte(data))
+		snap, parsed, err := ParseSnapshot([]byte(data))
 		if err != nil {
-			note := fmt.Sprintf("trend: skipping %s — its %s is not valid JSON", shortSHA(c.sha), relPath)
-			if onCI() {
-				fmt.Fprintf(metaW, "::warning::%s\n", note)
-			} else {
-				fmt.Fprintf(metaW, "⚠️  %s\n", note)
-			}
+			warn(fmt.Sprintf("trend: skipping %s — its %s is not valid JSON", shortSHA(c.sha), relPath))
+			continue
+		}
+		// A snapshot that parses as JSON but has an invalid shape (e.g. a metric
+		// with no numeric value) must not turn into a measured 0 — skip it like
+		// unparseable JSON, so "could not read" never reads as "was zero".
+		if shapeErrs := SnapshotShapeErrors(parsed); len(shapeErrs) > 0 {
+			warn(fmt.Sprintf("trend: skipping %s — its %s has an invalid shape (%s)", shortSHA(c.sha), relPath, shapeErrs[0]))
 			continue
 		}
 		for id, m := range snap.Metrics {
@@ -140,11 +153,14 @@ func trendSnapshotRelPath(cfg *Config, stderr io.Writer) (string, int) {
 		return "", 2
 	}
 	relPath, err := filepath.Rel(toplevel, cfg.SnapshotPath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
+	slash := filepath.ToSlash(relPath)
+	// Only a leading `..` path SEGMENT means "outside the repo" — a filename that
+	// merely starts with ".." (e.g. `..snap/pawl.snapshot.json`) is inside.
+	if err != nil || slash == ".." || strings.HasPrefix(slash, "../") {
 		fmt.Fprintf(stderr, "trend: snapshot %s is outside the git repository %s\n", cfg.SnapshotPath, toplevel)
 		return "", 2
 	}
-	return filepath.ToSlash(relPath), 0
+	return slash, 0
 }
 
 type trendPoint struct {

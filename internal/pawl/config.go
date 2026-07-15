@@ -65,6 +65,34 @@ type dimensionConfig struct {
 	Extract   any            `yaml:"extract"`
 }
 
+// LoadConfigLite resolves only the snapshot path (and config dir) from a
+// pawl.yaml, without validating the dimensions. It is for read-only commands
+// (trend) that never measure and so must not be blocked by a temporarily
+// invalid measurement config. The file must exist and be valid YAML.
+func LoadConfigLite(path string) (*Config, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving config path %s: %w", path, err)
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return nil, fmt.Errorf("config file %s: %w", path, err)
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var raw configFile
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	dir := filepath.Dir(abs)
+	snapshotRel := raw.Snapshot
+	if snapshotRel == "" {
+		snapshotRel = defaultSnapshotName
+	}
+	return &Config{Dir: dir, SnapshotPath: filepath.Join(dir, snapshotRel)}, nil
+}
+
 // LoadConfig reads and validates a pawl.yaml. Every validation failure is an
 // error — a config that cannot be trusted must abort with exit 2, never
 // half-run.

@@ -707,12 +707,17 @@ right way?" — the history is already in the repo.
   snapshot path outside the repo → exit 2.
 - Commits are those from `git log --format=<sha><TAB><ISO-date> -- <path>`
   reachable from `HEAD` (newest first). If the path was **never committed** →
-  exit 2 (`no committed history for <path> — commit the snapshot first`).
-- For each commit, `git show <sha>:<path>` is parsed. A commit whose snapshot is
-  **unparseable JSON** is skipped with a `::warning::` (under `GITHUB_ACTIONS`)
-  / `⚠️` note — one corrupt historical commit must not abort the whole trend.
-  A commit whose (parseable) snapshot simply lacks a given metric contributes no
-  point for that metric (a gap — the dimension didn't exist yet).
+  exit 2 (`no committed history for <path> — commit the snapshot first`). History
+  is traced at the snapshot's **current path**: renaming the snapshot file is a
+  boundary (commits before the rename are not reconstructed under the old name).
+- For each commit, `git show <sha>:<path>` is parsed. A commit is **skipped with
+  a loud `::warning::` (under `GITHUB_ACTIONS`) / `⚠️` note** — never silently —
+  when its snapshot cannot be read (`git show` fails, e.g. the commit that
+  deleted the file), is **unparseable JSON**, or has an **invalid shape** (e.g. a
+  metric with no numeric value). A malformed snapshot must never become a
+  measured `0`, and one corrupt historical commit must not abort the whole trend.
+  A commit whose (well-formed) snapshot simply lacks a given metric contributes
+  no point for that metric (a gap — the dimension didn't exist yet).
 - A metric's `direction` and `unit` are taken from its **most recent** appearance
   in the history (the current contract for that metric).
 - `<id>` restricts output to that one metric; if it appears in **no** historical

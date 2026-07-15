@@ -107,6 +107,22 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	// trend never measures — it reads config only for the snapshot path, so a
+	// temporarily-invalid measurement config (a bad adapter, zero dimensions)
+	// must not block viewing local history.
+	if command == "trend" {
+		cfg, err := LoadConfigLite(configPath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		metricID := ""
+		if len(positional) > 1 {
+			metricID = positional[1]
+		}
+		return runTrend(cfg, metricID, limit, format, stdout, stderr)
+	}
+
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -119,13 +135,6 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			ref = positional[1]
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
-	}
-	if command == "trend" {
-		metricID := ""
-		if len(positional) > 1 {
-			metricID = positional[1]
-		}
-		return runTrend(cfg, metricID, limit, format, stdout, stderr)
 	}
 	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
 }
