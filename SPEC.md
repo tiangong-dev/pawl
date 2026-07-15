@@ -408,9 +408,13 @@ optional, default `"failures"`), one of:
 
 Counts are derived from the **`<testcase>` elements themselves** (not the
 suite-level `tests=`/`failures=` attributes, which producers compute
-inconsistently and which would be a second, divergent source of truth). A
-document that does not parse as XML, or has no `<testcase>` at all, is a
-measurement failure. `value` = the selected count, `unit` = the `count` name
+inconsistently and which would be a second, divergent source of truth). Each
+state is detected independently, so `skipped` really is "testcases with a
+`<skipped>` child". A document that does not parse as XML, is **not rooted at
+`<testsuites>`/`<testsuite>`** (some other XML that merely contains a
+`<testcase>` is not a JUnit report), has no `<testcase>` at all, or contains a
+**contradictory** testcase (both failed/errored and skipped) is a measurement
+failure. `value` = the selected count, `unit` = the `count` name
 (`"tests"`/`"failures"`/`"skipped"`/`"passing"`), `breakdown` = null. Intended
 gate: `total` (a passing-count floor, or a failure-count ceiling).
 
@@ -425,9 +429,14 @@ produces the file, with the stale-artifact guard), and `metric` (optional,
 default `"lines"` — `"lines"`, `"branches"`, or `"functions"`; `functions` is
 lcov-only, so `functions` + `cobertura` is a config error).
 - **lcov**: sum the `LF`/`LH` (lines), `FNF`/`FNH` (functions), `BRF`/`BRH`
-  (branches) records across the file; `value` = `hit / found × 100`.
+  (branches) records across the file; `value` = `hit / found × 100`. Counters
+  must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
+  `Inf`, or hit-exceeds-found counter is a measurement failure (else e.g.
+  `LF:-1 LH:-1` would read as 100%).
 - **cobertura**: the root `<coverage>` element's `line-rate` / `branch-rate`
-  attribute × 100.
+  attribute × 100. The root must be `<coverage>` and the rate must be a fraction
+  in `[0,1]`; a non-`<coverage>` root, or a rate that is `NaN`/`Inf`/`<0`/`>1`,
+  is a measurement failure.
 - A report with **zero** of the requested unit found (lcov `found` total 0, or a
   missing cobertura rate attribute) is a measurement failure (`no <metric>
   coverage data`) — never a silent 0 or 100.

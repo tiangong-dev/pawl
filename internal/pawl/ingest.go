@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -159,6 +160,7 @@ func sarifResultLocation(r sarifResult) (uri string, line int, ok bool) {
 // --- JUnit ---------------------------------------------------------------
 
 type junitRoot struct {
+	XMLName   xml.Name
 	Suites    []junitTestSuite `xml:"testsuite"`
 	TestCases []junitTestCase  `xml:"testcase"`
 }
@@ -194,6 +196,12 @@ func measureJUnit(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	if err := xml.Unmarshal(data, &root); err != nil {
 		return MeasureResult{}, fmt.Errorf("not JUnit XML: %v (%.200s)", err, data)
 	}
+	// A document that parses as XML but is not rooted at <testsuites>/<testsuite>
+	// is the wrong shape — some other XML that merely contains a <testcase> must
+	// not read as a test result.
+	if root.XMLName.Local != "testsuites" && root.XMLName.Local != "testsuite" {
+		return MeasureResult{}, fmt.Errorf("not a JUnit report: root element is <%s>, want <testsuites> or <testsuite>", root.XMLName.Local)
+	}
 	cases := collectTestCases(root.Suites, root.TestCases)
 	if len(cases) == 0 {
 		return MeasureResult{}, fmt.Errorf("JUnit report has no <testcase> elements")
@@ -202,10 +210,18 @@ func measureJUnit(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	tests := len(cases)
 	failures, skipped := 0, 0
 	for _, c := range cases {
-		switch {
-		case len(c.Failures) > 0 || len(c.Errors) > 0:
+		// Detect each state independently so `skipped` really is "testcases with
+		// a <skipped> child" (per the contract). A testcase that is both failed
+		// and skipped is contradictory — fail loud rather than pick one silently.
+		hasFail := len(c.Failures) > 0 || len(c.Errors) > 0
+		hasSkip := len(c.Skipped) > 0
+		if hasFail && hasSkip {
+			return MeasureResult{}, fmt.Errorf("contradictory <testcase>: both failed/errored and skipped")
+		}
+		if hasFail {
 			failures++
-		case len(c.Skipped) > 0:
+		}
+		if hasSkip {
 			skipped++
 		}
 	}
@@ -285,25 +301,42 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 		return 0, fmt.Errorf("unknown metric %q", metric)
 	}
 
+	// Counters must be non-negative finite numbers — ParseFloat happily accepts
+	// "NaN", "Inf", and negatives, any of which would otherwise yield a bogus
+	// percentage (e.g. LF:-1 LH:-1 → 100%) instead of a measurement failure.
+	readCounter := func(key, raw string) (float64, error) {
+		n, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if err != nil {
+			return 0, fmt.Errorf("lcov %s record is not a number: %q", key, raw)
+		}
+		if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 {
+			return 0, fmt.Errorf("lcov %s record is not a non-negative finite number: %q", key, raw)
+		}
+		return n, nil
+	}
+
 	var found, hit float64
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if v, ok := strings.CutPrefix(line, foundKey+":"); ok {
-			n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			n, err := readCounter(foundKey, v)
 			if err != nil {
-				return 0, fmt.Errorf("lcov %s record is not a number: %q", foundKey, v)
+				return 0, err
 			}
 			found += n
 		} else if v, ok := strings.CutPrefix(line, hitKey+":"); ok {
-			n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			n, err := readCounter(hitKey, v)
 			if err != nil {
-				return 0, fmt.Errorf("lcov %s record is not a number: %q", hitKey, v)
+				return 0, err
 			}
 			hit += n
 		}
 	}
 	if found == 0 {
 		return 0, fmt.Errorf("no %s coverage data in lcov report", metric)
+	}
+	if hit > found {
+		return 0, fmt.Errorf("lcov report has more %s hit (%v) than found (%v)", metric, hit, found)
 	}
 	return hit / found * 100, nil
 }
@@ -313,11 +346,17 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 // functions rate, so metric "functions" never reaches here (config rejects it).
 func coberturaPercent(data []byte, metric string) (float64, error) {
 	var cov struct {
+		XMLName    xml.Name
 		LineRate   *float64 `xml:"line-rate,attr"`
 		BranchRate *float64 `xml:"branch-rate,attr"`
 	}
 	if err := xml.Unmarshal(data, &cov); err != nil {
 		return 0, fmt.Errorf("not cobertura XML: %v", err)
+	}
+	// The rate attributes exist on the root <coverage> element; some other XML
+	// that merely carries a line-rate attribute must not read as coverage.
+	if cov.XMLName.Local != "coverage" {
+		return 0, fmt.Errorf("not a cobertura report: root element is <%s>, want <coverage>", cov.XMLName.Local)
 	}
 	var rate *float64
 	var attr string
@@ -331,6 +370,9 @@ func coberturaPercent(data []byte, metric string) (float64, error) {
 	}
 	if rate == nil {
 		return 0, fmt.Errorf("no %s coverage data: cobertura report has no %s attribute", metric, attr)
+	}
+	if math.IsNaN(*rate) || math.IsInf(*rate, 0) || *rate < 0 || *rate > 1 {
+		return 0, fmt.Errorf("cobertura %s is not a fraction in [0,1]: %v", attr, *rate)
 	}
 	return *rate * 100, nil
 }
