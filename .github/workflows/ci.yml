@@ -42,6 +42,12 @@ jobs:
       - name: Guard pawl's own baseline
         if: github.event_name == 'pull_request'
         run: /tmp/pawl baseline-guard origin/main
+      # Dogfood --since: scope the gate to lines changed since the PR base, so
+      # the diff-scoping path (git diff + added-line attribution) runs on every
+      # PR. pawl's own baseline is clean, so this passes — it exercises the code.
+      - name: Self-check (diff-scoped, dogfoods --since)
+        if: github.event_name == 'pull_request'
+        run: /tmp/pawl check --since origin/main
       # Validate the whole release path on the PR — a publish-time break
       # (e.g. a non-package dir under dist/) then fails here, before merge,
       # instead of on the release run after it.
