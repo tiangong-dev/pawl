@@ -35,6 +35,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ```
 pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
 
+  init                 scaffold a starter pawl.yaml (never overwrites)
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
   diff                 measure + compare, print the table, always exit 0
@@ -59,6 +60,10 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
   directory with no `pawl.yaml`. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
+- `pawl init` writes a commented starter config to the config path (honoring
+  `-c`) **without reading any existing config** — it is the zero-friction
+  on-ramp, specified in [§ init](#init). If a file already exists at that path
+  it refuses (exit 2) rather than overwrite.
 
 ### Exit codes
 
@@ -70,6 +75,24 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.
+
+## init
+
+`pawl init` scaffolds a working starter `pawl.yaml` so a new project can go from
+nothing to a passing gate in two commands (`pawl init && pawl record`). It reads
+no existing config.
+
+- Writes to the config path (`-c <path>`, default `./pawl.yaml`).
+- **Never overwrites**: if a file already exists at that path, it prints a
+  message naming the path and exits 2 (a scaffolder that clobbered a hand-tuned
+  config would be worse than useless). A different pre-existing filesystem error
+  on the stat is likewise exit 2.
+- The written config is **valid and non-empty**: it declares at least one
+  dimension using only zero-dependency primitive builtins (`file-length`,
+  `pattern-count`), so `pawl record` succeeds immediately with no external tool
+  installed. Comments in the file point at the recipe cookbook for more.
+- On success it writes the file and prints a next-steps line (naming the file
+  and pointing at `pawl record`), exit 0.
 
 ## Config — `pawl.yaml`
 

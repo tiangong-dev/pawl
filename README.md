@@ -78,6 +78,9 @@ pawl itself is a small dependency-free Go binary. Adapters bring their own runti
 
 ## Quickstart
 
+`pawl init` scaffolds a working starter config (then paste more from the
+[recipe cookbook](./RECIPES.md)); or write `pawl.yaml` by hand:
+
 **1. Write `pawl.yaml`** at your repo root:
 
 ```yaml
@@ -120,6 +123,7 @@ pawl check
 
 | command | what it does |
 |---|---|
+| `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
 | `pawl diff` | measure + compare, print the table, always exit 0 |
@@ -191,8 +195,9 @@ knowledge, you own the tool setup.
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
 
 Each builtin's exact options, exit-code handling, and breakdown shape are in
-[SPEC.md § Built-in adapters](./SPEC.md). Full example configs live in the
-consuming projects.
+[SPEC.md § Built-in adapters](./SPEC.md). Copy-paste configs for all of them —
+plus SARIF/JUnit/coverage/complexity/duplication — are in the
+[recipe cookbook](./RECIPES.md).
 
 ## Custom adapters
 

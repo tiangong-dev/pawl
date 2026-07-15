@@ -1,0 +1,28 @@
+# pawl.yaml — a language-agnostic anti-regression quality gate.
+# Each dimension measures one number; `pawl record` snapshots them and
+# `pawl check` fails a PR when any dimension regresses. Numbers may only hold or
+# improve. Full contract: SPEC.md. Copy-paste more dimensions (ESLint, coverage,
+# complexity, SARIF, JUnit, duplication, …) from RECIPES.md.
+
+dimensions:
+  # Files over 500 lines — a maintainability floor. Go-native, no tools needed.
+  - id: "file-length"
+    title: "Files over 500 lines"
+    direction: "lower-is-better"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*"]
+      exclude: ["**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+
+  # Escape-hatch / debt markers. Swap the pattern (and includes) for your stack:
+  # e.g. "as any" for TypeScript, "//nolint" for Go, "# type: ignore" for Python.
+  - id: "todos"
+    title: "TODO / FIXME markers"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "pattern-count"
+    options:
+      pattern: "TODO|FIXME"
+      include: ["**/*"]
+      exclude: ["**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]

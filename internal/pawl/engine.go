@@ -73,14 +73,19 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "record", "check", "diff", "baseline-guard":
+	case "init", "record", "check", "diff", "baseline-guard":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | version\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | version\n", command)
 		return 2
 	}
 	if since != "" && command != "check" {
 		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
 		return 2
+	}
+
+	// init writes a new config; it must not require (or read) an existing one.
+	if command == "init" {
+		return runInit(configPath, stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)

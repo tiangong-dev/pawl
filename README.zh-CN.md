@@ -49,6 +49,8 @@ pawl 本身是个零依赖的小 Go 二进制。adapter 自带各自的运行时
 
 ## 快速上手
 
+`pawl init` 生成一份可用的起步配置(再从[配方手册](./RECIPES.md)里挑更多粘进去);也可以手写 `pawl.yaml`:
+
 **1. 在仓库根写 `pawl.yaml`:**
 
 ```yaml
@@ -90,6 +92,7 @@ pawl check
 
 | 命令 | 作用 |
 |---|---|
+| `pawl init` | 生成一份起步 `pawl.yaml`(不覆盖已有文件) |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
 | `pawl diff` | 测量 + 对比,打印表格,永远退出码 0 |
@@ -150,7 +153,7 @@ dimensions:
 | `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
 | `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
 
-每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md)。完整示例配置在各消费项目里。
+每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
 
 ## 自定义 adapter
 
