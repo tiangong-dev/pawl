@@ -379,7 +379,9 @@ alone, so the committed baseline for the rest stays exactly where it was.
   that names it).
 - Output honors `--format` as a full `record` does (text table, `json`,
   `codeclimate`). The text footer names the re-recorded ids and the number of
-  preserved metrics instead of the plain `📸 snapshot written` line.
+  preserved metrics instead of the plain `📸 snapshot written` line. The output
+  covers only the metrics actually written (measured or preserved); an
+  intentionally-absent dimension is omitted, never rendered as a measured `0`.
 
 ## Snapshot — `pawl.snapshot.json`
 

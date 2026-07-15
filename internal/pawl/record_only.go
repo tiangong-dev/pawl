@@ -92,8 +92,20 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		return 2
 	}
 
+	// Render only the metrics actually in the written snapshot. A configured
+	// dimension that is neither listed nor preserved is intentionally absent, and
+	// bare `current[id]` indexing in the renderers would otherwise invent a
+	// measured-looking 0 for it — "could not measure" must never read as measured.
+	shownCfg := *cfg
+	shownCfg.Dimensions = nil
+	for _, d := range cfg.Dimensions {
+		if _, ok := merged[d.ID]; ok {
+			shownCfg.Dimensions = append(shownCfg.Dimensions, d)
+		}
+	}
+
 	if format == "json" {
-		rep := buildReport("record", cfg, baseline, merged)
+		rep := buildReport("record", &shownCfg, baseline, merged)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -102,13 +114,13 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		return 0
 	}
 	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, cfg, merged); err != nil {
+		if err := renderCodeClimate(stdout, &shownCfg, merged); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
 		return 0
 	}
-	printTable(stdout, cfg, baseline, merged, nil)
+	printTable(stdout, &shownCfg, baseline, merged, nil)
 	recorded := append([]string(nil), only...)
 	sort.Strings(recorded)
 	fmt.Fprintf(stdout, "📸 re-recorded %s; preserved %d other metric(s) → %s\n",

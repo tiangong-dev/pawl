@@ -77,6 +77,13 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	if command == "" {
 		command = "check"
 	}
+	// --only is a record-only flag; reject it on any other command (including
+	// version) before the version short-circuit, so `pawl version --only x` is
+	// the usage error the contract promises rather than a silent version print.
+	if onlyProvided && command != "record" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+		return 2
+	}
 	// version never reads config — it must work in any directory.
 	if versionRequested || command == "version" {
 		fmt.Fprintf(stdout, "pawl %s\n", Version)
@@ -90,10 +97,6 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	}
 	if since != "" && command != "check" {
 		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
-		return 2
-	}
-	if onlyProvided && command != "record" {
-		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
 		return 2
 	}
 
