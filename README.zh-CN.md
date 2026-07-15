@@ -89,7 +89,7 @@ pawl check
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令**不会**默认成 `check`。
 
-**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。
+**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。
 
 ### 退出码
 
@@ -197,26 +197,49 @@ pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
 
 ### GitHub Actions
 
+action 负责安装二进制;不传 `command` 时它只做这件事:
+
 ```yaml
-- uses: tiangong-dev/pawl@v0.2.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
+- uses: tiangong-dev/pawl@v0.3.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
-    version: v0.2.0                # 可选;默认取最新 release
+    version: v0.3.0                # 可选;默认取最新 release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # PR 上跑
 ```
 
-在 `GITHUB_ACTIONS` 下,`check` 还会对每个回归在 PR diff 上发内联 `::error::` 注解,并在某维度变好但基线没重记时发 `::notice::`。
+传 `command` 时,action 还会跑门禁,并在 pull_request 上把结果渲染成一条 sticky 评论(取自 `--format json` 裁决)回写——不用再手写 `github-script`:
 
-### GitLab CI / 其他
+```yaml
+# ... 门禁需要的前置步骤,如构建 exec adapter ...
+- uses: tiangong-dev/pawl@v0.3.0
+  with:
+    command: check
+    args: --since origin/${{ github.base_ref }}   # 可选的附加参数
+    # comment: 'false'   # 默认 true;设 false 关掉 PR 评论
+```
 
-经 npm 用 `npx` 跑(或下载 release 二进制):
+评论步骤需要 `permissions: pull-requests: write`。门禁退出码在评论之后强制执行,所以回归照样让 job 失败,同时评论仍会发出。在 `GITHUB_ACTIONS` 下,`check` 还会对每个回归在 PR diff 上发内联 `::error::` 注解,并在某维度变好但基线没重记时发 `::notice::`。
+
+### GitLab Code Quality
+
+`--format codeclimate` 输出 Code Climate 问题数组——把每个当前 per-file-count offender 作为带位置的 finding——GitLab 会渲染成 MR 的 **Code Quality** 面板与 diff 行内标注。新增/消除由 GitLab 自己比对 MR 分支与目标分支的报告得出,job 只负责产出工件:
 
 ```yaml
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.2.0 check
+    - npx -y @pawl-tools/cli@0.3.0 check --format codeclimate > gl-code-quality-report.json
+  artifacts:
+    when: always                 # 门禁失败也要产出报告
+    reports:
+      codequality: gl-code-quality-report.json
 ```
+
+`check` 的退出码仍然把关流水线(相对 snapshot 有回归即 1);`total`/`per-key-value` 维度无行内位置、不产生行内 finding,但其门禁仍靠退出码强制。
+
+### 其他
+
+pawl 是单个二进制——任何 CI 里跑 `npx -y @pawl-tools/cli@0.3.0 check`(或下载 release 二进制)即可。
 
 ### 防篡改
 

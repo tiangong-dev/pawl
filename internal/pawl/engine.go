@@ -36,7 +36,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			configPath = args[i]
 		case args[i] == "--format":
 			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "--format requires a value (text|json)\n")
+				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
 				return 2
 			}
 			i++
@@ -57,8 +57,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			positional = append(positional, args[i])
 		}
 	}
-	if format != "text" && format != "json" {
-		fmt.Fprintf(stderr, "--format must be text or json, got %q\n", format)
+	if format != "text" && format != "json" && format != "codeclimate" {
+		fmt.Fprintf(stderr, "--format must be text, json or codeclimate, got %q\n", format)
 		return 2
 	}
 	if len(positional) > 0 {
@@ -162,6 +162,15 @@ func runMeasureCommand(cfg *Config, command, format, since string, stdout, stder
 		}
 		return exit
 	}
+	if format == "codeclimate" {
+		// Findings mode: emit the current offenders regardless of the gate
+		// verdict, but keep the verdict's exit code so the gate still fails CI.
+		if err := renderCodeClimate(stdout, cfg, current); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		return exit
+	}
 	if since != "" {
 		renderSinceText(stdout, rep, scope)
 		return exit
@@ -182,6 +191,13 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 		rep := buildReport("record", cfg, baseline, current)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		return 0
+	}
+	if format == "codeclimate" {
+		if err := renderCodeClimate(stdout, cfg, current); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}

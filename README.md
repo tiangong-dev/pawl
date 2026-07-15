@@ -109,8 +109,10 @@ to `check`.
 
 **Flags.** `--format json` makes `record`/`check`/`diff` print a stable
 machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl stays
-the gate, any reporter consumes the JSON. `check --since <ref>` scopes the gate to
-lines changed since `<ref>` ([clean-as-you-code](#diff-scoped-checking)).
+the gate, any reporter consumes the JSON. `--format codeclimate` emits a
+[Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
+`check --since <ref>` scopes the gate to lines changed since `<ref>`
+([clean-as-you-code](#diff-scoped-checking)).
 
 ### Exit codes
 
@@ -250,28 +252,62 @@ pawl is a single binary — any CI can run it. Two common wirings:
 
 ### GitHub Actions
 
+The action installs the binary; on its own that is all it does:
+
 ```yaml
-- uses: tiangong-dev/pawl@v0.2.0   # puts the pawl binary on PATH — no Go/Node
+- uses: tiangong-dev/pawl@v0.3.0   # puts the pawl binary on PATH — no Go/Node
   with:
-    version: v0.2.0                # optional; defaults to the latest release
+    version: v0.3.0                # optional; defaults to the latest release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
 ```
 
-Under `GITHUB_ACTIONS`, `check` also emits inline `::error::` annotations on the
-PR diff for each regression, and a `::notice::` when a dimension improved but the
-baseline wasn't re-recorded.
+Pass `command` and the action also runs the gate and, on a pull request, upserts
+one sticky comment with the result (rendered from the `--format json` verdict) —
+no bespoke `github-script` step:
 
-### GitLab CI / anything else
+```yaml
+# ... your pre-steps here, e.g. build exec adapters ...
+- uses: tiangong-dev/pawl@v0.3.0
+  with:
+    command: check
+    args: --since origin/${{ github.base_ref }}   # optional extra args
+    # comment: 'true'   # default; set 'false' to skip the PR comment
+```
 
-Install via npm and run through `npx` (or download the release binary):
+The comment step needs `permissions: pull-requests: write`. The gate's exit code
+is enforced after the comment, so a regression still fails the job while the
+comment posts. Under `GITHUB_ACTIONS`, `check` also emits inline `::error::`
+annotations on the PR diff for each regression, and a `::notice::` when a
+dimension improved but the baseline wasn't re-recorded.
+
+### GitLab Code Quality
+
+`--format codeclimate` emits a Code Climate issue array — every current
+per-file-count offender as a located finding — which GitLab renders as the Merge
+Request **Code Quality** widget and inline diff annotations. New-vs-fixed is
+GitLab's own comparison of the MR-branch report against the target branch, so the
+job just publishes the artifact:
 
 ```yaml
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.2.0 check
+    - npx -y @pawl-tools/cli@0.3.0 check --format codeclimate > gl-code-quality-report.json
+  artifacts:
+    when: always                 # publish the report even when the gate fails
+    reports:
+      codequality: gl-code-quality-report.json
 ```
+
+`check`'s exit code still gates the pipeline (1 on a regression vs the snapshot);
+`total`/`per-key-value` dimensions have no per-line location and so add no inline
+findings, but their gate is still enforced through that exit code.
+
+### Anything else
+
+pawl is a single binary — run `npx -y @pawl-tools/cli@0.3.0 check` (or download
+the release binary) in any CI.
 
 ### Anti-tamper
 

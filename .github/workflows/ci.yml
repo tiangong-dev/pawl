@@ -32,6 +32,10 @@ jobs:
         run: go test ./...
       - name: node distribution tests
         run: node --test npm/cli/test/*.test.js
+      # The setup-pawl action renders its PR comment from a pawl --format json
+      # verdict via scripts/render-comment.mjs; unit-test that rendering here.
+      - name: node action-script tests
+        run: node --test scripts/*.test.mjs
       # pawl gates its own Go source (dogfooding — the self-closed loop).
       - name: Build pawl
         run: go build -o /tmp/pawl ./cmd/pawl
@@ -39,6 +43,11 @@ jobs:
         run: |
           set -o pipefail
           /tmp/pawl check | tee /tmp/pawl-check.txt
+      # Dogfood --format codeclimate: the findings array must be valid JSON on
+      # every PR, so a break in the Code Quality output path fails here.
+      - name: Self-check (codeclimate findings are valid JSON)
+        run: |
+          /tmp/pawl check --format codeclimate | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"utf8"));if(!Array.isArray(a))throw new Error("codeclimate output is not an array");console.log(a.length+" codeclimate finding(s)")'
       - name: Guard pawl's own baseline
         if: github.event_name == 'pull_request'
         run: /tmp/pawl baseline-guard origin/main
@@ -111,3 +120,13 @@ jobs:
         uses: ./
       - name: Confirm pawl is on PATH
         run: pawl version
+      # Dogfood the command wiring (install → run gate → capture json → enforce
+      # verdict) on each OS. comment is off so pawl's own PRs don't race on a
+      # sticky comment; the comment renderer is unit-tested separately, and the
+      # live upsert path is exercised by downstream consumers. pawl's baseline is
+      # clean, so the enforced verdict is 0 and this step passes.
+      - name: Dogfood the action's command mode
+        uses: ./
+        with:
+          command: check
+          comment: 'false'
