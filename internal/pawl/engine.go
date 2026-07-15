@@ -23,6 +23,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	configPath := "pawl.yaml"
 	format := "text"
 	since := ""
+	only := ""
+	onlyProvided := false
 	versionRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -34,6 +36,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
+		case args[i] == "--only":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--only requires a comma-separated list of dimension ids\n")
+				return 2
+			}
+			i++
+			only = args[i]
+			onlyProvided = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -82,6 +92,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
 		return 2
 	}
+	if onlyProvided && command != "record" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+		return 2
+	}
 
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
@@ -95,6 +109,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			ref = positional[1]
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
+	}
+	if command == "record" && onlyProvided {
+		ids := parseOnly(only)
+		if len(ids) == 0 {
+			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
+			return 2
+		}
+		return runRecordOnly(cfg, ids, format, stdout, stderr)
 	}
 	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
 }
