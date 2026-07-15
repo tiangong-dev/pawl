@@ -9,11 +9,34 @@ inputs:
     description: 'Release to install: a tag like v0.1.0, or "latest".'
     required: false
     default: 'latest'
+  command:
+    description: >-
+      Optional pawl command to run after install (e.g. "check"). Left empty,
+      the action only installs the binary. Any pre-steps the command needs
+      (building exec adapters, etc.) run as ordinary earlier workflow steps.
+    required: false
+    default: ''
+  args:
+    description: 'Extra arguments for the command, e.g. "--since origin/main".'
+    required: false
+    default: ''
+  comment:
+    description: >-
+      On a pull_request event, upsert a sticky comment with the gate result
+      (rendered from the command''s --format json verdict). Default true; set
+      "false" to disable.
+    required: false
+    default: 'true'
+  token:
+    description: 'Token used to post the PR comment. Defaults to the workflow token.'
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: 'composite'
   steps:
-    - shell: bash
+    - name: Install pawl
+      shell: bash
       env:
         PAWL_VERSION: ${{ inputs.version }}
         # Authenticated API calls avoid the unauthenticated rate limit when
@@ -54,3 +77,38 @@ runs:
         chmod +x "${dest}/${bin}" 2>/dev/null || true
         echo "$dest" >> "$GITHUB_PATH"
         echo "setup-pawl: installed pawl $ver to $dest"
+
+    # Run the gate but capture its exit code instead of failing here, so the
+    # comment step still runs on a regression. The verdict is enforced last.
+    - name: Run pawl
+      id: gate
+      if: inputs.command != ''
+      shell: bash
+      env:
+        PAWL_COMMAND: ${{ inputs.command }}
+        PAWL_ARGS: ${{ inputs.args }}
+      run: |
+        set -uo pipefail
+        report="${RUNNER_TEMP}/pawl-report.json"
+        code=0
+        # $PAWL_ARGS is intentionally unquoted so multi-word args word-split.
+        pawl "$PAWL_COMMAND" --format json $PAWL_ARGS > "$report" || code=$?
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        echo "code=$code" >> "$GITHUB_OUTPUT"
+        # Mirror the verdict to the log so a failing run still shows it.
+        cat "$report" || true
+
+    - name: Upsert PR comment
+      if: ${{ inputs.command != '' && inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        PAWL_REPORT: ${{ steps.gate.outputs.report }}
+      run: node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs"
+
+    - name: Enforce gate verdict
+      if: inputs.command != ''
+      shell: bash
+      env:
+        PAWL_CODE: ${{ steps.gate.outputs.code }}
+      run: exit "$PAWL_CODE"

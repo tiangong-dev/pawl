@@ -33,7 +33,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>]
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
 
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
@@ -45,8 +45,10 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>]
 
 - No command defaults to `check`.
 - `-c <path>` selects the config file; default `./pawl.yaml`.
-- `--format <text|json>` selects the output format of `record`/`check`/`diff`;
-  default `text`. `json` is specified in [§ Machine-readable output](#machine-readable-output).
+- `--format <text|json|codeclimate>` selects the output format of
+  `record`/`check`/`diff`; default `text`. `json` is specified in
+  [§ Machine-readable output](#machine-readable-output); `codeclimate` in
+  [§ Code Quality output](#code-quality-output).
   `baseline-guard` ignores `--format` (its output is not tabular).
 - `--since <ref>` scopes `check` (only) to lines changed since `<ref>`, specified
   in [§ Diff-scoped checking](#diff-scoped-checking). `--since` on any command
@@ -564,6 +566,56 @@ a `--since` suppression.
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are
   still listed (so the JSON is a faithful record) but do not affect `exit_code`.
+
+## Code Quality output
+
+`--format codeclimate` makes `record`/`check`/`diff` print a **Code Climate
+issue array** (the format GitLab renders as its Merge Request *Code Quality*
+widget and inline diff annotations) to stdout and nothing else — no table, no
+emoji, no GitHub annotations. stderr (the `measuring <id>…` progress lines) and
+the exit code are unchanged from text mode, so `pawl check --format codeclimate`
+still exits 1 on a regression while writing the artifact.
+
+This is **findings mode**, not the baseline delta: it lists *every current
+offender* the gate can locate to a file and line, and leaves the new-vs-fixed
+comparison to GitLab (which diffs the report on the MR branch against the report
+on the target branch). The output is therefore independent of the snapshot — the
+same command on any branch reports that branch's current offenders.
+
+Only **per-file-count** dimensions produce findings: their breakdown is keyed by
+`path:line`, so each offender has a location. `total` and `per-key-value`
+dimensions carry no per-line location (a total has no attributable line; a
+per-key-value key is an arbitrary label, not a source position), so they emit no
+findings — their gate is still enforced through the exit code. A `check` whose
+config has no per-file-count offenders prints `[]` (a valid empty report).
+
+```json
+[
+  {
+    "description": "TODO / FIXME markers",
+    "check_name": "todo-markers",
+    "fingerprint": "8f14e45fceea167a5a36dedd4bea2543",
+    "severity": "major",
+    "location": {
+      "path": "src/a.ts",
+      "lines": { "begin": 5 }
+    }
+  }
+]
+```
+
+- One entry per per-file-count breakdown key. `check_name` is the dimension `id`;
+  `description` is the dimension `title` (with ` ×<n>` appended when the offender
+  count at that location exceeds 1). `severity` is always `major` (pawl has no
+  per-issue severity). `location.path` and `location.lines.begin` come from the
+  breakdown key `path:line`; a key with no numeric line is skipped (Code Quality
+  entries require a line).
+- `fingerprint` is a stable hex digest of `check_name`, `path`, `line`, and
+  `description` — identical inputs yield an identical fingerprint across runs, so
+  GitLab tracks the same issue across commits and never treats a re-measured
+  offender as new.
+- Entries are sorted by `path`, then `line`, then `check_name` — a deterministic
+  array for reproducible artifacts and diffs.
 
 ## Diff-scoped checking
 
