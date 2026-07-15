@@ -13,7 +13,7 @@ dimensions:
     options:
       threshold: 500
       include: ["**/*"]
-      exclude: ["**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
 
   # Escape-hatch / debt markers. Swap the pattern (and includes) for your stack:
   # e.g. "as any" for TypeScript, "//nolint" for Go, "# type: ignore" for Python.
@@ -25,4 +25,4 @@ dimensions:
     options:
       pattern: "TODO|FIXME"
       include: ["**/*"]
-      exclude: ["**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]

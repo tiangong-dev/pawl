@@ -2,6 +2,7 @@ package pawl
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,14 +27,25 @@ func runInit(configPath string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "init: resolving %s: %v\n", configPath, err)
 		return 2
 	}
-	if _, err := os.Stat(abs); err == nil {
-		fmt.Fprintf(stderr, "init: %s already exists — edit it, or remove it first.\n", displayPath(abs))
-		return 2
-	} else if !os.IsNotExist(err) {
-		fmt.Fprintf(stderr, "init: checking %s: %v\n", displayPath(abs), err)
+	// Atomic create-exclusive rather than stat-then-write: O_CREATE|O_EXCL fails
+	// if anything already exists at the path (including a symlink, dangling or
+	// not), which closes both the TOCTOU race and the "write through a symlink to
+	// an outside file" hole a stat pre-check would leave open.
+	f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			fmt.Fprintf(stderr, "init: %s already exists — edit it, or remove it first.\n", displayPath(abs))
+			return 2
+		}
+		fmt.Fprintf(stderr, "init: writing %s: %v\n", displayPath(abs), err)
 		return 2
 	}
-	if err := os.WriteFile(abs, []byte(starterConfig), 0o644); err != nil {
+	if _, err := f.WriteString(starterConfig); err != nil {
+		f.Close()
+		fmt.Fprintf(stderr, "init: writing %s: %v\n", displayPath(abs), err)
+		return 2
+	}
+	if err := f.Close(); err != nil {
 		fmt.Fprintf(stderr, "init: writing %s: %v\n", displayPath(abs), err)
 		return 2
 	}
