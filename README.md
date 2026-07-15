@@ -21,6 +21,28 @@ The measuring tool is an implementation detail of each dimension. Swapping ESLin
 for another linter, or migrating a whole project onto pawl, means rewriting one
 adapter command — the baseline and the CI gate stay put.
 
+## Why pawl
+
+- **Measure anything, in any language.** A dimension is any command that prints a
+  number — coverage, passing-test count, bundle size, `as any` count, cycles in a
+  dependency graph, a metric only your codebase has. pawl parses no code and ships
+  no plugins to keep current; it ratchets whatever number you feed it.
+- **The baseline lives in your repo.** The snapshot is one JSON file committed to
+  git — the single source of truth for *where you are today*. Fully local and
+  offline: no account, no server, no dashboard, nothing about your code leaves CI.
+- **A ratchet, not a threshold.** It locks in wherever you stand and only lets it
+  improve. Existing debt is grandfathered per file, so you are never forced to fix
+  everything at once — and the number can never slip back up.
+- **Per-file / per-key precision.** A localized regression can't hide behind a
+  net-zero total, and an offender that merely moves *within* a file doesn't cry
+  wolf — the baseline remembers each file's count, not just the grand total.
+- **Honest by construction.** "Couldn't measure" (exit `2`) is never mistaken for
+  "measured zero", and a hand-edited baseline is caught by `baseline-guard`. The
+  gate would rather stop loud than pass a lie.
+- **One static binary.** Drop it into any CI in seconds; it sits on top of the
+  tools you already run, and renders natively as GitHub PR comments/annotations or
+  a GitLab Code Quality report.
+
 ---
 
 ## Why a quality gate?
