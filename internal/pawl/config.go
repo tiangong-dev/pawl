@@ -223,9 +223,55 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if command == "" && file == "" {
 			return fmt.Errorf("builtin %q requires a command or a file option (the JSON source)", builtin)
 		}
+	case builtinSarif:
+		command, _ := options["command"].(string)
+		file, _ := options["file"].(string)
+		if command == "" && file == "" {
+			return fmt.Errorf("builtin %q requires a command or a file option (the SARIF source)", builtin)
+		}
+		for _, lv := range stringList(options["levels"]) {
+			switch lv {
+			case "error", "warning", "note", "none":
+			default:
+				return fmt.Errorf("builtin %q levels entry %q must be one of error, warning, note or none", builtin, lv)
+			}
+		}
+	case builtinJUnit:
+		command, _ := options["command"].(string)
+		file, _ := options["file"].(string)
+		if command == "" && file == "" {
+			return fmt.Errorf("builtin %q requires a command or a file option (the JUnit XML source)", builtin)
+		}
+		if c, ok := options["count"].(string); ok && c != "" {
+			switch c {
+			case "failures", "tests", "skipped", "passing":
+			default:
+				return fmt.Errorf("builtin %q count must be one of failures, tests, skipped or passing, got %q", builtin, c)
+			}
+		}
+	case builtinCoverage:
+		if file, _ := options["file"].(string); file == "" {
+			return fmt.Errorf("builtin %q requires a file option (the coverage report)", builtin)
+		}
+		format, _ := options["format"].(string)
+		switch format {
+		case "lcov", "cobertura":
+		default:
+			return fmt.Errorf("builtin %q requires a format option of lcov or cobertura, got %q", builtin, format)
+		}
+		metric, _ := options["metric"].(string)
+		switch metric {
+		case "", "lines", "branches", "functions":
+		default:
+			return fmt.Errorf("builtin %q metric must be lines, branches or functions, got %q", builtin, metric)
+		}
+		if metric == "functions" && format == "cobertura" {
+			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
+		}
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd, builtinSwiftComplexity, builtinJSONValue)
+		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd,
+			builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
 	}
 	return nil
 }
