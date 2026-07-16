@@ -142,6 +142,50 @@ func TestBuiltinCoverageLcovExplicitZeroHitIsHonestMeasurement(t *testing.T) {
 	}
 }
 
+// lcov summary counters must be paired WITHIN the same SF:...end_of_record
+// record, not merely appear the same number of times across the whole
+// report. Two records that each supply half of a pair (LF in one, LH in
+// another) sum to a matching total and must not fabricate a percentage from
+// counters that were never actually co-located in one record. A counter
+// appearing after the last end_of_record is not inside any record either.
+func TestBuiltinCoverageLcovCountersMustPairWithinSameRecord(t *testing.T) {
+	cases := map[string]string{
+		"LF and LH split across two different records": "SF:a.go\nLF:10\nend_of_record\n" +
+			"SF:b.go\nLH:10\nend_of_record\n",
+		"LH counter appears after the last end_of_record": "SF:a.go\nLF:10\nLH:5\nend_of_record\n" +
+			"LH:5\n",
+	}
+	for name, fixture := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "cov.info", fixture)
+			writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+				id: "cov", direction: "higher-is-better", builtin: "coverage",
+				optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+			}))
+			res := runPawl(t, dir, baseEnv(), "record")
+			if res.exit != 2 {
+				t.Fatalf("record exit = %d, want 2 (LF/LH must pair within one SF record, not merely balance in total across the report)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+			}
+		})
+	}
+}
+
+// A trailing record cut off mid-parse — SF and LF present, EOF before LH or
+// end_of_record — is truncated input, not a genuine zero-hit record.
+func TestBuiltinCoverageLcovTruncatedTrailingRecordIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:10\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (a record truncated before LH/end_of_record is not a measured report)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
 // SARIF filter lists are string lists with constrained values; a non-string
 // entry must be a config error, not silently dropped into "no filter" (which
 // would broaden the gate behind the user's back).

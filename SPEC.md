@@ -478,10 +478,12 @@ lcov-only, so `functions` + `cobertura` is a config error).
   must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
   `Inf`, or hit-exceeds-found counter is a measurement failure (else e.g.
   `LF:-1 LH:-1` would read as 100%). The selected metric's found/hit counters
-  must appear in **equal numbers** (well-formed lcov emits them in pairs per
-  file record); an unpaired counter — a truncated report's `LF` with no `LH` —
-  is a measurement failure, never a fabricated 0% or partial average. An
-  explicit `LH:0` is an honest 0%.
+  must pair **within the same `SF:`…`end_of_record` record** (well-formed lcov
+  emits them together per record; a record with neither is fine). An unpaired
+  counter — a truncated report's `LF` with no `LH`, or a cross-record
+  complement (`LF` in one record, `LH` in another, which would read as 100%) —
+  is a measurement failure, never a fabricated percentage. An explicit `LH:0`
+  is an honest 0%.
 - **cobertura**: the root `<coverage>` element's `line-rate` / `branch-rate`
   attribute × 100. The root must be `<coverage>` and the rate must be a fraction
   in `[0,1]`; a non-`<coverage>` root, or a rate that is `NaN`/`Inf`/`<0`/`>1`,
