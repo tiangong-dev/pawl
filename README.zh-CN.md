@@ -49,6 +49,8 @@ pawl 本身是个零依赖的小 Go 二进制。adapter 自带各自的运行时
 
 ## 快速上手
 
+`pawl init` 生成一份可用的起步配置(再从[配方手册](./RECIPES.md)里挑更多粘进去);也可以手写 `pawl.yaml`:
+
 **1. 在仓库根写 `pawl.yaml`:**
 
 ```yaml
@@ -90,15 +92,17 @@ pawl check
 
 | 命令 | 作用 |
 |---|---|
+| `pawl init` | 生成一份起步 `pawl.yaml`(不覆盖已有文件) |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
 | `pawl diff` | 测量 + 对比,打印表格,永远退出码 0 |
 | `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
+| `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
 
-`-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令**不会**默认成 `check`。
+`-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
-**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。
+**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。`record --only <id>[,<id>…]` 只重录这些维度、保留其余已提交基线原样——把某个指标的改进单独锁定,不牵动别的维度。
 
 ### 退出码
 
@@ -139,7 +143,7 @@ dimensions:
 
 ## 内置 adapter
 
-分两层。**原语(primitives)** 是 Go 原生实现(零依赖)。**工具 adapter** 运行**你**提供的分析器命令、解析它的机器输出——pawl 掌握格式知识,你掌握工具配置。
+分三层。**原语(primitives)** 是 Go 原生实现(零依赖)。**工具 adapter** 运行**你**提供的分析器命令、解析它的机器输出。**报告格式摄取(ingest)** 读取生态里的标准机器格式,任何能吐这种格式的工具都能免包装成为一个维度——pawl 掌握格式知识,你掌握工具配置。
 
 | builtin | 层 | 测量什么 | 常用 gate |
 |---|---|---|---|
@@ -149,8 +153,21 @@ dimensions:
 | `jscpd` | adapter | 从 jscpd JSON 报告读重复行数 | `total` |
 | `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
 | `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
+| `sarif` | ingest | SARIF 日志里的 findings(CodeQL、Semgrep……),可按 rule/level 过滤 | `per-file-count` |
+| `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
+| `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
 
-每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md)。完整示例配置在各消费项目里。
+报告格式的生产工具会用非零退出码表示"有 findings/失败",所以 ingest 系 builtin 以**能否解析出合法报告**为准、不卡退出码。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一个维度:
+
+```yaml
+  - id: "line-coverage"
+    title: "行覆盖率 %"
+    direction: "higher-is-better"
+    builtin: "coverage"
+    options: { file: "coverage/lcov.info", format: "lcov" }
+```
+
+每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md) 与 [§ Report-format ingest](./SPEC.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
 
 ## 自定义 adapter
 
@@ -200,9 +217,34 @@ dimensions:
 
 按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./SPEC.md#gate-modes) 写清了各自的边界。
 
+## 单独锁定一个胜利(`record --only`)
+
+全量 `pawl record` 会一次性重测并重新"祝福"**所有**维度——想锁定某一项的改进,就会顺带把其他维度此刻的读数照单全收,包括你并不想接受的别处回归。改好了哪一项,就只锁哪一项:
+
+```console
+$ pawl record --only line-coverage
+📸 re-recorded line-coverage; preserved 4 other metric(s) → pawl.snapshot.json
+```
+
+只有列出的维度会被重测;其余每个指标都逐字保留已提交的值。无关维度的 adapter 坏了也不挡路——它根本不会被运行。
+
+## 看质量走势(`pawl trend`)
+
+快照是一个已提交的文件,它的 git 历史**就是**指标历史。`pawl trend [<id>]` 直接渲染出来——全本地,零云,零账号:
+
+```console
+$ pawl trend line-coverage
+line-coverage  (higher-is-better, %)
+  6952777  2026-07-13  71.2  —
+  165cabc  2026-07-14  72.4  +1.2
+  0142640  2026-07-16  74.0  +1.6
+```
+
+不带 id 看全部维度。`--limit <n>` 限制行数(默认 20,`0` = 全部);`--format json` 输出机器可读的数据点,方便自己画图。
+
 ## CI 集成
 
-pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
+pawl 是单个二进制——任何 CI 都能跑。pawl 自己的 CI 就在 dogfood 这整条链路:把 `go test` 经 go-junit-report 生成真实 JUnit 报告,再用 `junit` builtin 给通过用例数设地板,让 ingest 路径每次提交都跑在真实工具产物上([pawl.yaml](./pawl.yaml))。两种常见接法:
 
 ### GitHub Actions
 

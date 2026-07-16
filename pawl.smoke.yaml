@@ -1,0 +1,17 @@
+# Smoke config for the `action-smoke` CI job, which installs the *released*
+# pawl through the action and runs it. It intentionally uses only primitive
+# builtins that every release ships, so this job verifies the action's
+# install → run → verdict wiring without coupling to whichever (possibly
+# newer, not-yet-released) builtins pawl.yaml has adopted. The real self-gate
+# lives in pawl.yaml and runs against the PR-built binary in the `test` job.
+snapshot: "pawl.smoke.snapshot.json"
+
+dimensions:
+  - id: "file-length"
+    title: "Go files over 500 lines"
+    direction: "lower-is-better"
+    gate: "total"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*.go"]

@@ -33,32 +33,59 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>]
 
+  init                 scaffold a starter pawl.yaml (never overwrites)
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
   diff                 measure + compare, print the table, always exit 0
   baseline-guard <ref> compare the working tree's snapshot against the version
                        committed at <ref> — the anti-tamper gate
+  trend [<id>]         print each metric's value across the committed snapshot's
+                       git history — a fully local trend, no cloud
   version              print `pawl <version>` and exit 0
 ```
 
-- No command defaults to `check`.
+- Run with no command, pawl defaults to `check` (so a bare `pawl` in CI is the
+  gate, not a usage error). "No command" means zero positional arguments — an
+  empty-string argument is an unknown command (exit 2), so a wrapper passing an
+  unset variable fails loud instead of silently running the default gate.
 - `-c <path>` selects the config file; default `./pawl.yaml`.
+- `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
+  for all); on any command other than `trend` it is a usage error (exit 2).
+- `--only <id>[,<id>…]` re-records only the named dimensions and preserves the
+  rest of the committed snapshot; valid only on `record`, specified in
+  [§ Partial record](#partial-record---only). On any other command it is a
+  usage error (exit 2).
 - `--format <text|json|codeclimate>` selects the output format of
   `record`/`check`/`diff`; default `text`. `json` is specified in
   [§ Machine-readable output](#machine-readable-output); `codeclimate` in
   [§ Code Quality output](#code-quality-output).
-  `baseline-guard` ignores `--format` (its output is not tabular).
+  `baseline-guard` ignores `--format` (its output is not tabular). `trend`
+  honors `text` (default) and `json`; `--format codeclimate` on `trend` is a
+  usage error (exit 2).
 - `--since <ref>` scopes `check` (only) to lines changed since `<ref>`, specified
   in [§ Diff-scoped checking](#diff-scoped-checking). `--since` on any command
   other than `check` is a usage error (exit 2).
 - Unknown command → stderr message naming valid commands, exit 2.
+- Extra positional operands are usage errors (exit 2): `trend` takes at most
+  one operand (the metric id) and `baseline-guard` one (the ref); every other
+  command takes none. This keeps a mistyped invocation (`pawl record only x` —
+  the dashes of `--only` forgotten) from silently running a different,
+  state-writing command.
 - `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
   stdout and exit 0 **without reading any config file** — they must work in a
-  directory with no `pawl.yaml`. The version string defaults to `dev` and is
+  directory with no `pawl.yaml`. A `--version` riding on a **valid,
+  validly-flagged** command (`pawl check --version`) also prints the version;
+  any usage error in the invocation — an unknown command, a mis-scoped flag, a
+  disallowed format (`trend --format codeclimate`) — outranks the version
+  print and exits 2. Unknown-command outranks mis-scoped-flag in diagnostics. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
+- `pawl init` writes a commented starter config to the config path (honoring
+  `-c`) **without reading any existing config** — it is the zero-friction
+  on-ramp, specified in [§ init](#init). If a file already exists at that path
+  it refuses (exit 2) rather than overwrite.
 
 ### Exit codes
 
@@ -70,6 +97,24 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.
+
+## init
+
+`pawl init` scaffolds a working starter `pawl.yaml` so a new project can go from
+nothing to a passing gate in two commands (`pawl init && pawl record`). It reads
+no existing config.
+
+- Writes to the config path (`-c <path>`, default `./pawl.yaml`).
+- **Never overwrites**: if a file already exists at that path, it prints a
+  message naming the path and exits 2 (a scaffolder that clobbered a hand-tuned
+  config would be worse than useless). A different pre-existing filesystem error
+  on the stat is likewise exit 2.
+- The written config is **valid and non-empty**: it declares at least one
+  dimension using only zero-dependency primitive builtins (`file-length`,
+  `pattern-count`), so `pawl record` succeeds immediately with no external tool
+  installed. Comments in the file point at the recipe cookbook for more.
+- On success it writes the file and prints a next-steps line (naming the file
+  and pointing at `pawl record`), exit 0.
 
 ## Config — `pawl.yaml`
 
@@ -344,6 +389,154 @@ json`, e.g. `swift-complexity Sources --recursive --format json`), `threshold`
   `filePath`s are relativized; a function with no line uses line 0).
 - Intended gate: `per-file-count` — a function crossing the threshold in one file
   fails even if the total is unchanged.
+
+## Report-format ingest builtins
+
+Three builtins read the ecosystem's **standard machine report formats** so any
+tool that emits one becomes a pawl dimension with no wrapper — pawl sits *on top
+of* the tools it already trusts (a scanner's SARIF, a runner's JUnit XML, a
+coverage report) rather than reimplementing them.
+
+**Shared exit-code rule (the honesty guard for all three).** Unlike the raw exec
+contract (exit 0 or bust) and the `eslint` adapter (0/1 ok, 2+ fatal), these
+formats are produced by tools that conventionally exit **non-zero to signal
+findings/failures** — a scanner with findings, a test run with a failing test, a
+coverage run whose tests failed. Gating on exit code would force `|| true` and
+lose the report. So pawl **does not gate on the command's exit code**; the
+honesty guard is instead that a **well-formed report of the declared format must
+be produced**. A tool that crashes emits no parseable report (or, in `file`
+mode, does not write the file — a pre-existing `file` is deleted before the
+command runs, so a stale one can never satisfy the measurement), which is a
+measurement failure (exit 2), never a silent zero. The one dishonesty this
+cannot catch is a tool that emits a *well-formed but empty* report after failing
+to actually analyze/run — pin the tool and its invocation so that can't happen.
+
+**Shared JSON/report source** (as `json-value`): exactly one of
+- `command` alone — its stdout is the report;
+- `file` alone — a report file (path relative to the config dir) that already
+  exists;
+- `command` + `file` — the command produces the file (stale-artifact guard: any
+  pre-existing `file` is deleted first).
+
+### `sarif`
+
+Counts results in a [SARIF](https://sarifweb.azurewebsites.net/) log — the
+standard output of CodeQL, Semgrep, and a growing set of linters/scanners.
+Options: the shared source, plus `rules` (string list, optional — count only
+results whose `ruleId` is in the list; empty/omitted counts all) and `levels`
+(string list, optional — count only results whose `level` is in the list; each
+entry must be one of `error`/`warning`/`note`/`none`, else a config error;
+empty/omitted counts all). A result with no `level` is treated as `warning`
+(the SARIF default).
+- stdout/file must parse as a SARIF log object with a `runs` array; a document
+  that parses as JSON but lacks a `runs` array is the wrong shape and a
+  measurement failure (an empty run is `{"runs":[]}`, not `{}`).
+- `value` = number of `results` across all `runs` matching the filters, `unit` =
+  `"findings"`.
+- `breakdown` = `{ "<path>:<line>": <count> }` from each result's
+  `locations[0].physicalLocation`: `artifactLocation.uri` (a `file://` scheme
+  prefix stripped, then relativized to the config dir) and `region.startLine`
+  (0 when absent). A result with **no** `physicalLocation`/`uri` still counts
+  toward `value` but is omitted from the breakdown (nothing to attribute it to).
+- Intended gate: `per-file-count`.
+
+### `junit`
+
+Reads a [JUnit XML](https://github.com/testmoapp/junitxml) report — the
+near-universal test-result format (`<testsuites>`/`<testsuite>`/`<testcase>`) —
+and counts one quantity. Options: the shared source, plus `count` (string,
+optional, default `"failures"`), one of:
+- `"failures"` — testcases with a `<failure>` or `<error>` child (`lower-is-better`);
+- `"tests"` — all testcases;
+- `"skipped"` — testcases with a `<skipped>` child;
+- `"passing"` — `tests − failures − skipped` (`higher-is-better`).
+
+Counts are derived from the **`<testcase>` elements themselves** (not the
+suite-level `tests=`/`failures=` attributes, which producers compute
+inconsistently and which would be a second, divergent source of truth). Each
+state is detected independently, so `skipped` really is "testcases with a
+`<skipped>` child". A document that does not parse as XML, is **not rooted at
+`<testsuites>`/`<testsuite>`** (some other XML that merely contains a
+`<testcase>` is not a JUnit report), has no `<testcase>` at all, or contains a
+**contradictory** testcase (both failed/errored and skipped) is a measurement
+failure. `value` = the selected count, `unit` = the `count` name
+(`"tests"`/`"failures"`/`"skipped"`/`"passing"`), `breakdown` = null. Intended
+gate: `total` (a passing-count floor, or a failure-count ceiling).
+
+### `coverage`
+
+Reads a code-coverage report and computes a coverage **percentage** — the two
+machine formats `json-value` cannot read (lcov's text, cobertura's XML). (A
+`coverage-summary.json` is already a `json-value` `total.lines.pct` read.)
+Options: `file` (string, required — the report, relative to the config dir),
+`format` (string, required — `"lcov"` or `"cobertura"`), `command` (optional —
+produces the file, with the stale-artifact guard), and `metric` (optional,
+default `"lines"` — `"lines"`, `"branches"`, or `"functions"`; `functions` is
+lcov-only, so `functions` + `cobertura` is a config error).
+- **lcov**: sum the `LF`/`LH` (lines), `FNF`/`FNH` (functions), `BRF`/`BRH`
+  (branches) records across the file; `value` = `hit / found × 100`. Counters
+  must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
+  `Inf`, or hit-exceeds-found counter is a measurement failure (else e.g.
+  `LF:-1 LH:-1` would read as 100%). The cross-record **sums** must stay
+  finite — an aggregate that overflows float64 is a measurement failure, not
+  a fabricated 0%. `hit ≤ found` holds **per record** — an
+  impossible record (2 lines hit out of 1 found) is a measurement failure even
+  when another record's slack makes the global totals look consistent. The
+  selected metric's found/hit counters must pair **within the same
+  `SF:`…`end_of_record` record**, and a record carries **at most one** such
+  pair (well-formed lcov emits exactly one summary pair per record; duplicate
+  summaries in one record would dilute the percentage; a record with neither
+  counter is fine). An unpaired
+  counter — a truncated report's `LF` with no `LH`, or a cross-record
+  complement (`LF` in one record, `LH` in another, which would read as 100%) —
+  is a measurement failure, never a fabricated percentage. A counter **outside
+  any record** (before the first `SF:` or after an `end_of_record`) is
+  malformed even as a balanced pair — stray counters must not skew the total.
+  An explicit `LH:0` is an honest 0%.
+- **cobertura**: the root `<coverage>` element's `line-rate` / `branch-rate`
+  attribute × 100. The root must be `<coverage>` and the rate must be a fraction
+  in `[0,1]`; a non-`<coverage>` root, or a rate that is `NaN`/`Inf`/`<0`/`>1`,
+  is a measurement failure.
+- A report with **zero** of the requested unit found (lcov `found` total 0, or a
+  missing cobertura rate attribute) is a measurement failure (`no <metric>
+  coverage data`) — never a silent 0 or 100.
+- `value` = the percentage, `unit` = `"%"`, `breakdown` = null. Direction is
+  `higher-is-better`; intended gate: `total` (a small `tolerance` absorbs
+  rounding noise).
+
+## Partial record (`--only`)
+
+`pawl record --only <id>[,<id>…]` re-measures **only** the named dimensions and
+writes a snapshot that keeps every other metric's committed value untouched. It
+is the surgical counterpart to a full `record`: a full record re-measures and
+re-blesses *every* dimension at once, so locking in a win on one dimension also
+silently accepts whatever the others currently measure — including a regression
+elsewhere you did not mean to bless. `--only` locks in the improved dimension
+alone, so the committed baseline for the rest stays exactly where it was.
+
+- Valid only on `record`; on any other command it is a usage error (exit 2).
+  An empty list (`--only ""` / `--only ,`) is a usage error (exit 2).
+- Every listed id must be a configured dimension id; an unknown id → exit 2
+  (naming the id), before anything is measured or written.
+- Requires an existing, **well-formed** snapshot to preserve: a missing snapshot,
+  or one with shape errors, → exit 2 (naming the problem). "Preserve the rest"
+  is meaningless without a baseline — run a full `pawl record` first.
+- **Only the listed dimensions are measured.** An unrelated dimension whose
+  adapter is currently broken therefore does not block locking in the win (that
+  is the point). The written snapshot = the freshly measured listed dimensions,
+  plus, for every **other configured** dimension, its metric copied verbatim
+  from the existing snapshot.
+- A metric in the existing snapshot whose dimension is no longer configured (an
+  orphan) is dropped, exactly as a full `record` drops it — `--only` never writes
+  an orphan back.
+- A configured dimension that is neither listed nor present in the existing
+  snapshot stays absent (it remains "new" until a full record, or an `--only`
+  that names it).
+- Output honors `--format` as a full `record` does (text table, `json`,
+  `codeclimate`). The text footer names the re-recorded ids and the number of
+  preserved metrics instead of the plain `📸 snapshot written` line. The output
+  covers only the metrics actually written (measured or preserved); an
+  intentionally-absent dimension is omitted, never rendered as a measured `0`.
 
 ## Snapshot — `pawl.snapshot.json`
 
@@ -685,6 +878,77 @@ of pre-existing regressions exempted. `--format json` sets `mode: "since"`,
 `since: "<ref>"`, and carries `suppressed: true` on each exempted regression.
 The exit code is 1 iff any live (non-suppressed) regression remains — including
 a full-strength `total` regression — else 0.
+
+## Trend
+
+`pawl trend [<id>]` reconstructs each metric's value over time from the
+**committed snapshot file's own git history** — no cloud, no external store, no
+account. It is **read-only and never measures**: it walks `git log` for the
+snapshot path, parses the snapshot committed at each commit that touched it, and
+prints the series. This is the fully-local answer to "is this metric trending the
+right way?" — the history is already in the repo.
+
+- The snapshot's repo-relative path is resolved as `baseline-guard` does
+  (`git rev-parse --show-toplevel`, then Rel). `trend` reads the config only for
+  the snapshot path; it needs no measurement. Not inside a git repo, or the
+  snapshot path outside the repo → exit 2.
+- Commits are those from `git log --format=<sha><TAB><ISO-date> -- <path>`
+  reachable from `HEAD` (newest first). If the path was **never committed** →
+  exit 2 (`no committed history for <path> — commit the snapshot first`). History
+  is traced at the snapshot's **current path**: renaming the snapshot file is a
+  boundary (commits before the rename are not reconstructed under the old name).
+- For each commit, `git show <sha>:<path>` is parsed. A commit is **skipped with
+  a loud `::warning::` (under `GITHUB_ACTIONS`) / `⚠️` note** — never silently —
+  when its snapshot cannot be read (`git show` fails, e.g. the commit that
+  deleted the file), is **unparseable JSON**, or has an **invalid shape** (e.g. a
+  metric with no numeric value). A malformed snapshot must never become a
+  measured `0`, and one corrupt historical commit must not abort the whole trend.
+  A commit whose (well-formed) snapshot simply lacks a given metric contributes
+  no point for that metric (a gap — the dimension didn't exist yet).
+- A metric's `direction` and `unit` are taken from its **most recent** appearance
+  in the history (the current contract for that metric).
+- `<id>` restricts output to that one metric; if it appears in **no** historical
+  snapshot → exit 2 (`no metric "<id>" in the snapshot history`). With no `<id>`,
+  every metric id that appears anywhere in the history is shown, sorted by id.
+- `--limit <n>` (default 20) keeps only the `n` **most recent** snapshot commits;
+  `--limit 0` means all. When the history is longer than the limit, a loud line
+  (`showing <n> of <m> snapshots (--limit 0 for all)`) is printed — never a
+  silent cap. Points are always ordered **oldest → newest** in the output, so the
+  per-point Δ reads as "change from the previous point".
+
+**Output (text).** For each metric: a header `<id>  (<direction>, <unit>)`, then
+one row per kept commit, oldest first:
+
+```
+<short-sha>  <YYYY-MM-DD>  <value>  <Δ>
+```
+
+`<value>` is minimal-decimal; `<Δ>` is `—` for the first (oldest) point, else the
+signed change from the previous point (`±0` when unchanged), same formatting as
+the `check` table's Δ.
+
+**Output (`--format json`).** One JSON object, `metrics` sorted by id, `points`
+oldest → newest:
+
+```json
+{
+  "schema_version": 1,
+  "command": "trend",
+  "snapshot": "pawl.snapshot.json",
+  "metrics": [
+    {
+      "id": "file-length",
+      "direction": "lower-is-better",
+      "unit": "files > 500 lines",
+      "points": [
+        { "commit": "<full sha>", "date": "<ISO-8601>", "value": 3 }
+      ]
+    }
+  ]
+}
+```
+
+The exit code is 0 on success, 2 on any of the error cases above.
 
 ## Public Go API (package `pawl`)
 

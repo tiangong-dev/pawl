@@ -78,6 +78,9 @@ pawl itself is a small dependency-free Go binary. Adapters bring their own runti
 
 ## Quickstart
 
+`pawl init` scaffolds a working starter config (then paste more from the
+[recipe cookbook](./RECIPES.md)); or write `pawl.yaml` by hand:
+
 **1. Write `pawl.yaml`** at your repo root:
 
 ```yaml
@@ -120,21 +123,25 @@ pawl check
 
 | command | what it does |
 |---|---|
+| `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
 | `pawl diff` | measure + compare, print the table, always exit 0 |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
+| `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 
-`-c <path>` selects the config file (default `./pawl.yaml`). No command defaults
-to `check`.
+`-c <path>` selects the config file (default `./pawl.yaml`). Omitting the
+command runs `check`.
 
 **Flags.** `--format json` makes `record`/`check`/`diff` print a stable
 machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl stays
 the gate, any reporter consumes the JSON. `--format codeclimate` emits a
 [Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
 `check --since <ref>` scopes the gate to lines changed since `<ref>`
-([clean-as-you-code](#diff-scoped-checking)).
+([clean-as-you-code](#diff-scoped-checking)). `record --only <id>[,<id>…]`
+re-records just those dimensions and preserves the rest of the committed
+baseline, so a win on one metric locks in without re-blessing the others.
 
 ### Exit codes
 
@@ -177,9 +184,11 @@ dimensions:
 
 ## Built-in adapters
 
-Two tiers. **Primitives** are Go-native (zero dependencies). **Tool adapters**
-run an analyzer *you* invoke and parse its machine output — pawl owns the format
-knowledge, you own the tool setup.
+Three tiers. **Primitives** are Go-native (zero dependencies). **Tool adapters**
+run an analyzer *you* invoke and parse its machine output. **Report-format
+ingest** reads the ecosystem's standard machine formats, so any tool that emits
+one becomes a dimension with no wrapper — pawl owns the format knowledge, you own
+the tool setup.
 
 | builtin | tier | measures | typical gate |
 |---|---|---|---|
@@ -189,10 +198,26 @@ knowledge, you own the tool setup.
 | `jscpd` | adapter | duplicated lines from a jscpd JSON report | `total` |
 | `swift-complexity` | adapter | Swift **cognitive** complexity offenders (what SwiftLint can't) | `per-file-count` |
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
+| `sarif` | ingest | findings in a SARIF log (CodeQL, Semgrep, …), filtered by rule/level | `per-file-count` |
+| `junit` | ingest | failing / passing / total tests from a JUnit XML report | `total` |
+| `coverage` | ingest | line/branch/function coverage % from lcov or cobertura | `total` |
+
+Report-format producers exit non-zero to signal findings/failures, so the ingest
+builtins gate on a **parseable report**, not the exit code. A coverage floor is
+one dimension away from any lcov report your CI already produces:
+
+```yaml
+  - id: "line-coverage"
+    title: "Line coverage %"
+    direction: "higher-is-better"
+    builtin: "coverage"
+    options: { file: "coverage/lcov.info", format: "lcov" }
+```
 
 Each builtin's exact options, exit-code handling, and breakdown shape are in
-[SPEC.md § Built-in adapters](./SPEC.md). Full example configs live in the
-consuming projects.
+[SPEC.md § Built-in adapters](./SPEC.md) and [§ Report-format ingest](./SPEC.md).
+Copy-paste configs for all of them — plus SARIF/JUnit/coverage/complexity/
+duplication — are in the [recipe cookbook](./RECIPES.md).
 
 ## Custom adapters
 
@@ -268,9 +293,44 @@ Pick the gate for the shape: `per-file-count` is the strong net-zero defense for
 guards keys already in the baseline. Neither is a universal net-zero proof — the
 [SPEC](./SPEC.md#gate-modes) spells out the edges.
 
+## Locking in one win (`record --only`)
+
+A full `pawl record` re-measures and re-blesses **every** dimension at once — so
+locking in a win on one metric silently accepts whatever the others currently
+measure, including a regression elsewhere you did not mean to accept. When you
+improve one dimension, lock in just that one:
+
+```console
+$ pawl record --only line-coverage
+📸 re-recorded line-coverage; preserved 4 other metric(s) → pawl.snapshot.json
+```
+
+Only the listed dimensions are re-measured; every other metric keeps its
+committed value verbatim. A broken adapter on an unrelated dimension doesn't
+block the win either — it isn't run at all.
+
+## Watching the trend (`pawl trend`)
+
+The snapshot is a committed file, so its git history **is** the metric history.
+`pawl trend [<id>]` renders it — fully local, no cloud, no account:
+
+```console
+$ pawl trend line-coverage
+line-coverage  (higher-is-better, %)
+  6952777  2026-07-13  71.2  —
+  165cabc  2026-07-14  72.4  +1.2
+  0142640  2026-07-16  74.0  +1.6
+```
+
+Omit the id to see every dimension. `--limit <n>` caps the rows (default 20,
+`0` = all); `--format json` emits machine-readable points for your own plotting.
+
 ## CI integration
 
-pawl is a single binary — any CI can run it. Two common wirings:
+pawl is a single binary — any CI can run it. pawl's own CI dogfoods the whole
+loop: it pipes `go test` through go-junit-report and gates its passing-test
+floor with the `junit` builtin, so the ingest path runs on real report output
+on every commit ([pawl.yaml](./pawl.yaml)). Two common wirings:
 
 ### GitHub Actions
 

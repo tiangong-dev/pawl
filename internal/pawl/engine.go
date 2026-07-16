@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	configPath := "pawl.yaml"
 	format := "text"
 	since := ""
+	limit := 20
+	limitSet := false
+	only := ""
+	onlyProvided := false
 	versionRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -34,6 +39,27 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
+		case args[i] == "--limit":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--limit requires a non-negative integer\n")
+				return 2
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				fmt.Fprintf(stderr, "--limit must be a non-negative integer, got %q\n", args[i])
+				return 2
+			}
+			limit = n
+			limitSet = true
+		case args[i] == "--only":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--only requires a comma-separated list of dimension ids\n")
+				return 2
+			}
+			i++
+			only = args[i]
+			onlyProvided = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -62,25 +88,88 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if len(positional) > 0 {
+		// An explicit positional is taken verbatim — an empty string is an
+		// unknown command, not "no command", so a wrapper running
+		// `pawl "$PAWL_COMMAND"` with the variable unset fails loud instead
+		// of silently running the default gate.
 		command = positional[0]
-	}
-	if command == "" {
+	} else if versionRequested {
+		// `pawl --version` is the version command, not an implicit check —
+		// otherwise the default would make check-scoped flags (--since) look
+		// valid on a version print.
+		command = "version"
+	} else {
 		command = "check"
 	}
-	// version never reads config — it must work in any directory.
-	if versionRequested || command == "version" {
-		fmt.Fprintf(stdout, "pawl %s\n", Version)
-		return 0
-	}
+	// An unknown command is reported first — even alongside --version, so
+	// `pawl frobnicate --version` is the usage error the contract promises,
+	// never laundered into a clean version print.
 	switch command {
-	case "record", "check", "diff", "baseline-guard":
+	case "init", "record", "check", "diff", "baseline-guard", "trend", "version":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | version\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
+		return 2
+	}
+	// Commands have a fixed operand arity; an extra operand is a usage error,
+	// so a mistyped invocation (`pawl record only x` — the dashes of --only
+	// forgotten) fails loud instead of silently running a different,
+	// state-writing command.
+	maxOperands := 0
+	if command == "trend" || command == "baseline-guard" {
+		maxOperands = 1
+	}
+	if len(positional) > 1+maxOperands {
+		fmt.Fprintf(stderr, "unexpected argument %q — `%s` takes at most %d positional argument(s)\n",
+			positional[1+maxOperands], command, maxOperands)
+		return 2
+	}
+	// Command-scoped flags are rejected on any other command — including
+	// version, so these guards run before the version short-circuit and e.g.
+	// `pawl version --limit 1` is the usage error the contract promises
+	// rather than a silent version print.
+	if onlyProvided && command != "record" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
 		return 2
 	}
 	if since != "" && command != "check" {
 		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
 		return 2
+	}
+	if limitSet && command != "trend" {
+		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
+		return 2
+	}
+	if command == "trend" && format == "codeclimate" {
+		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")
+		return 2
+	}
+	// version never reads config — it must work in any directory. A --version
+	// riding on a valid, validly-flagged command (`pawl check --version`) also
+	// wins here; every usage error above outranks the version print.
+	if versionRequested || command == "version" {
+		fmt.Fprintf(stdout, "pawl %s\n", Version)
+		return 0
+	}
+
+	// trend never measures — it reads config only for the snapshot path, so a
+	// temporarily-invalid measurement config (a bad adapter, zero dimensions)
+	// must not block viewing local history.
+	if command == "trend" {
+		cfg, err := LoadConfigLite(configPath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		metricID := ""
+		if len(positional) > 1 {
+			metricID = positional[1]
+		}
+		return runTrend(cfg, metricID, limit, format, stdout, stderr)
+	}
+
+	// init writes a new config; it must not require (or read) an existing one.
+	if command == "init" {
+		return runInit(configPath, stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)
@@ -95,6 +184,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			ref = positional[1]
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
+	}
+	if command == "record" && onlyProvided {
+		ids := parseOnly(only)
+		if len(ids) == 0 {
+			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
+			return 2
+		}
+		return runRecordOnly(cfg, ids, format, stdout, stderr)
 	}
 	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
 }

@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "file-length": {
+      "direction": "lower-is-better",
+      "value": 0,
+      "unit": "files \u003e 500 lines",
+      "breakdown": {}
+    }
+  }
+}
