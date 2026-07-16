@@ -88,17 +88,18 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if len(positional) > 0 {
+		// An explicit positional is taken verbatim — an empty string is an
+		// unknown command, not "no command", so a wrapper running
+		// `pawl "$PAWL_COMMAND"` with the variable unset fails loud instead
+		// of silently running the default gate.
 		command = positional[0]
-	}
-	if command == "" {
+	} else if versionRequested {
 		// `pawl --version` is the version command, not an implicit check —
 		// otherwise the default would make check-scoped flags (--since) look
 		// valid on a version print.
-		if versionRequested {
-			command = "version"
-		} else {
-			command = "check"
-		}
+		command = "version"
+	} else {
+		command = "check"
 	}
 	// An unknown command is reported first — even alongside --version, so
 	// `pawl frobnicate --version` is the usage error the contract promises,

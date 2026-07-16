@@ -194,3 +194,61 @@ func TestValidCommandVersionFlagStillWins(t *testing.T) {
 func containsUnknownCommandMention(stderr string) bool {
 	return strings.Contains(stderr, "unknown command")
 }
+
+// TestEmptyStringPositionalIsUnknownCommand guards that an empty-string
+// positional argument is treated as an unknown command, not as "no command
+// given": the no-command-given default to `check` applies only when zero
+// positional args are passed. A wrapper that runs `pawl "$PAWL_COMMAND"`
+// with an unset variable must fail loud instead of silently running the
+// default gate — the config and snapshot here are deliberately valid, so a
+// silent fall-through to `check` would exit 0 and mask the misconfigured
+// wrapper.
+func TestEmptyStringPositionalIsUnknownCommand(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 1}'`})
+	mustRecord(t, dir, config)
+
+	res := runPawl(t, dir, baseEnv(), "")
+
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2 (stdout=%q stderr=%q)", res.exit, res.stdout, res.stderr)
+	}
+	if !containsUnknownCommandMention(res.stderr) {
+		t.Errorf("stderr = %q, want a mention of \"unknown command\"", res.stderr)
+	}
+}
+
+// TestEmptyStringPositionalWithVersionFlagIsUsageError guards the same
+// contract when --version rides along: the empty-string positional is still
+// an unknown command, so this is a usage error, not a version dump.
+func TestEmptyStringPositionalWithVersionFlagIsUsageError(t *testing.T) {
+	dir := t.TempDir() // no pawl.yaml present — an unknown command is rejected before config is read
+	res := runPawl(t, dir, baseEnv(), "", "--version")
+
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2 (stdout=%q stderr=%q)", res.exit, res.stdout, res.stderr)
+	}
+	if !containsUnknownCommandMention(res.stderr) {
+		t.Errorf("stderr = %q, want a mention of \"unknown command\"", res.stderr)
+	}
+	if containsVersionString(res.stdout) {
+		t.Errorf("stdout = %q, must not contain the version string when the command is unknown", res.stdout)
+	}
+}
+
+// TestZeroPositionalArgsStillDefaultsToCheck is the control for the two
+// tests above: truly bare `pawl` (zero positional args, as opposed to one
+// empty-string positional arg) still defaults to `check` and exits 0 given
+// a valid recorded config, proving the unknown-command guard rejects only
+// an explicit empty-string positional, not the zero-arg default path.
+func TestZeroPositionalArgsStillDefaultsToCheck(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 1}'`})
+	mustRecord(t, dir, config)
+
+	res := runPawl(t, dir, baseEnv())
+
+	if res.exit != 0 {
+		t.Fatalf("exit = %d, want 0 (stdout=%q stderr=%q)", res.exit, res.stdout, res.stderr)
+	}
+}

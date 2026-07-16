@@ -47,7 +47,9 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 ```
 
 - Run with no command, pawl defaults to `check` (so a bare `pawl` in CI is the
-  gate, not a usage error).
+  gate, not a usage error). "No command" means zero positional arguments — an
+  empty-string argument is an unknown command (exit 2), so a wrapper passing an
+  unset variable fails loud instead of silently running the default gate.
 - `-c <path>` selects the config file; default `./pawl.yaml`.
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
   for all); on any command other than `trend` it is a usage error (exit 2).
