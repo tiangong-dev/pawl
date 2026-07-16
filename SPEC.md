@@ -477,7 +477,9 @@ lcov-only, so `functions` + `cobertura` is a config error).
   (branches) records across the file; `value` = `hit / found × 100`. Counters
   must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
   `Inf`, or hit-exceeds-found counter is a measurement failure (else e.g.
-  `LF:-1 LH:-1` would read as 100%). `hit ≤ found` holds **per record** — an
+  `LF:-1 LH:-1` would read as 100%). The cross-record **sums** must stay
+  finite — an aggregate that overflows float64 is a measurement failure, not
+  a fabricated 0%. `hit ≤ found` holds **per record** — an
   impossible record (2 lines hit out of 1 found) is a measurement failure even
   when another record's slack makes the global totals look consistent. The
   selected metric's found/hit counters must pair **within the same

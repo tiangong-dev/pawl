@@ -350,6 +350,47 @@ func TestBuiltinCoverageLcovDuplicateFoundCounterWithSingleHitIsMeasurementFailu
 	}
 }
 
+// Per-record counters can each be finite and individually satisfy hit <=
+// found, yet still overflow float64 once summed across the whole report.
+// Record a.go's found total (1e308) plus b.go's found total (1e308) exceeds
+// float64's finite range and overflows to +Inf, while the hit total (1e308)
+// stays finite — so hit/Inf silently reads as a "measured" 0% instead of the
+// measurement failure it actually is.
+func TestBuiltinCoverageLcovAggregateOverflowIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1e308\nLH:1e308\nend_of_record\n"+
+		"SF:b.go\nLF:1e308\nLH:0\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (found totals overflow float64 to +Inf; hit/Inf must not fabricate a percentage)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+// TestBuiltinCoverageLcovLargeButFiniteAggregateMeasuresCorrectly is the
+// control: counters large enough to matter but nowhere near float64's range
+// limit sum without overflowing, so the report measures honestly.
+func TestBuiltinCoverageLcovLargeButFiniteAggregateMeasuresCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1e15\nLH:5e14\nend_of_record\n"+
+		"SF:b.go\nLF:1e15\nLH:5e14\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 0 {
+		t.Fatalf("record exit = %d, want 0 (counters are large but well within float64's finite range)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	snap := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json"))
+	if snap.Metrics["cov"].Value != 50 {
+		t.Errorf("value = %v, want 50 ((5e14+5e14)/(1e15+1e15) across two well-formed records)", snap.Metrics["cov"].Value)
+	}
+}
+
 // SARIF filter lists are string lists with constrained values; a non-string
 // entry must be a config error, not silently dropped into "no filter" (which
 // would broaden the gate behind the user's back).

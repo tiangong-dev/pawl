@@ -396,6 +396,11 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 	if err := flushRecord(); err != nil {
 		return 0, err
 	}
+	// Each counter is finite, but the cross-record sum can still overflow
+	// float64 — an overflowed found reads hit/Inf as a fabricated 0%.
+	if math.IsInf(found, 0) || math.IsInf(hit, 0) {
+		return 0, fmt.Errorf("lcov report is malformed: summed %s counters overflow", metric)
+	}
 	if found == 0 {
 		return 0, fmt.Errorf("no %s coverage data in lcov report", metric)
 	}
