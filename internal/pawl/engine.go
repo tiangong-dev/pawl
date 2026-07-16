@@ -106,9 +106,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "record", "check", "diff", "baseline-guard", "trend":
+	case "init", "record", "check", "diff", "baseline-guard", "trend":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
 		return 2
 	}
 	if since != "" && command != "check" {
@@ -138,6 +138,11 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			metricID = positional[1]
 		}
 		return runTrend(cfg, metricID, limit, format, stdout, stderr)
+	}
+
+	// init writes a new config; it must not require (or read) an existing one.
+	if command == "init" {
+		return runInit(configPath, stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)
