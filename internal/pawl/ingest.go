@@ -316,12 +316,16 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 	}
 
 	// Well-formed lcov emits the found/hit summary counters in pairs inside
-	// each SF:…end_of_record record. The pairing is enforced per record — a
-	// merely globally-balanced report (LF in one record, LH in another) is a
+	// each SF:…end_of_record record — never outside one. Both structure rules
+	// are enforced: a counter outside any record is malformed even as a
+	// balanced pair (stray counters would silently skew the total), and
+	// within a record the selected counters must pair (a merely
+	// globally-balanced report — LF in one record, LH in another — is a
 	// truncated or mangled report whose surviving counters would fabricate a
-	// percentage (a cross-record complement reads as 100%, a lone LF as 0%).
-	// A record with neither counter of the selected metric is fine.
+	// percentage). A record with neither counter of the selected metric is
+	// fine.
 	var found, hit float64
+	inRecord := false
 	recFound, recHit := 0, 0
 	flushRecord := func() error {
 		if recFound != recHit {
@@ -334,14 +338,23 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		switch {
-		case strings.HasPrefix(line, "SF:"), line == "end_of_record":
-			// Both close any open record; a missing end_of_record before the
-			// next SF must not let an unpaired counter escape validation.
+		case strings.HasPrefix(line, "SF:"):
+			// A missing end_of_record before the next SF must not let an
+			// unpaired counter escape validation.
 			if err := flushRecord(); err != nil {
 				return 0, err
 			}
+			inRecord = true
+		case line == "end_of_record":
+			if err := flushRecord(); err != nil {
+				return 0, err
+			}
+			inRecord = false
 		default:
 			if v, ok := strings.CutPrefix(line, foundKey+":"); ok {
+				if !inRecord {
+					return 0, fmt.Errorf("lcov report is malformed: %s counter outside any SF record", foundKey)
+				}
 				n, err := readCounter(foundKey, v)
 				if err != nil {
 					return 0, err
@@ -349,6 +362,9 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 				found += n
 				recFound++
 			} else if v, ok := strings.CutPrefix(line, hitKey+":"); ok {
+				if !inRecord {
+					return 0, fmt.Errorf("lcov report is malformed: %s counter outside any SF record", hitKey)
+				}
 				n, err := readCounter(hitKey, v)
 				if err != nil {
 					return 0, err

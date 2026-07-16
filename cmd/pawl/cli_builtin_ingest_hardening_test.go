@@ -186,6 +186,56 @@ func TestBuiltinCoverageLcovTruncatedTrailingRecordIsMeasurementFailure(t *testi
 	}
 }
 
+// lcov counters must live inside an SF:...end_of_record record. A pair of
+// counters outside any record — even a balanced LF/LH pair that would sum to
+// a plausible-looking total — is not attached to a file and must not be
+// folded into the measurement. This holds whether the stray pair trails the
+// last record or precedes the first one.
+func TestBuiltinCoverageLcovCountersOutsideAnyRecordAreMeasurementFailure(t *testing.T) {
+	cases := map[string]string{
+		"balanced pair trails the last end_of_record": "SF:a.go\nLF:10\nLH:5\nend_of_record\n" +
+			"LF:90\nLH:90\n",
+		"balanced pair precedes the first SF": "LF:90\nLH:90\n" +
+			"SF:a.go\nLF:10\nLH:5\nend_of_record\n",
+	}
+	for name, fixture := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "cov.info", fixture)
+			writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+				id: "cov", direction: "higher-is-better", builtin: "coverage",
+				optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+			}))
+			res := runPawl(t, dir, baseEnv(), "record")
+			if res.exit != 2 {
+				t.Fatalf("record exit = %d, want 2 (a counter pair outside any SF record must not be folded into the measurement, however balanced it looks)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+			}
+		})
+	}
+}
+
+// TestBuiltinCoverageLcovMultiRecordReportMeasuresCorrectly is the control:
+// two genuinely separate SF records, each internally balanced, sum to the
+// same 95% a stray trailing pair would fabricate — but here every counter is
+// inside a record, so the measurement is honest and must succeed.
+func TestBuiltinCoverageLcovMultiRecordReportMeasuresCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:10\nLH:5\nend_of_record\n"+
+		"SF:b.go\nLF:90\nLH:90\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 0 {
+		t.Fatalf("record exit = %d, want 0 (every counter is inside an SF record; this is a genuine measurement)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	snap := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json"))
+	if snap.Metrics["cov"].Value != 95 {
+		t.Errorf("value = %v, want 95 ((5+90)/(10+90) across two well-formed records)", snap.Metrics["cov"].Value)
+	}
+}
+
 // SARIF filter lists are string lists with constrained values; a non-string
 // entry must be a config error, not silently dropped into "no filter" (which
 // would broaden the gate behind the user's back).
