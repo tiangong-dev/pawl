@@ -100,6 +100,15 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			command = "check"
 		}
 	}
+	// An unknown command is reported first — even alongside --version, so
+	// `pawl frobnicate --version` is the usage error the contract promises,
+	// never laundered into a clean version print.
+	switch command {
+	case "init", "record", "check", "diff", "baseline-guard", "trend", "version":
+	default:
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
+		return 2
+	}
 	// Command-scoped flags are rejected on any other command — including
 	// version, so these guards run before the version short-circuit and e.g.
 	// `pawl version --limit 1` is the usage error the contract promises
@@ -116,16 +125,11 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
 		return 2
 	}
-	// version never reads config — it must work in any directory.
+	// version never reads config — it must work in any directory. A --version
+	// riding on a valid command (`pawl check --version`) also wins here.
 	if versionRequested || command == "version" {
 		fmt.Fprintf(stdout, "pawl %s\n", Version)
 		return 0
-	}
-	switch command {
-	case "init", "record", "check", "diff", "baseline-guard", "trend":
-	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
-		return 2
 	}
 	if command == "trend" && format == "codeclimate" {
 		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")

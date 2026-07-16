@@ -68,7 +68,10 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 - Unknown command → stderr message naming valid commands, exit 2.
 - `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
   stdout and exit 0 **without reading any config file** — they must work in a
-  directory with no `pawl.yaml`. The version string defaults to `dev` and is
+  directory with no `pawl.yaml`. A `--version` riding on a **valid** command
+  (`pawl check --version`) also prints the version; on an **unknown** command
+  it is the unknown-command usage error (exit 2), never a version print. The
+  unknown-command error also outranks a mis-scoped-flag error in diagnostics. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
 - `pawl init` writes a commented starter config to the config path (honoring
