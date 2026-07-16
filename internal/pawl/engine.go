@@ -91,13 +91,29 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		command = positional[0]
 	}
 	if command == "" {
-		command = "check"
+		// `pawl --version` is the version command, not an implicit check —
+		// otherwise the default would make check-scoped flags (--since) look
+		// valid on a version print.
+		if versionRequested {
+			command = "version"
+		} else {
+			command = "check"
+		}
 	}
-	// --only is a record-only flag; reject it on any other command (including
-	// version) before the version short-circuit, so `pawl version --only x` is
-	// the usage error the contract promises rather than a silent version print.
+	// Command-scoped flags are rejected on any other command — including
+	// version, so these guards run before the version short-circuit and e.g.
+	// `pawl version --limit 1` is the usage error the contract promises
+	// rather than a silent version print.
 	if onlyProvided && command != "record" {
 		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+		return 2
+	}
+	if since != "" && command != "check" {
+		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
+		return 2
+	}
+	if limitSet && command != "trend" {
+		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
 		return 2
 	}
 	// version never reads config — it must work in any directory.
@@ -109,14 +125,6 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	case "init", "record", "check", "diff", "baseline-guard", "trend":
 	default:
 		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
-		return 2
-	}
-	if since != "" && command != "check" {
-		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
-		return 2
-	}
-	if limitSet && command != "trend" {
-		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
 		return 2
 	}
 	if command == "trend" && format == "codeclimate" {

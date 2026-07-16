@@ -16,7 +16,7 @@
     },
     "passing-tests": {
       "direction": "higher-is-better",
-      "value": 414,
+      "value": 422,
       "unit": "passing",
       "breakdown": null
     },

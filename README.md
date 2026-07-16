@@ -131,8 +131,8 @@ pawl check
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 
-`-c <path>` selects the config file (default `./pawl.yaml`). No command defaults
-to `check`.
+`-c <path>` selects the config file (default `./pawl.yaml`). Omitting the
+command runs `check`.
 
 **Flags.** `--format json` makes `record`/`check`/`diff` print a stable
 machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl stays

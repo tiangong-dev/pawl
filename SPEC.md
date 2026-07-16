@@ -46,7 +46,8 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   version              print `pawl <version>` and exit 0
 ```
 
-- No command defaults to `check`.
+- Run with no command, pawl defaults to `check` (so a bare `pawl` in CI is the
+  gate, not a usage error).
 - `-c <path>` selects the config file; default `./pawl.yaml`.
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
   for all); on any command other than `trend` it is a usage error (exit 2).
