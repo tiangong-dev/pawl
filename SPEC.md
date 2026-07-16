@@ -68,6 +68,11 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   in [§ Diff-scoped checking](#diff-scoped-checking). `--since` on any command
   other than `check` is a usage error (exit 2).
 - Unknown command → stderr message naming valid commands, exit 2.
+- Extra positional operands are usage errors (exit 2): `trend` takes at most
+  one operand (the metric id) and `baseline-guard` one (the ref); every other
+  command takes none. This keeps a mistyped invocation (`pawl record only x` —
+  the dashes of `--only` forgotten) from silently running a different,
+  state-writing command.
 - `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
   stdout and exit 0 **without reading any config file** — they must work in a
   directory with no `pawl.yaml`. A `--version` riding on a **valid** command

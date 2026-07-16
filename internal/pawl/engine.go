@@ -110,6 +110,19 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
 		return 2
 	}
+	// Commands have a fixed operand arity; an extra operand is a usage error,
+	// so a mistyped invocation (`pawl record only x` — the dashes of --only
+	// forgotten) fails loud instead of silently running a different,
+	// state-writing command.
+	maxOperands := 0
+	if command == "trend" || command == "baseline-guard" {
+		maxOperands = 1
+	}
+	if len(positional) > 1+maxOperands {
+		fmt.Fprintf(stderr, "unexpected argument %q — `%s` takes at most %d positional argument(s)\n",
+			positional[1+maxOperands], command, maxOperands)
+		return 2
+	}
 	// Command-scoped flags are rejected on any other command — including
 	// version, so these guards run before the version short-circuit and e.g.
 	// `pawl version --limit 1` is the usage error the contract promises
