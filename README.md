@@ -203,8 +203,18 @@ the tool setup.
 | `coverage` | ingest | line/branch/function coverage % from lcov or cobertura | `total` |
 
 Report-format producers exit non-zero to signal findings/failures, so the ingest
-builtins gate on a **parseable report**, not the exit code. Each builtin's exact
-options, exit-code handling, and breakdown shape are in
+builtins gate on a **parseable report**, not the exit code. A coverage floor is
+one dimension away from any lcov report your CI already produces:
+
+```yaml
+  - id: "line-coverage"
+    title: "Line coverage %"
+    direction: "higher-is-better"
+    builtin: "coverage"
+    options: { file: "coverage/lcov.info", format: "lcov" }
+```
+
+Each builtin's exact options, exit-code handling, and breakdown shape are in
 [SPEC.md § Built-in adapters](./SPEC.md) and [§ Report-format ingest](./SPEC.md).
 Copy-paste configs for all of them — plus SARIF/JUnit/coverage/complexity/
 duplication — are in the [recipe cookbook](./RECIPES.md).
@@ -283,9 +293,44 @@ Pick the gate for the shape: `per-file-count` is the strong net-zero defense for
 guards keys already in the baseline. Neither is a universal net-zero proof — the
 [SPEC](./SPEC.md#gate-modes) spells out the edges.
 
+## Locking in one win (`record --only`)
+
+A full `pawl record` re-measures and re-blesses **every** dimension at once — so
+locking in a win on one metric silently accepts whatever the others currently
+measure, including a regression elsewhere you did not mean to accept. When you
+improve one dimension, lock in just that one:
+
+```console
+$ pawl record --only line-coverage
+📸 re-recorded line-coverage; preserved 4 other metric(s) → pawl.snapshot.json
+```
+
+Only the listed dimensions are re-measured; every other metric keeps its
+committed value verbatim. A broken adapter on an unrelated dimension doesn't
+block the win either — it isn't run at all.
+
+## Watching the trend (`pawl trend`)
+
+The snapshot is a committed file, so its git history **is** the metric history.
+`pawl trend [<id>]` renders it — fully local, no cloud, no account:
+
+```console
+$ pawl trend line-coverage
+line-coverage  (higher-is-better, %)
+  6952777  2026-07-13  71.2  —
+  165cabc  2026-07-14  72.4  +1.2
+  0142640  2026-07-16  74.0  +1.6
+```
+
+Omit the id to see every dimension. `--limit <n>` caps the rows (default 20,
+`0` = all); `--format json` emits machine-readable points for your own plotting.
+
 ## CI integration
 
-pawl is a single binary — any CI can run it. Two common wirings:
+pawl is a single binary — any CI can run it. pawl's own CI dogfoods the whole
+loop: it pipes `go test` through go-junit-report and gates its passing-test
+floor with the `junit` builtin, so the ingest path runs on real report output
+on every commit ([pawl.yaml](./pawl.yaml)). Two common wirings:
 
 ### GitHub Actions
 

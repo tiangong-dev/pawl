@@ -157,7 +157,17 @@ dimensions:
 | `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
 | `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
 
-报告格式的生产工具会用非零退出码表示"有 findings/失败",所以 ingest 系 builtin 以**能否解析出合法报告**为准、不卡退出码。每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md) 与 [§ Report-format ingest](./SPEC.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
+报告格式的生产工具会用非零退出码表示"有 findings/失败",所以 ingest 系 builtin 以**能否解析出合法报告**为准、不卡退出码。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一个维度:
+
+```yaml
+  - id: "line-coverage"
+    title: "行覆盖率 %"
+    direction: "higher-is-better"
+    builtin: "coverage"
+    options: { file: "coverage/lcov.info", format: "lcov" }
+```
+
+每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md) 与 [§ Report-format ingest](./SPEC.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
 
 ## 自定义 adapter
 
@@ -207,9 +217,34 @@ dimensions:
 
 按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./SPEC.md#gate-modes) 写清了各自的边界。
 
+## 单独锁定一个胜利(`record --only`)
+
+全量 `pawl record` 会一次性重测并重新"祝福"**所有**维度——想锁定某一项的改进,就会顺带把其他维度此刻的读数照单全收,包括你并不想接受的别处回归。改好了哪一项,就只锁哪一项:
+
+```console
+$ pawl record --only line-coverage
+📸 re-recorded line-coverage; preserved 4 other metric(s) → pawl.snapshot.json
+```
+
+只有列出的维度会被重测;其余每个指标都逐字保留已提交的值。无关维度的 adapter 坏了也不挡路——它根本不会被运行。
+
+## 看质量走势(`pawl trend`)
+
+快照是一个已提交的文件,它的 git 历史**就是**指标历史。`pawl trend [<id>]` 直接渲染出来——全本地,零云,零账号:
+
+```console
+$ pawl trend line-coverage
+line-coverage  (higher-is-better, %)
+  6952777  2026-07-13  71.2  —
+  165cabc  2026-07-14  72.4  +1.2
+  0142640  2026-07-16  74.0  +1.6
+```
+
+不带 id 看全部维度。`--limit <n>` 限制行数(默认 20,`0` = 全部);`--format json` 输出机器可读的数据点,方便自己画图。
+
 ## CI 集成
 
-pawl 是单个二进制——任何 CI 都能跑。两种常见接法:
+pawl 是单个二进制——任何 CI 都能跑。pawl 自己的 CI 就在 dogfood 这整条链路:把 `go test` 经 go-junit-report 生成真实 JUnit 报告,再用 `junit` builtin 给通过用例数设地板,让 ingest 路径每次提交都跑在真实工具产物上([pawl.yaml](./pawl.yaml))。两种常见接法:
 
 ### GitHub Actions
 
