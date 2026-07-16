@@ -236,6 +236,63 @@ func TestBuiltinCoverageLcovMultiRecordReportMeasuresCorrectly(t *testing.T) {
 	}
 }
 
+// lcov hit <= found must hold per record, not merely across the report's
+// global totals. A record with LH:2 LF:1 is impossible on its own, but here a
+// second, honest record (LF:99 LH:98) pads the totals to (2+98)/(1+99) = 100
+// found = 100 hit — a globally "consistent" 100% that masks the impossible
+// record. The per-record violation must still fail measurement.
+func TestBuiltinCoverageLcovImpossibleRecordMaskedByGlobalTotalsIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:2\nend_of_record\n"+
+		"SF:b.go\nLF:99\nLH:98\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (a.go alone has LH>LF; a second well-formed record must not launder it into a plausible global total)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+// TestBuiltinCoverageLcovSingleRecordHitExceedsFoundIsMeasurementFailure is
+// the control: a lone record with LH>LF is impossible both per-record and
+// globally (there are no other records to average it against), and must
+// already fail measurement.
+func TestBuiltinCoverageLcovSingleRecordHitExceedsFoundIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:2\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (a lone LH>LF record is impossible with nothing to average against)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+// TestBuiltinCoverageLcovTwoWellFormedRecordsMeasureCorrectly is the control:
+// both records individually satisfy hit <= found, so the report measures
+// honestly and must succeed.
+func TestBuiltinCoverageLcovTwoWellFormedRecordsMeasureCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:1\nend_of_record\n"+
+		"SF:b.go\nLF:99\nLH:98\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 0 {
+		t.Fatalf("record exit = %d, want 0 (both records satisfy hit <= found; this is a genuine measurement)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	snap := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json"))
+	if snap.Metrics["cov"].Value != 99 {
+		t.Errorf("value = %v, want 99 ((1+98)/(1+99) across two well-formed records)", snap.Metrics["cov"].Value)
+	}
+}
+
 // SARIF filter lists are string lists with constrained values; a non-string
 // entry must be a config error, not silently dropped into "no filter" (which
 // would broaden the gate behind the user's back).

@@ -327,12 +327,21 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 	var found, hit float64
 	inRecord := false
 	recFound, recHit := 0, 0
+	recFoundVal, recHitVal := 0.0, 0.0
 	flushRecord := func() error {
 		if recFound != recHit {
 			return fmt.Errorf("lcov report is malformed: a record has %d %s counter(s) but %d %s counter(s) — they must pair within the same record",
 				recFound, foundKey, recHit, hitKey)
 		}
+		// hit ≤ found must hold per record — an impossible record (2 lines
+		// hit out of 1 found) must not be masked by another record's slack
+		// in the global sum, where it would fabricate a clean percentage.
+		if recHitVal > recFoundVal {
+			return fmt.Errorf("lcov report is malformed: a record has more %s hit (%v) than %s found (%v)",
+				metric, recHitVal, metric, recFoundVal)
+		}
 		recFound, recHit = 0, 0
+		recFoundVal, recHitVal = 0, 0
 		return nil
 	}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -361,6 +370,7 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 				}
 				found += n
 				recFound++
+				recFoundVal += n
 			} else if v, ok := strings.CutPrefix(line, hitKey+":"); ok {
 				if !inRecord {
 					return 0, fmt.Errorf("lcov report is malformed: %s counter outside any SF record", hitKey)
@@ -371,6 +381,7 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 				}
 				hit += n
 				recHit++
+				recHitVal += n
 			}
 		}
 	}
