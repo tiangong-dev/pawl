@@ -293,6 +293,63 @@ func TestBuiltinCoverageLcovTwoWellFormedRecordsMeasureCorrectly(t *testing.T) {
 	}
 }
 
+// A well-formed lcov record carries at most one summary pair per metric (one
+// LF + one LH for lines). A record with two LF/LH pairs is malformed: naively
+// summing hits and founds across the duplicated pairs fabricates a low
+// percentage — here (1+0)/(1+99) = 1% — that the record never actually
+// reported.
+func TestBuiltinCoverageLcovDuplicateSummaryPairInRecordIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:1\nLF:99\nLH:0\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (a record with two LF/LH pairs is malformed, not a 1%% measurement)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+// TestBuiltinCoverageLcovSingleSummaryPairPlusSecondRecordMeasuresCorrectly is
+// a control: one record carrying exactly one LF+LH pair, followed by a
+// second, independently well-formed record, is ordinary honest input and must
+// measure correctly.
+func TestBuiltinCoverageLcovSingleSummaryPairPlusSecondRecordMeasuresCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:1\nend_of_record\n"+
+		"SF:b.go\nLF:99\nLH:99\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 0 {
+		t.Fatalf("record exit = %d, want 0 (two records, each with a single LF/LH pair, are a genuine measurement)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	snap := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json"))
+	if snap.Metrics["cov"].Value != 100 {
+		t.Errorf("value = %v, want 100 ((1+99)/(1+99) across two well-formed records)", snap.Metrics["cov"].Value)
+	}
+}
+
+// TestBuiltinCoverageLcovDuplicateFoundCounterWithSingleHitIsMeasurementFailure
+// is a control locking existing behavior: two LF counters against a single LH
+// is already an unequal-count violation and must already fail measurement,
+// independent of the duplicate-pair fix above.
+func TestBuiltinCoverageLcovDuplicateFoundCounterWithSingleHitIsMeasurementFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "cov.info", "SF:a.go\nLF:1\nLH:1\nLF:99\nend_of_record\n")
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "cov.info", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (two LF counters against one LH is an unequal-count violation)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
 // SARIF filter lists are string lists with constrained values; a non-string
 // entry must be a config error, not silently dropped into "no filter" (which
 // would broaden the gate behind the user's back).

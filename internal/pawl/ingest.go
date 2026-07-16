@@ -333,6 +333,13 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 			return fmt.Errorf("lcov report is malformed: a record has %d %s counter(s) but %d %s counter(s) — they must pair within the same record",
 				recFound, foundKey, recHit, hitKey)
 		}
+		// One summary pair per record: duplicate summaries in one record are
+		// not independent records to be summed — that would dilute the
+		// percentage with whichever duplicate the mangling left behind.
+		if recFound > 1 {
+			return fmt.Errorf("lcov report is malformed: a record has %d %s/%s summary pairs — a record carries at most one",
+				recFound, foundKey, hitKey)
+		}
 		// hit ≤ found must hold per record — an impossible record (2 lines
 		// hit out of 1 found) must not be masked by another record's slack
 		// in the global sum, where it would fabricate a clean percentage.

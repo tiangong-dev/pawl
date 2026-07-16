@@ -481,8 +481,10 @@ lcov-only, so `functions` + `cobertura` is a config error).
   impossible record (2 lines hit out of 1 found) is a measurement failure even
   when another record's slack makes the global totals look consistent. The
   selected metric's found/hit counters must pair **within the same
-  `SF:`…`end_of_record` record** (well-formed lcov emits them together per
-  record; a record with neither is fine). An unpaired
+  `SF:`…`end_of_record` record**, and a record carries **at most one** such
+  pair (well-formed lcov emits exactly one summary pair per record; duplicate
+  summaries in one record would dilute the percentage; a record with neither
+  counter is fine). An unpaired
   counter — a truncated report's `LF` with no `LH`, or a cross-record
   complement (`LF` in one record, `LH` in another, which would read as 100%) —
   is a measurement failure, never a fabricated percentage. A counter **outside
