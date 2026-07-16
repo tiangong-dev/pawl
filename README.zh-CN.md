@@ -139,7 +139,7 @@ dimensions:
 
 ## 内置 adapter
 
-分两层。**原语(primitives)** 是 Go 原生实现(零依赖)。**工具 adapter** 运行**你**提供的分析器命令、解析它的机器输出——pawl 掌握格式知识,你掌握工具配置。
+分三层。**原语(primitives)** 是 Go 原生实现(零依赖)。**工具 adapter** 运行**你**提供的分析器命令、解析它的机器输出。**报告格式摄取(ingest)** 读取生态里的标准机器格式,任何能吐这种格式的工具都能免包装成为一个维度——pawl 掌握格式知识,你掌握工具配置。
 
 | builtin | 层 | 测量什么 | 常用 gate |
 |---|---|---|---|
@@ -149,8 +149,11 @@ dimensions:
 | `jscpd` | adapter | 从 jscpd JSON 报告读重复行数 | `total` |
 | `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
 | `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
+| `sarif` | ingest | SARIF 日志里的 findings(CodeQL、Semgrep……),可按 rule/level 过滤 | `per-file-count` |
+| `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
+| `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
 
-每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md)。完整示例配置在各消费项目里。
+报告格式的生产工具会用非零退出码表示"有 findings/失败",所以 ingest 系 builtin 以**能否解析出合法报告**为准、不卡退出码。每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md) 与 [§ Report-format ingest](./SPEC.md)。完整示例配置在各消费项目里。
 
 ## 自定义 adapter
 

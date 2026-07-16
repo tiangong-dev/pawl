@@ -33,6 +33,12 @@ func measureBuiltin(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult
 		return measureSwiftComplexity(cfg, dim, stderr)
 	case builtinJSONValue:
 		return measureJSONValue(cfg, dim, stderr)
+	case builtinSarif:
+		return measureSarif(cfg, dim, stderr)
+	case builtinJUnit:
+		return measureJUnit(cfg, dim, stderr)
+	case builtinCoverage:
+		return measureCoverage(cfg, dim, stderr)
 	}
 	// Unknown builtins are rejected at config load; reaching here is a bug.
 	return MeasureResult{}, fmt.Errorf("unknown builtin %q", dim.Builtin)

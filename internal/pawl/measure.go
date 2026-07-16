@@ -52,6 +52,13 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 			failures = append(failures, fmt.Sprintf("measuring %s failed: %v", o.id, o.err))
 			continue
 		}
+		// A measured value must be finite. The exec path already enforces this;
+		// this guards the builtin path too, so a NaN/Inf can never be stored (a
+		// NaN silently never compares "worse", which would read as a pass).
+		if math.IsNaN(o.result.Value) || math.IsInf(o.result.Value, 0) {
+			failures = append(failures, fmt.Sprintf("measuring %s failed: value is not finite (%v)", o.id, o.result.Value))
+			continue
+		}
 		dim := cfg.Dimensions[i]
 		unit := o.result.Unit
 		if unit == "" {

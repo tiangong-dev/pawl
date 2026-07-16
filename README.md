@@ -177,9 +177,11 @@ dimensions:
 
 ## Built-in adapters
 
-Two tiers. **Primitives** are Go-native (zero dependencies). **Tool adapters**
-run an analyzer *you* invoke and parse its machine output — pawl owns the format
-knowledge, you own the tool setup.
+Three tiers. **Primitives** are Go-native (zero dependencies). **Tool adapters**
+run an analyzer *you* invoke and parse its machine output. **Report-format
+ingest** reads the ecosystem's standard machine formats, so any tool that emits
+one becomes a dimension with no wrapper — pawl owns the format knowledge, you own
+the tool setup.
 
 | builtin | tier | measures | typical gate |
 |---|---|---|---|
@@ -189,10 +191,15 @@ knowledge, you own the tool setup.
 | `jscpd` | adapter | duplicated lines from a jscpd JSON report | `total` |
 | `swift-complexity` | adapter | Swift **cognitive** complexity offenders (what SwiftLint can't) | `per-file-count` |
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
+| `sarif` | ingest | findings in a SARIF log (CodeQL, Semgrep, …), filtered by rule/level | `per-file-count` |
+| `junit` | ingest | failing / passing / total tests from a JUnit XML report | `total` |
+| `coverage` | ingest | line/branch/function coverage % from lcov or cobertura | `total` |
 
-Each builtin's exact options, exit-code handling, and breakdown shape are in
-[SPEC.md § Built-in adapters](./SPEC.md). Full example configs live in the
-consuming projects.
+Report-format producers exit non-zero to signal findings/failures, so the ingest
+builtins gate on a **parseable report**, not the exit code. Each builtin's exact
+options, exit-code handling, and breakdown shape are in
+[SPEC.md § Built-in adapters](./SPEC.md) and [§ Report-format ingest](./SPEC.md).
+Full example configs live in the consuming projects.
 
 ## Custom adapters
 

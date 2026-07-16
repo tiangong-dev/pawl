@@ -223,11 +223,90 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if command == "" && file == "" {
 			return fmt.Errorf("builtin %q requires a command or a file option (the JSON source)", builtin)
 		}
+	case builtinSarif:
+		command, _ := options["command"].(string)
+		file, _ := options["file"].(string)
+		if command == "" && file == "" {
+			return fmt.Errorf("builtin %q requires a command or a file option (the SARIF source)", builtin)
+		}
+		// Strict, not stringList: a non-string entry (e.g. levels: [123]) must be
+		// rejected, not silently dropped into "no filter" — that would broaden
+		// the gate behind the user's back.
+		levels, err := strictStringList(options["levels"])
+		if err != nil {
+			return fmt.Errorf("builtin %q levels: %v", builtin, err)
+		}
+		for _, lv := range levels {
+			switch lv {
+			case "error", "warning", "note", "none":
+			default:
+				return fmt.Errorf("builtin %q levels entry %q must be one of error, warning, note or none", builtin, lv)
+			}
+		}
+		if _, err := strictStringList(options["rules"]); err != nil {
+			return fmt.Errorf("builtin %q rules: %v", builtin, err)
+		}
+	case builtinJUnit:
+		command, _ := options["command"].(string)
+		file, _ := options["file"].(string)
+		if command == "" && file == "" {
+			return fmt.Errorf("builtin %q requires a command or a file option (the JUnit XML source)", builtin)
+		}
+		if c, ok := options["count"].(string); ok && c != "" {
+			switch c {
+			case "failures", "tests", "skipped", "passing":
+			default:
+				return fmt.Errorf("builtin %q count must be one of failures, tests, skipped or passing, got %q", builtin, c)
+			}
+		}
+	case builtinCoverage:
+		if file, _ := options["file"].(string); file == "" {
+			return fmt.Errorf("builtin %q requires a file option (the coverage report)", builtin)
+		}
+		format, _ := options["format"].(string)
+		switch format {
+		case "lcov", "cobertura":
+		default:
+			return fmt.Errorf("builtin %q requires a format option of lcov or cobertura, got %q", builtin, format)
+		}
+		metric, _ := options["metric"].(string)
+		switch metric {
+		case "", "lines", "branches", "functions":
+		default:
+			return fmt.Errorf("builtin %q metric must be lines, branches or functions, got %q", builtin, metric)
+		}
+		if metric == "functions" && format == "cobertura" {
+			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
+		}
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd, builtinSwiftComplexity, builtinJSONValue)
+		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd,
+			builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
 	}
 	return nil
+}
+
+// strictStringList validates an optional list option: absent is fine (nil), but
+// a present value must be a list of strings — a non-list, or any non-string
+// entry, is an error rather than a silent drop. Used for filter lists whose
+// silent broadening would weaken the gate unnoticed.
+func strictStringList(v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	items, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("must be a list of strings")
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("every entry must be a string, got %T", item)
+		}
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 // stringList coerces a config array option into []string, dropping non-string
