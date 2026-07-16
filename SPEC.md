@@ -33,7 +33,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>]
 
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
@@ -49,6 +49,10 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>]
 - `-c <path>` selects the config file; default `./pawl.yaml`.
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
   for all); on any command other than `trend` it is a usage error (exit 2).
+- `--only <id>[,<id>…]` re-records only the named dimensions and preserves the
+  rest of the committed snapshot; valid only on `record`, specified in
+  [§ Partial record](#partial-record---only). On any other command it is a
+  usage error (exit 2).
 - `--format <text|json|codeclimate>` selects the output format of
   `record`/`check`/`diff`; default `text`. `json` is specified in
   [§ Machine-readable output](#machine-readable-output); `codeclimate` in
@@ -449,6 +453,40 @@ lcov-only, so `functions` + `cobertura` is a config error).
 - `value` = the percentage, `unit` = `"%"`, `breakdown` = null. Direction is
   `higher-is-better`; intended gate: `total` (a small `tolerance` absorbs
   rounding noise).
+
+## Partial record (`--only`)
+
+`pawl record --only <id>[,<id>…]` re-measures **only** the named dimensions and
+writes a snapshot that keeps every other metric's committed value untouched. It
+is the surgical counterpart to a full `record`: a full record re-measures and
+re-blesses *every* dimension at once, so locking in a win on one dimension also
+silently accepts whatever the others currently measure — including a regression
+elsewhere you did not mean to bless. `--only` locks in the improved dimension
+alone, so the committed baseline for the rest stays exactly where it was.
+
+- Valid only on `record`; on any other command it is a usage error (exit 2).
+  An empty list (`--only ""` / `--only ,`) is a usage error (exit 2).
+- Every listed id must be a configured dimension id; an unknown id → exit 2
+  (naming the id), before anything is measured or written.
+- Requires an existing, **well-formed** snapshot to preserve: a missing snapshot,
+  or one with shape errors, → exit 2 (naming the problem). "Preserve the rest"
+  is meaningless without a baseline — run a full `pawl record` first.
+- **Only the listed dimensions are measured.** An unrelated dimension whose
+  adapter is currently broken therefore does not block locking in the win (that
+  is the point). The written snapshot = the freshly measured listed dimensions,
+  plus, for every **other configured** dimension, its metric copied verbatim
+  from the existing snapshot.
+- A metric in the existing snapshot whose dimension is no longer configured (an
+  orphan) is dropped, exactly as a full `record` drops it — `--only` never writes
+  an orphan back.
+- A configured dimension that is neither listed nor present in the existing
+  snapshot stays absent (it remains "new" until a full record, or an `--only`
+  that names it).
+- Output honors `--format` as a full `record` does (text table, `json`,
+  `codeclimate`). The text footer names the re-recorded ids and the number of
+  preserved metrics instead of the plain `📸 snapshot written` line. The output
+  covers only the metrics actually written (measured or preserved); an
+  intentionally-absent dimension is omitted, never rendered as a measured `0`.
 
 ## Snapshot — `pawl.snapshot.json`
 

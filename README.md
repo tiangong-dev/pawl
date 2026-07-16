@@ -135,7 +135,9 @@ machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl sta
 the gate, any reporter consumes the JSON. `--format codeclimate` emits a
 [Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
 `check --since <ref>` scopes the gate to lines changed since `<ref>`
-([clean-as-you-code](#diff-scoped-checking)).
+([clean-as-you-code](#diff-scoped-checking)). `record --only <id>[,<id>…]`
+re-records just those dimensions and preserves the rest of the committed
+baseline, so a win on one metric locks in without re-blessing the others.
 
 ### Exit codes
 

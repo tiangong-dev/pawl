@@ -26,6 +26,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	since := ""
 	limit := 20
 	limitSet := false
+	only := ""
+	onlyProvided := false
 	versionRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -50,6 +52,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			}
 			limit = n
 			limitSet = true
+		case args[i] == "--only":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--only requires a comma-separated list of dimension ids\n")
+				return 2
+			}
+			i++
+			only = args[i]
+			onlyProvided = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -82,6 +92,13 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	}
 	if command == "" {
 		command = "check"
+	}
+	// --only is a record-only flag; reject it on any other command (including
+	// version) before the version short-circuit, so `pawl version --only x` is
+	// the usage error the contract promises rather than a silent version print.
+	if onlyProvided && command != "record" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+		return 2
 	}
 	// version never reads config — it must work in any directory.
 	if versionRequested || command == "version" {
@@ -135,6 +152,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			ref = positional[1]
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
+	}
+	if command == "record" && onlyProvided {
+		ids := parseOnly(only)
+		if len(ids) == 0 {
+			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
+			return 2
+		}
+		return runRecordOnly(cfg, ids, format, stdout, stderr)
 	}
 	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
 }
