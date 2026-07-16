@@ -1,1 +1,3 @@
 npm/dist/
+# CI-generated report the junit dogfood dimensions ingest (regenerated each run).
+pawl-junit.xml

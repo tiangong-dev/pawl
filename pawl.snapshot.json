@@ -14,11 +14,23 @@
         "internal/pawl/snapshot.go:119": 1
       }
     },
+    "passing-tests": {
+      "direction": "higher-is-better",
+      "value": 414,
+      "unit": "passing",
+      "breakdown": null
+    },
     "stray-prints": {
       "direction": "lower-is-better",
       "value": 0,
       "unit": "count",
       "breakdown": {}
+    },
+    "test-failures": {
+      "direction": "lower-is-better",
+      "value": 0,
+      "unit": "failures",
+      "breakdown": null
     },
     "todo-markers": {
       "direction": "lower-is-better",

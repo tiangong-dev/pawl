@@ -28,8 +28,14 @@ jobs:
         run: test -z "$(gofmt -l .)" || { gofmt -l .; echo '::error::run gofmt'; exit 1; }
       - name: go vet
         run: go vet ./...
-      - name: go test
-        run: go test ./...
+      # Run the Go suite and, in the same pass, capture its verbose output as a
+      # real JUnit report the self-gate ingests below. pipefail makes a test
+      # failure fail this step (go-junit-report always exits 0), so this stays
+      # the authoritative fast-fail while also producing pawl-junit.xml.
+      - name: go test (+ JUnit report for the self-gate)
+        run: |
+          set -o pipefail
+          go test -v ./... 2>&1 | go run github.com/jstemmer/go-junit-report/v2@v2.1.0 > pawl-junit.xml
       - name: node distribution tests
         run: node --test npm/cli/test/*.test.js
       # The setup-pawl action renders its PR comment from a pawl --format json
@@ -125,8 +131,13 @@ jobs:
       # sticky comment; the comment renderer is unit-tested separately, and the
       # live upsert path is exercised by downstream consumers. pawl's baseline is
       # clean, so the enforced verdict is 0 and this step passes.
+      # Point the released binary at pawl.smoke.yaml (primitives only, so any
+      # release can run it) rather than pawl.yaml, whose junit dimensions need
+      # a builtin the released pawl may not have yet. This keeps action-smoke a
+      # test of the action's wiring, decoupled from pawl.yaml's builtin set.
       - name: Dogfood the action's command mode
         uses: ./
         with:
           command: check
+          args: '-c pawl.smoke.yaml'
           comment: 'false'

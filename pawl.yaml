@@ -1,7 +1,9 @@
 # pawl gates its own Go source — the gate dogfoods itself in CI (`pawl check`
-# runs in .github/workflows/ci.yml). Zero external dependencies (built-in
-# primitives plus a POSIX-grep exec adapter that dogfoods the extract layer), so
-# the self-check needs nothing but the repo, matching pawl's self-contained ethos.
+# runs in .github/workflows/ci.yml). The structural dimensions use only built-in
+# primitives plus a POSIX-grep exec adapter (the extract layer). The `junit`
+# dimensions make pawl the first real consumer of its own report-ingest tier:
+# they read the actual go-junit-report output CI produces from `go test`, so the
+# ingest path runs on genuine tool output, not a fixture.
 snapshot: "pawl.snapshot.json"
 
 dimensions:
@@ -47,3 +49,31 @@ dimensions:
     command: "grep -rnE 'fmt\\.Print(ln|f)?\\(' internal cmd --include='*.go' | grep -v _test.go || true"
     extract:
       regex: '^(?P<path>[^:]+):(?P<line>\d+):'
+
+  # Report-ingest dogfood: both dimensions read pawl-junit.xml — the real JUnit
+  # report CI generates by piping `go test -v ./...` through go-junit-report.
+  # The producer's own exit code is deliberately ignored (per the ingest
+  # contract); the gate is that a parseable report exists.
+
+  # A passing-test floor: deleting a test drops the count and regresses. New
+  # tests raise it — re-record to lock the higher floor in.
+  - id: "passing-tests"
+    title: "passing Go tests"
+    direction: "higher-is-better"
+    gate: "total"
+    builtin: "junit"
+    options:
+      file: "pawl-junit.xml"
+      count: "passing"
+
+  # A failing-test ceiling held at 0. `go test` already fails CI on a failure;
+  # this reads the same fact through the ingest path so a break there surfaces
+  # as a gate regression too.
+  - id: "test-failures"
+    title: "failing Go tests"
+    direction: "lower-is-better"
+    gate: "total"
+    builtin: "junit"
+    options:
+      file: "pawl-junit.xml"
+      count: "failures"
