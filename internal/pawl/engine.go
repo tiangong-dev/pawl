@@ -139,15 +139,16 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
 		return 2
 	}
-	// version never reads config — it must work in any directory. A --version
-	// riding on a valid command (`pawl check --version`) also wins here.
-	if versionRequested || command == "version" {
-		fmt.Fprintf(stdout, "pawl %s\n", Version)
-		return 0
-	}
 	if command == "trend" && format == "codeclimate" {
 		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")
 		return 2
+	}
+	// version never reads config — it must work in any directory. A --version
+	// riding on a valid, validly-flagged command (`pawl check --version`) also
+	// wins here; every usage error above outranks the version print.
+	if versionRequested || command == "version" {
+		fmt.Fprintf(stdout, "pawl %s\n", Version)
+		return 0
 	}
 
 	// trend never measures — it reads config only for the snapshot path, so a

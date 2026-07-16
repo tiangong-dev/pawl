@@ -316,6 +316,7 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 	}
 
 	var found, hit float64
+	var foundRecords, hitRecords int
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if v, ok := strings.CutPrefix(line, foundKey+":"); ok {
@@ -324,13 +325,23 @@ func lcovPercent(data []byte, metric string) (float64, error) {
 				return 0, err
 			}
 			found += n
+			foundRecords++
 		} else if v, ok := strings.CutPrefix(line, hitKey+":"); ok {
 			n, err := readCounter(hitKey, v)
 			if err != nil {
 				return 0, err
 			}
 			hit += n
+			hitRecords++
 		}
+	}
+	// Well-formed lcov emits the found/hit summary counters in pairs per file
+	// record; an unpaired counter means a truncated or mangled report, and
+	// summing the survivors would fabricate a percentage (LF with no LH reads
+	// as 0%, a missing LH in one of two records reads as a made-up average).
+	if foundRecords != hitRecords {
+		return 0, fmt.Errorf("lcov report is malformed: %d %s record(s) but %d %s record(s) — the counters must come in pairs",
+			foundRecords, foundKey, hitRecords, hitKey)
 	}
 	if found == 0 {
 		return 0, fmt.Errorf("no %s coverage data in lcov report", metric)

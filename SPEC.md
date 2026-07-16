@@ -75,10 +75,11 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   state-writing command.
 - `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
   stdout and exit 0 **without reading any config file** — they must work in a
-  directory with no `pawl.yaml`. A `--version` riding on a **valid** command
-  (`pawl check --version`) also prints the version; on an **unknown** command
-  it is the unknown-command usage error (exit 2), never a version print. The
-  unknown-command error also outranks a mis-scoped-flag error in diagnostics. The version string defaults to `dev` and is
+  directory with no `pawl.yaml`. A `--version` riding on a **valid,
+  validly-flagged** command (`pawl check --version`) also prints the version;
+  any usage error in the invocation — an unknown command, a mis-scoped flag, a
+  disallowed format (`trend --format codeclimate`) — outranks the version
+  print and exits 2. Unknown-command outranks mis-scoped-flag in diagnostics. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
 - `pawl init` writes a commented starter config to the config path (honoring
@@ -476,7 +477,11 @@ lcov-only, so `functions` + `cobertura` is a config error).
   (branches) records across the file; `value` = `hit / found × 100`. Counters
   must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
   `Inf`, or hit-exceeds-found counter is a measurement failure (else e.g.
-  `LF:-1 LH:-1` would read as 100%).
+  `LF:-1 LH:-1` would read as 100%). The selected metric's found/hit counters
+  must appear in **equal numbers** (well-formed lcov emits them in pairs per
+  file record); an unpaired counter — a truncated report's `LF` with no `LH` —
+  is a measurement failure, never a fabricated 0% or partial average. An
+  explicit `LH:0` is an honest 0%.
 - **cobertura**: the root `<coverage>` element's `line-rate` / `branch-rate`
   attribute × 100. The root must be `<coverage>` and the rate must be a fraction
   in `[0,1]`; a non-`<coverage>` root, or a rate that is `NaN`/`Inf`/`<0`/`>1`,
