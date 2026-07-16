@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -23,6 +24,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	configPath := "pawl.yaml"
 	format := "text"
 	since := ""
+	limit := 20
+	limitSet := false
 	versionRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -34,6 +37,19 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
+		case args[i] == "--limit":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--limit requires a non-negative integer\n")
+				return 2
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				fmt.Fprintf(stderr, "--limit must be a non-negative integer, got %q\n", args[i])
+				return 2
+			}
+			limit = n
+			limitSet = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -73,14 +89,38 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	switch command {
-	case "record", "check", "diff", "baseline-guard":
+	case "record", "check", "diff", "baseline-guard", "trend":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | version\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
 		return 2
 	}
 	if since != "" && command != "check" {
 		fmt.Fprintf(stderr, "--since is only valid on `check`, not %q\n", command)
 		return 2
+	}
+	if limitSet && command != "trend" {
+		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
+		return 2
+	}
+	if command == "trend" && format == "codeclimate" {
+		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")
+		return 2
+	}
+
+	// trend never measures — it reads config only for the snapshot path, so a
+	// temporarily-invalid measurement config (a bad adapter, zero dimensions)
+	// must not block viewing local history.
+	if command == "trend" {
+		cfg, err := LoadConfigLite(configPath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		metricID := ""
+		if len(positional) > 1 {
+			metricID = positional[1]
+		}
+		return runTrend(cfg, metricID, limit, format, stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)

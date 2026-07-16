@@ -94,6 +94,7 @@ pawl check
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
 | `pawl diff` | 测量 + 对比,打印表格,永远退出码 0 |
 | `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
+| `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令**不会**默认成 `check`。

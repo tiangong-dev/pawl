@@ -124,6 +124,7 @@ pawl check
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
 | `pawl diff` | measure + compare, print the table, always exit 0 |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
+| `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 
 `-c <path>` selects the config file (default `./pawl.yaml`). No command defaults
