@@ -251,9 +251,9 @@ pawl 是单个二进制——任何 CI 都能跑。pawl 自己的 CI 就在 dogf
 action 负责安装二进制;不传 `command` 时它只做这件事:
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.3.1   # 把 pawl 二进制放进 PATH——无需 Go/Node
+- uses: tiangong-dev/pawl@v0.4.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
-    version: v0.3.1                # 可选;默认取最新 release
+    version: v0.4.0                # 可选;默认取最新 release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # PR 上跑
 ```
@@ -262,7 +262,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 
 ```yaml
 # ... 门禁需要的前置步骤,如构建 exec adapter ...
-- uses: tiangong-dev/pawl@v0.3.1
+- uses: tiangong-dev/pawl@v0.4.0
   with:
     command: check
     args: --since origin/${{ github.base_ref }}   # 可选的附加参数
@@ -279,7 +279,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.3.1 check --format codeclimate > gl-code-quality-report.json
+    - npx -y @pawl-tools/cli@0.4.0 check --format codeclimate > gl-code-quality-report.json
   artifacts:
     when: always                 # 门禁失败也要产出报告
     reports:
@@ -290,7 +290,7 @@ quality-gate:
 
 ### 其他
 
-pawl 是单个二进制——任何 CI 里跑 `npx -y @pawl-tools/cli@0.3.1 check`(或下载 release 二进制)即可。
+pawl 是单个二进制——任何 CI 里跑 `npx -y @pawl-tools/cli@0.4.0 check`(或下载 release 二进制)即可。
 
 ### 防篡改
 

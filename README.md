@@ -337,9 +337,9 @@ on every commit ([pawl.yaml](./pawl.yaml)). Two common wirings:
 The action installs the binary; on its own that is all it does:
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.3.1   # puts the pawl binary on PATH — no Go/Node
+- uses: tiangong-dev/pawl@v0.4.0   # puts the pawl binary on PATH — no Go/Node
   with:
-    version: v0.3.1                # optional; defaults to the latest release
+    version: v0.4.0                # optional; defaults to the latest release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
 ```
@@ -350,7 +350,7 @@ no bespoke `github-script` step:
 
 ```yaml
 # ... your pre-steps here, e.g. build exec adapters ...
-- uses: tiangong-dev/pawl@v0.3.1
+- uses: tiangong-dev/pawl@v0.4.0
   with:
     command: check
     args: --since origin/${{ github.base_ref }}   # optional extra args
@@ -375,7 +375,7 @@ job just publishes the artifact:
 quality-gate:
   image: node:22
   script:
-    - npx -y @pawl-tools/cli@0.3.1 check --format codeclimate > gl-code-quality-report.json
+    - npx -y @pawl-tools/cli@0.4.0 check --format codeclimate > gl-code-quality-report.json
   artifacts:
     when: always                 # publish the report even when the gate fails
     reports:
@@ -388,7 +388,7 @@ findings, but their gate is still enforced through that exit code.
 
 ### Anything else
 
-pawl is a single binary — run `npx -y @pawl-tools/cli@0.3.1 check` (or download
+pawl is a single binary — run `npx -y @pawl-tools/cli@0.4.0 check` (or download
 the release binary) in any CI.
 
 ### Anti-tamper
