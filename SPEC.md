@@ -30,6 +30,32 @@ is; if cross-language *uniform* metrics are ever wanted, the move is to adopt
 qlty as one more adapter (pinned version, telemetry off), not to rebuild it. So
 pawl stays a small, verifiable binary over a clean adapter contract.
 
+### Integration acceptance criteria
+
+Pawl owns measurement integrity, normalization, committed baselines, comparison,
+and verdicts. The project owns analyzer installation, version pinning,
+configuration, and invocation. In particular, Pawl does **not** grow into a tool
+manager: automatic language detection, analyzer/runtime installation, a plugin
+marketplace, cross-run result caching, formatting, autofix, and bundled
+security-scanner orchestration are explicit non-goals.
+
+Standard report protocols are preferred: SARIF for findings, JUnit for tests,
+LCOV/Cobertura for coverage, and the exec JSON contract for arbitrary metrics.
+A tool-specific adapter is accepted only when all of these are true:
+
+1. A standard report or declarative adapter cannot preserve an honest verdict.
+2. The adapter closes a concrete false-pass risk such as ambiguous exit codes,
+   incomplete scan evidence, stale output, or a misspelled selector becoming
+   zero.
+3. The project still supplies and pins the tool; Pawl only acquires and decodes
+   its machine output.
+4. The normalized result remains the same scalar plus optional finding
+   breakdown consumed by the generic gate engine.
+
+Shared analyzers are an execution boundary inside one Pawl invocation, not the
+start of a general plugin runtime: they may prevent duplicate scans, but do not
+install tools, discover languages, or cache results across runs.
+
 ## CLI
 
 ```
@@ -127,9 +153,9 @@ snapshot: "pawl.snapshot.json"
 
 analyzers:
   - id: "frontend-lint"         # required, unique across analyzers
-    builtin: "eslint"           # eslint or sarif
+    builtin: "eslint"           # eslint, oxlint or sarif
     timeout: "10m"              # applies to acquisition and verification
-    verify:                     # optional ESLint --print-config commands
+    verify:                     # optional ESLint/Oxlint --print-config commands
       - "npx eslint --print-config src/probe.ts"
     options:
       command: "npx eslint src --format json"
@@ -186,6 +212,16 @@ the source identity.
   a referencing dimension must be enabled in at least one verified config or
   measurement fails; zero findings remains valid. `min_files` optionally
   requires the JSON report to contain at least that many file results.
+- `builtin: oxlint`: `options.command` is required and must produce Oxlint
+  `--format json` on stdout. Exit 0 and 1 are accepted only with a complete
+  native report; every other exit is fatal. `verify` is an optional list of
+  Oxlint `--print-config` commands. Referencing dimensions select native diagnostic
+  codes such as `eslint(no-debugger)` or `unicorn(no-invalid-fetch-options)`;
+  verification maps those to config keys `no-debugger` and
+  `unicorn/no-invalid-fetch-options` and requires each selected rule to be
+  enabled in at least one probe. Dimensions may also select `levels`
+  (`error`/`warning`/`advice`). `min_files` uses the report's required
+  `number_of_files`.
 - `builtin: sarif`: the normal SARIF `command` / `file` acquisition contract
   applies. `min_files` optionally requires at least that many SARIF artifacts.
   `valid_exit_codes` can declare the producer's successful/finding exit codes;
@@ -367,6 +403,42 @@ or omitted counts every message).
 - Result: `value` = total counted messages, `unit` = `"issues"`, `breakdown` =
   `{ "<path relative to config dir>:<line>": <count> }` (absolute `filePath`s
   from ESLint are relativized; a message with no line uses line 0).
+- Intended gate: `per-file-count`.
+
+### `oxlint`
+
+Runs the Oxc project's Oxlint linter and parses its native `--format json`
+output. It is available both as a direct dimension builtin and as a named
+analyzer; use the named form when several dimensions should share one scan.
+Options: `command` (string, required), `rules` (native diagnostic code list,
+optional), `levels` (optional list containing `error`, `warning`, and/or
+`advice`), `min_files` (optional non-negative integer), and `verify` (direct
+builtin only: optional list of `--print-config` commands; named analyzers put
+the same list in the analyzer's top-level `verify` field).
+
+- The command must emit Oxlint native JSON, for example
+  `npx oxlint src --format json`. The report must contain a `diagnostics` array
+  and a non-negative integer `number_of_files`; missing fields, malformed JSON,
+  or unsupported diagnostic severities are measurement failures. A legitimate
+  empty scan is `{"diagnostics":[],"number_of_files":n}`, never `{}`.
+- Oxlint uses exit 0 when no error-level diagnostics are present and exit 1
+  when errors are found. Some fatal CLI/config failures also use exit 1, so
+  Pawl accepts 0/1 only if stdout passes the native-report validation above.
+  Every other exit is a measurement failure.
+- `rules` entries match the diagnostic `code` exactly, such as
+  `eslint(no-debugger)`, `typescript(no-explicit-any)`, or
+  `unicorn(no-invalid-fetch-options)`. Parser diagnostics legitimately have no
+  code: they count in an unfiltered dimension but do not match a rule selector.
+- Each `verify` command must produce Oxlint `--print-config` JSON. Core config
+  keys map from `no-debugger` to `eslint(no-debugger)`; plugin keys map from
+  `unicorn/no-invalid-fetch-options` to
+  `unicorn(no-invalid-fetch-options)`. Every selected rule must be enabled in
+  at least one representative config or measurement fails before the scan.
+- `value` is the number of diagnostics that match the selectors, `unit` is
+  `"issues"`, and `breakdown` accumulates
+  `{ "<filename relative to config dir>:<first labelled line>": <count> }`.
+  Diagnostics without a filename remain in the scalar value but have no
+  breakdown entry; a filename without a labelled line uses line 0.
 - Intended gate: `per-file-count`.
 
 ### `jscpd`

@@ -31,9 +31,9 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 		id = fmt.Sprintf("#%d", index+1)
 		return Analyzer{}, fmt.Errorf("analyzer %s: missing id", id)
 	}
-	if raw.Builtin != builtinEslint && raw.Builtin != builtinSarif {
-		return Analyzer{}, fmt.Errorf("analyzer %s: builtin must be %q or %q, got %q",
-			id, builtinEslint, builtinSarif, raw.Builtin)
+	if raw.Builtin != builtinEslint && raw.Builtin != builtinOxlint && raw.Builtin != builtinSarif {
+		return Analyzer{}, fmt.Errorf("analyzer %s: builtin must be %q, %q or %q, got %q",
+			id, builtinEslint, builtinOxlint, builtinSarif, raw.Builtin)
 	}
 	timeout := defaultTimeout
 	if raw.Timeout != "" {
@@ -63,8 +63,8 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 			return Analyzer{}, fmt.Errorf("analyzer %s: min_files must be a non-negative integer, got %v", id, value)
 		}
 	}
-	if len(raw.Verify) > 0 && raw.Builtin != builtinEslint {
-		return Analyzer{}, fmt.Errorf("analyzer %s: verify is currently supported only for eslint", id)
+	if len(raw.Verify) > 0 && raw.Builtin != builtinEslint && raw.Builtin != builtinOxlint {
+		return Analyzer{}, fmt.Errorf("analyzer %s: verify is supported only for eslint or oxlint", id)
 	}
 	for _, command := range raw.Verify {
 		if strings.TrimSpace(command) == "" {
@@ -91,7 +91,7 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 
 func validateAnalyzerSelector(builtin string, options map[string]any) error {
 	allowed := map[string]bool{"rules": true}
-	if builtin == builtinSarif {
+	if builtin == builtinSarif || builtin == builtinOxlint {
 		allowed["levels"] = true
 	}
 	for option := range options {
@@ -102,7 +102,7 @@ func validateAnalyzerSelector(builtin string, options map[string]any) error {
 	if _, err := strictStringList(options["rules"]); err != nil {
 		return fmt.Errorf("rules: %v", err)
 	}
-	if builtin != builtinSarif {
+	if builtin == builtinEslint {
 		return nil
 	}
 	levels, err := strictStringList(options["levels"])
@@ -110,13 +110,30 @@ func validateAnalyzerSelector(builtin string, options map[string]any) error {
 		return fmt.Errorf("levels: %v", err)
 	}
 	for _, lv := range levels {
-		switch lv {
-		case "error", "warning", "note", "none":
-		default:
-			return fmt.Errorf("levels entry %q must be one of error, warning, note or none", lv)
+		if !validAnalyzerLevel(builtin, lv) {
+			return fmt.Errorf("levels entry %q must be one of %s", lv, analyzerLevelsDescription(builtin))
 		}
 	}
 	return nil
+}
+
+func validAnalyzerLevel(builtin, level string) bool {
+	if builtin == builtinOxlint {
+		return level == "error" || level == "warning" || level == "advice"
+	}
+	switch level {
+	case "error", "warning", "note", "none":
+		return true
+	default:
+		return false
+	}
+}
+
+func analyzerLevelsDescription(builtin string) string {
+	if builtin == builtinOxlint {
+		return "error, warning or advice"
+	}
+	return "error, warning, note or none"
 }
 
 // strictExitCodeList validates a named SARIF producer's explicit successful

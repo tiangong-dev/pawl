@@ -15,6 +15,7 @@ import (
 
 const (
 	builtinEslint          = "eslint"
+	builtinOxlint          = "oxlint"
 	builtinJscpd           = "jscpd"
 	builtinSwiftComplexity = "swift-complexity"
 	builtinJSONValue       = "json-value"
@@ -125,6 +126,25 @@ func measureEslint(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult,
 		}
 	}
 	return findings.result("issues"), nil
+}
+
+// measureOxlint runs an Oxlint invocation that emits its native --format json
+// report. Oxlint uses exit 0 for a successful scan without error-level
+// diagnostics and exit 1 when errors are found; its fatal CLI/config failures
+// also use exit 1, so the parseable, complete native report is the decisive
+// honesty guard. Every exit other than 0/1 is fatal.
+func measureOxlint(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
+	rules, _ := strictStringList(dim.Options["rules"])
+	verify, _ := strictStringList(dim.Options["verify"])
+	if err := verifyOxlintRules(cfg, dim, verify, rules, stderr); err != nil {
+		return MeasureResult{}, err
+	}
+	report, err := runOxlintAnalyzer(cfg, dim, stderr)
+	if err != nil {
+		return MeasureResult{}, err
+	}
+	analyzer := Analyzer{Builtin: builtinOxlint}
+	return reduceAnalyzerReport(cfg, analyzer, dim, report)
 }
 
 // measureJscpd runs the configured jscpd invocation and reads the JSON

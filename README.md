@@ -160,7 +160,7 @@ The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
 `pawl.yaml` lists dimensions; each is a **built-in**, a **custom command**, or a
 projection from a named analyzer (exactly one of `builtin` / `command` / `source`).
 Named analyzers run once per invocation and let several dimensions filter one
-complete ESLint or SARIF report.
+complete ESLint, Oxlint, or SARIF report.
 
 ```yaml
 snapshot: "pawl.snapshot.json"   # optional, relative to this file
@@ -207,6 +207,7 @@ the tool setup.
 | `file-length` | primitive | files whose line count exceeds `threshold` | `total` |
 | `pattern-count` | primitive | regexp matches (suppressions, escape hatches: `as any`, `//nolint`, `try!`) | `per-file-count` |
 | `eslint` | adapter | counted ESLint messages (optionally filtered by `rules`) | `per-file-count` |
+| `oxlint` | adapter | Oxlint native JSON diagnostics, filtered by rule/severity and shareable across dimensions | `per-file-count` |
 | `jscpd` | adapter | duplicated lines from a jscpd JSON report | `total` |
 | `swift-complexity` | adapter | Swift **cognitive** complexity offenders (what SwiftLint can't) | `per-file-count` |
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
@@ -453,6 +454,12 @@ grammar; everything requiring real language semantics (complexity, type escapes)
 is delegated to that language's own best analyzer through an adapter, so the gate
 agrees with what developers already see in their IDE. Rationale in
 [SPEC.md § Scope boundary](./SPEC.md).
+
+Pawl owns the verdict, not the toolchain: projects install, pin, configure, and
+invoke analyzers. Automatic tool/runtime installation, language detection,
+formatting, autofix, a plugin marketplace, and cross-run analyzer caching are
+deliberate non-goals. Tool-specific adapters are added only when a standard
+report cannot preserve an honest measurement.
 
 ## License
 

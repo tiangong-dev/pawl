@@ -152,10 +152,10 @@ dimensions:
     command: "./scripts/coverage.sh"   # ……或一条自定义命令
 ```
 
-`verify` 会证明过滤的 ESLint rule 在至少一个代表文件上已启用，拼错/禁用
-rule 会 exit 2，而真正的干净零仍合法。Oxlint、golangci-lint 等可通过一个
-命名 `sarif` analyzer 共享报告；`valid_exit_codes` 区分“发现问题”和 fatal，
-`verify_rules: true` 可对 SARIF rule catalog 校验 selector。完整配置见
+`verify` 会证明过滤的 ESLint/Oxlint rule 在至少一个代表文件上已启用，
+拼错/禁用 rule 会 exit 2，而真正的干净零仍合法。Oxlint 有一等的命名
+`oxlint` analyzer，直接解析原生 JSON 并让多个维度共享一次扫描；
+golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告。完整配置见
 [配方手册](./RECIPES.md)。
 
 ## 内置 adapter
@@ -167,6 +167,7 @@ rule 会 exit 2，而真正的干净零仍合法。Oxlint、golangci-lint 等可
 | `file-length` | 原语 | 行数超过 `threshold` 的文件数 | `total` |
 | `pattern-count` | 原语 | 正则匹配数(各种抑制/逃生舱:`as any`、`//nolint`、`try!`) | `per-file-count` |
 | `eslint` | adapter | ESLint 消息计数(可用 `rules` 过滤) | `per-file-count` |
+| `oxlint` | adapter | Oxlint 原生 JSON diagnostics（可按 rule/severity 过滤并跨维度共享） | `per-file-count` |
 | `jscpd` | adapter | 从 jscpd JSON 报告读重复行数 | `total` |
 | `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
 | `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
@@ -337,6 +338,8 @@ pawl check --since origin/main        # PR 上:只对改动行门禁
 ## 边界(设计决策)
 
 pawl 是**质量门禁 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./SPEC.md)。
+
+pawl 只拥有 verdict，不拥有工具链：分析器仍由项目安装、锁版本、配置和调用。自动安装工具/运行时、语言探测、格式化、自动修复、插件市场和跨次运行缓存都是明确的非目标。只有标准报告无法维持诚实测量时，才增加工具专用 adapter。
 
 ## 许可证
 
