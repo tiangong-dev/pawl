@@ -38,9 +38,9 @@ func TestRegressionsOfScalarTotal(t *testing.T) {
 	}
 }
 
-// per-file-count: offender count per file may not rise. Counting keys (not
-// summing values) means moving offenders around inside one file is not a
-// regression; a file only appearing in current regresses from an implicit 0.
+// per-file-count: summed finding count per file may not rise. Moving the same
+// multiplicity within one file is not a regression; multiple findings sharing
+// one location remain multiple offenders.
 func TestRegressionsOfPerFileCount(t *testing.T) {
 	t.Run("a file gaining an offender regresses", func(t *testing.T) {
 		spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GatePerFileCount}
@@ -64,6 +64,14 @@ func TestRegressionsOfPerFileCount(t *testing.T) {
 		cur := pawl.MetricSample{Value: 2, Breakdown: map[string]float64{"a.go:5": 1, "a.go:9": 1}}
 		got := pawl.RegressionsOf(spec, base, cur)
 		assertLines(t, got, nil)
+	})
+
+	t.Run("same location gaining another finding regresses", func(t *testing.T) {
+		spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GatePerFileCount}
+		base := pawl.MetricSample{Value: 2, Breakdown: map[string]float64{"a.go:10": 1, "b.go:20": 1}}
+		cur := pawl.MetricSample{Value: 2, Breakdown: map[string]float64{"a.go:10": 2}}
+		got := pawl.RegressionsOf(spec, base, cur)
+		assertLines(t, got, []string{"a.go  1 → 2"})
 	})
 
 	t.Run("a file losing offenders is not reported", func(t *testing.T) {
@@ -91,6 +99,44 @@ func TestRegressionsOfPerFileCount(t *testing.T) {
 		got := pawl.RegressionsOf(spec, base, cur)
 		assertLines(t, got, []string{"b.go  0 → 1"})
 	})
+}
+
+func TestStructuredPerFileRegressionsExplainEachContributingKey(t *testing.T) {
+	spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GatePerFileCount}
+	base := pawl.MetricSample{Value: 8, Breakdown: map[string]float64{
+		"a.go:10": 1,
+		"b.go:1":  7,
+	}}
+	cur := pawl.MetricSample{Value: 8, Breakdown: map[string]float64{
+		"a.go:10": 3,
+		"a.go:20": 5,
+	}}
+
+	got := pawl.StructuredRegressions(spec, base, cur)
+	if len(got) != 2 {
+		t.Fatalf("regressions = %+v, want two contributing keys", got)
+	}
+	want := map[string]struct {
+		base, current float64
+		message       string
+	}{
+		"a.go:10": {1, 3, "a.go:10  1 → 3 (file total 1 → 8)"},
+		"a.go:20": {0, 5, "a.go:20  0 → 5 (file total 1 → 8)"},
+	}
+	for _, regression := range got {
+		if regression.Key == nil {
+			t.Fatalf("regression has no key: %+v", regression)
+		}
+		expected, ok := want[*regression.Key]
+		if !ok {
+			t.Fatalf("unexpected regression key %q", *regression.Key)
+		}
+		if regression.Base != expected.base || regression.Current != expected.current || regression.Message != expected.message {
+			t.Errorf("%s = base %v current %v message %q, want %v/%v/%q",
+				*regression.Key, regression.Base, regression.Current, regression.Message,
+				expected.base, expected.current, expected.message)
+		}
+	}
 }
 
 // per-key-value: every baseline breakdown key must not worsen (with

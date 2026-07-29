@@ -24,17 +24,18 @@ func TestGitHubAnnotationsPerFileCountNewKeysOnly(t *testing.T) {
 	assertAnnotationsExact(t, got, want)
 }
 
-// A file's offender-count is the number of distinct keys, not a sum of
-// values: a key present in both base and cur that merely changed value must
-// not be treated as a new offender, even though the raw number moved.
-func TestGitHubAnnotationsPerFileCountValueChangeAloneNotNewOffender(t *testing.T) {
+// A value increase on an existing location means more findings share that
+// path:line and must be annotated as the contributor to the file regression.
+func TestGitHubAnnotationsPerFileCountValueIncreaseIsAnOffender(t *testing.T) {
 	spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GatePerFileCount}
 	base := pawl.MetricSample{Value: 2, Breakdown: map[string]float64{"a.go:1": 1, "a.go:2": 1}}
 	cur := pawl.MetricSample{Value: 2, Breakdown: map[string]float64{"a.go:1": 5, "a.go:2": 1}}
 
 	got := pawl.GitHubAnnotations("cc", "Cognitive complexity", spec, base, cur)
 
-	assertAnnotationsExact(t, got, nil)
+	assertAnnotationsExact(t, got, []string{
+		"::error file=a.go,line=1,title=pawl: cc::Cognitive complexity: 1 → 5",
+	})
 }
 
 // Builtins may key by file only, with no ":line" suffix. Splitting such a

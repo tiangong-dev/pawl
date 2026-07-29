@@ -32,15 +32,52 @@ func FormatNumber(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-// OffenderCountsByFile counts breakdown KEYS grouped by the key's file part
-// (substring before the first ':'; a key with no ':' is itself the file).
-// Counting keys, not summing values, keeps the per-file-count gate robust to
-// code moving around inside a file.
-func OffenderCountsByFile(breakdown map[string]float64) map[string]int {
-	out := map[string]int{}
-	for k := range breakdown {
-		file, _, _ := strings.Cut(k, ":")
-		out[file]++
+// OffenderCountsByFile sums finding multiplicity grouped by file. A breakdown
+// value is the number of findings at that path:line, so counting only map keys
+// would collapse multiple rules or regexp matches on one line into one
+// offender. Summing remains robust to findings moving within a file: only the
+// file total matters.
+func OffenderCountsByFile(breakdown map[string]float64) map[string]float64 {
+	out := map[string]float64{}
+	for k, count := range breakdown {
+		file, _ := splitLocationKey(k)
+		out[file] += count
+	}
+	return out
+}
+
+type perFileRegression struct {
+	File         string
+	Base         float64
+	Current      float64
+	Contributors []string
+}
+
+// perFileRegressions is the single source of truth for per-file-count
+// comparison. A file regresses when its summed finding count rises. The
+// contributors are the new or increased path:line keys that explain that
+// aggregate rise; renderers and --since consume the same list.
+func perFileRegressions(base, cur map[string]float64) []perFileRegression {
+	bFiles := OffenderCountsByFile(base)
+	cFiles := OffenderCountsByFile(cur)
+	contributors := map[string][]string{}
+	for _, key := range sortedKeys(cur) {
+		file, _ := splitLocationKey(key)
+		if cur[key] > base[key] {
+			contributors[file] = append(contributors[file], key)
+		}
+	}
+	var out []perFileRegression
+	for _, file := range sortedKeyUnion(bFiles, cFiles) {
+		if cFiles[file] <= bFiles[file] {
+			continue
+		}
+		out = append(out, perFileRegression{
+			File:         file,
+			Base:         bFiles[file],
+			Current:      cFiles[file],
+			Contributors: contributors[file],
+		})
 	}
 	return out
 }
@@ -56,12 +93,8 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 	}
 	switch spec.Gate {
 	case GatePerFileCount:
-		b := OffenderCountsByFile(base.Breakdown)
-		c := OffenderCountsByFile(cur.Breakdown)
-		for _, f := range sortedKeyUnion(b, c) {
-			if c[f] > b[f] {
-				out = append(out, fmt.Sprintf("%s  %d → %d", f, b[f], c[f]))
-			}
+		for _, r := range perFileRegressions(base.Breakdown, cur.Breakdown) {
+			out = append(out, fmt.Sprintf("%s  %s → %s", r.File, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
 	case GatePerKeyValue:
 		for _, k := range sortedKeys(base.Breakdown) {
@@ -93,11 +126,12 @@ type Regression struct {
 }
 
 // StructuredRegressions is the machine-readable twin of RegressionsOf. It emits
-// one entry per NEW offender key (per-file-count) or worsened baseline key
-// (per-key-value) — the granularity `--since` needs to test each against the
-// changed lines — plus a `total` entry when the scalar regressed. The scalar and
-// per-key predicates match RegressionsOf exactly, so the two views never
-// disagree on whether a dimension regressed.
+// one entry per new or increased offender key that contributes to a regressed
+// file (per-file-count), or worsened baseline key (per-key-value) — the
+// granularity `--since` needs to test each against changed lines — plus a
+// `total` entry when the scalar regressed. The scalar and per-key predicates
+// match RegressionsOf exactly, so the two views never disagree on whether a
+// dimension regressed.
 func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 	var out []Regression
 	if Worse(spec.Direction, base.Value, cur.Value, spec.Tolerance) {
@@ -110,13 +144,14 @@ func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 	}
 	switch spec.Gate {
 	case GatePerFileCount:
-		b := OffenderCountsByFile(base.Breakdown)
-		c := OffenderCountsByFile(cur.Breakdown)
-		for _, key := range sortedKeys(cur.Breakdown) {
-			file, _, _ := strings.Cut(key, ":")
-			if _, isOld := base.Breakdown[key]; c[file] > b[file] && !isOld {
-				out = append(out, keyRegression("per-file-count", key, float64(b[file]), float64(c[file]),
-					fmt.Sprintf("%s  %d → %d", file, b[file], c[file])))
+		for _, r := range perFileRegressions(base.Breakdown, cur.Breakdown) {
+			for _, key := range r.Contributors {
+				baseValue := base.Breakdown[key]
+				currentValue := cur.Breakdown[key]
+				out = append(out, keyRegression("per-file-count", key, baseValue, currentValue,
+					fmt.Sprintf("%s  %s → %s (file total %s → %s)",
+						key, FormatNumber(baseValue), FormatNumber(currentValue),
+						FormatNumber(r.Base), FormatNumber(r.Current))))
 			}
 		}
 	case GatePerKeyValue:
@@ -134,14 +169,25 @@ func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 // the "path:line" breakdown key (Line stays nil when the key carries no numeric
 // line — a location that `--since` cannot attribute to a changed line).
 func keyRegression(kind, key string, base, cur float64, message string) Regression {
-	file, lineStr, hasLine := strings.Cut(key, ":")
+	file, line := splitLocationKey(key)
 	r := Regression{Kind: kind, Key: strPtr(key), Path: strPtr(file), Base: base, Current: cur, Message: message}
-	if hasLine && lineStr != "" {
-		if n, err := strconv.Atoi(lineStr); err == nil {
-			r.Line = &n
-		}
-	}
+	r.Line = line
 	return r
+}
+
+// splitLocationKey parses the final :<line> suffix so paths containing colons
+// (notably Windows drive paths) remain intact. A key without a numeric suffix is
+// a file-only location.
+func splitLocationKey(key string) (string, *int) {
+	colon := strings.LastIndex(key, ":")
+	if colon < 0 || colon == len(key)-1 {
+		return key, nil
+	}
+	n, err := strconv.Atoi(key[colon+1:])
+	if err != nil {
+		return key, nil
+	}
+	return key[:colon], &n
 }
 
 // statusName is the emoji-free status word for a dimension — the `--format json`
@@ -255,20 +301,20 @@ func ImprovementNotice(improvedIDs []string, onCI bool) string {
 // GitHubAnnotations renders GitHub Actions `::error::` workflow commands for one
 // regressed dimension so violations surface inline on the PR diff, reusing the
 // `path:line` breakdown key shape. Per-file-count emits one line-anchored
-// annotation per NEW offender key in a file whose offender count rose;
+// annotation per new or increased offender key in a file whose count rose;
 // per-key-value emits one per key that worsened; a total-gate (or detail-less)
 // regression emits a single file-less annotation. Empty when nothing regressed.
 func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) []string {
 	var out []string
 	switch spec.Gate {
 	case GatePerFileCount:
-		bFiles := OffenderCountsByFile(base.Breakdown)
-		cFiles := OffenderCountsByFile(cur.Breakdown)
-		for _, key := range sortedKeys(cur.Breakdown) {
-			file, _, _ := strings.Cut(key, ":")
-			_, isOld := base.Breakdown[key]
-			if cFiles[file] > bFiles[file] && !isOld {
-				out = append(out, annotationLine(id, title, key, "new "+id+" offender"))
+		for _, r := range perFileRegressions(base.Breakdown, cur.Breakdown) {
+			for _, key := range r.Contributors {
+				detail := "new " + id + " offender"
+				if baseValue, existed := base.Breakdown[key]; existed {
+					detail = FormatNumber(baseValue) + " → " + FormatNumber(cur.Breakdown[key])
+				}
+				out = append(out, annotationLine(id, title, key, detail))
 			}
 		}
 	case GatePerKeyValue:
@@ -289,10 +335,10 @@ func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) 
 // "path:line" breakdown key (the line clause is dropped when the key carries
 // no numeric line suffix).
 func annotationLine(id, title, key, detail string) string {
-	file, line, hasLine := strings.Cut(key, ":")
+	file, line := splitLocationKey(key)
 	loc := "file=" + file
-	if hasLine && line != "" {
-		loc += ",line=" + line
+	if line != nil {
+		loc += ",line=" + strconv.Itoa(*line)
 	}
 	return fmt.Sprintf("::error %s,title=pawl: %s::%s: %s", loc, id, title, detail)
 }
@@ -324,7 +370,7 @@ func sortedMetricKeys(m map[string]Metric) []string {
 	return out
 }
 
-func sortedKeyUnion(a, b map[string]int) []string {
+func sortedKeyUnion(a, b map[string]float64) []string {
 	seen := map[string]bool{}
 	var out []string
 	for k := range a {

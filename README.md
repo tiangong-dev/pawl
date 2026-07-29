@@ -130,6 +130,7 @@ pawl check
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
 | `pawl version` | print `pawl <version>` (works with no config present) |
+| `pawl help [<command>]` | print global or command help (also `-h` / `--help`) |
 
 `-c <path>` selects the config file (default `./pawl.yaml`). Omitting the
 command runs `check`.
@@ -156,11 +157,24 @@ The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
 
 ## Configuration
 
-`pawl.yaml` lists dimensions; each is either a **built-in** or a **custom command**
-(exactly one of `builtin` / `command`).
+`pawl.yaml` lists dimensions; each is a **built-in**, a **custom command**, or a
+projection from a named analyzer (exactly one of `builtin` / `command` / `source`).
+Named analyzers run once per invocation and let several dimensions filter one
+complete ESLint or SARIF report.
 
 ```yaml
 snapshot: "pawl.snapshot.json"   # optional, relative to this file
+
+analyzers:
+  - id: "frontend-lint"
+    builtin: "eslint"
+    # Optional representative --print-config probes. Every filtered rule must
+    # be enabled by at least one probe; a clean zero remains a valid zero.
+    verify:
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
 
 dimensions:
   - id: "cognitive-complexity"   # required, unique
@@ -168,10 +182,8 @@ dimensions:
     direction: "lower-is-better" # required: lower-is-better | higher-is-better
     gate: "per-file-count"       # optional: total (default) | per-file-count | per-key-value
     tolerance: 0                 # optional, absolute slack in the worse direction
-    timeout: "10m"               # optional Go duration, default 10m
-    builtin: "eslint"            # a built-in adapter …
+    source: "frontend-lint"      # reuse the analyzer output …
     options:
-      command: "npx eslint src --format json --no-inline-config"
       rules: ["sonarjs/cognitive-complexity"]
 
   - id: "coverage"
@@ -255,8 +267,8 @@ wrapper script. Four forms:
   direction: "lower-is-better"
   extract: lines            # value = non-empty line count
 
-- id: golangci
-  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+- id: legacy-lint
+  command: "my-linter --format concise"
   direction: "lower-is-better"
   gate: "per-file-count"
   extract:
@@ -265,9 +277,12 @@ wrapper script. Four forms:
 
 Also `extract: number` (stdout is one number) and `extract: { json_path: "a.b.c" }`
 (read one number from the command's stdout JSON). Same honesty rule: a non-zero
-exit, or output that can't be extracted, is a measurement failure (exit 2) — with
+exit, or output that can't be extracted, is a measurement failure (exit 2). With
 `regex`, every non-empty line must match, so a mistyped pattern can't report a
-silent zero. Details in [SPEC.md § Declarative extract layer](./SPEC.md).
+silent zero. Tools whose "findings found" exit code is non-zero should use a
+report-format builtin (for example the shared SARIF recipe) rather than hiding
+every failure with `|| true`. Details in
+[SPEC.md § Declarative extract layer](./SPEC.md).
 
 ## Gate modes
 
@@ -277,9 +292,10 @@ improves, file B worsens, total unchanged):
 
 - **`total`** — scalar only. (Growing an already-long file shouldn't fail; only a
   new file crossing the limit, which moves the total, should.)
-- **`per-file-count`** — offender *count* per file may not rise. The file is the
-  substring before the first `:` in each breakdown key. Counts keys, not values,
-  so code moving inside a file doesn't trip it.
+- **`per-file-count`** — summed offender *count* per file may not rise.
+  Breakdown values are finding multiplicity at each `path:line`, so two rules or
+  matches on one line count as two. Moving the same number of findings within a
+  file still does not trip the gate.
 - **`per-key-value`** — every baseline key's *value* may not worsen (with
   tolerance). New keys and removed keys are ignored. Ideal for per-package
   coverage / type-coverage.
@@ -308,6 +324,11 @@ $ pawl record --only line-coverage
 Only the listed dimensions are re-measured; every other metric keeps its
 committed value verbatim. A broken adapter on an unrelated dimension doesn't
 block the win either — it isn't run at all.
+
+Preserved rows show `current —` / `preserved`; JSON uses
+`measurement_state:"preserved"`, `current:null`, and `snapshot_value`. A partial
+record cannot emit Code Climate because that format has no way to distinguish a
+preserved finding from current evidence.
 
 ## Watching the trend (`pawl trend`)
 

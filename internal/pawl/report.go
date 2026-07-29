@@ -25,24 +25,26 @@ type Report struct {
 // that cannot be scoped to changed lines and is therefore kept at full strength;
 // it is not serialized (it drives only the text banner).
 type MetricReport struct {
-	ID             string       `json:"id"`
-	Title          string       `json:"title"`
-	Direction      Direction    `json:"direction"`
-	Gate           GateMode     `json:"gate"`
-	Unit           string       `json:"unit"`
-	Base           *float64     `json:"base"`
-	Current        float64      `json:"current"`
-	Status         string       `json:"status"`
-	Improved       bool         `json:"improved"`
-	Regressions    []Regression `json:"regressions"`
-	EnforcedInFull bool         `json:"-"`
+	ID               string       `json:"id"`
+	Title            string       `json:"title"`
+	Direction        Direction    `json:"direction"`
+	Gate             GateMode     `json:"gate"`
+	Unit             string       `json:"unit"`
+	Base             *float64     `json:"base"`
+	Current          *float64     `json:"current"`
+	SnapshotValue    *float64     `json:"snapshot_value,omitempty"`
+	MeasurementState string       `json:"measurement_state"`
+	Status           string       `json:"status"`
+	Improved         bool         `json:"improved"`
+	Regressions      []Regression `json:"regressions"`
+	EnforcedInFull   bool         `json:"-"`
 }
 
 // buildReport assembles the full-mode verdict for a command from the baseline
 // and a fresh measurement. Metrics are sorted by id (a stable machine contract).
 // The gate defaults to "total" in the output when a dimension left it unset.
 func buildReport(command string, cfg *Config, baseline *Snapshot, current map[string]Metric) *Report {
-	rep := &Report{SchemaVersion: 1, Command: command, Mode: "full"}
+	rep := &Report{SchemaVersion: 2, Command: command, Mode: "full"}
 	if baseline == nil {
 		baseline = &Snapshot{} // first record: no baseline to compare against.
 	}
@@ -59,13 +61,14 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 			tolerance = *dim.Tolerance
 		}
 		m := MetricReport{
-			ID:          dim.ID,
-			Title:       dim.Title,
-			Direction:   dim.Direction,
-			Gate:        gate,
-			Unit:        cur.Unit,
-			Current:     cur.Value,
-			Regressions: []Regression{},
+			ID:               dim.ID,
+			Title:            dim.Title,
+			Direction:        dim.Direction,
+			Gate:             gate,
+			Unit:             cur.Unit,
+			Current:          floatPtr(cur.Value),
+			MeasurementState: "measured",
+			Regressions:      []Regression{},
 		}
 		if b, ok := baseline.Metrics[dim.ID]; ok {
 			base := b.Value
@@ -88,6 +91,53 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 	}
 	return rep
 }
+
+// buildPartialRecordReport distinguishes observations made by this invocation
+// from values copied out of the old snapshot. A preserved value is written to
+// SnapshotValue while Current is null: it was recorded, but it was not current
+// evidence.
+func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric) *Report {
+	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full"}
+	dims := append([]Dimension(nil), cfg.Dimensions...)
+	sort.Slice(dims, func(i, j int) bool { return dims[i].ID < dims[j].ID })
+	for _, dim := range dims {
+		written, ok := merged[dim.ID]
+		if !ok {
+			continue
+		}
+		gate := dim.Gate
+		if gate == "" {
+			gate = GateTotal
+		}
+		m := MetricReport{
+			ID:          dim.ID,
+			Title:       dim.Title,
+			Direction:   dim.Direction,
+			Gate:        gate,
+			Unit:        written.Unit,
+			Regressions: []Regression{},
+		}
+		baseMetric, hadBase := baseline.Metrics[dim.ID]
+		if hadBase {
+			m.Base = floatPtr(baseMetric.Value)
+		}
+		if cur, wasMeasured := measured[dim.ID]; wasMeasured {
+			m.Current = floatPtr(cur.Value)
+			m.SnapshotValue = floatPtr(cur.Value)
+			m.MeasurementState = "measured"
+			m.Status = statusName(dim.Direction, m.Base, cur.Value, dim.GateSpecOf().Tolerance)
+			m.Improved = hadBase && Better(dim.Direction, baseMetric.Value, cur.Value)
+		} else {
+			m.SnapshotValue = floatPtr(written.Value)
+			m.MeasurementState = "preserved"
+			m.Status = "preserved"
+		}
+		rep.Metrics = append(rep.Metrics, m)
+	}
+	return rep
+}
+
+func floatPtr(v float64) *float64 { return &v }
 
 // hasLiveRegression reports whether any metric carries a regression that is not
 // suppressed by `--since` — the check-command exit-1 predicate for the report.

@@ -99,6 +99,7 @@ pawl check
 | `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
 | `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
+| `pawl help [<命令>]` | 打印全局或子命令帮助（也支持 `-h` / `--help`） |
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
@@ -116,10 +117,21 @@ pawl check
 
 ## 配置
 
-`pawl.yaml` 列出各维度;每个维度要么是**内置(builtin)**、要么是**自定义命令(command)**(`builtin` / `command` 二选一,恰好一个)。
+`pawl.yaml` 列出各维度；每个维度恰好使用 **内置
+(`builtin`)**、**自定义命令 (`command`)** 或命名分析源 (`source`) 之一。
+命名分析源每次调用只扫描、解析一次，多个维度再各自过滤 findings。
 
 ```yaml
 snapshot: "pawl.snapshot.json"   # 可选,相对本文件所在目录
+
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"
+    verify:                       # 可选的 --print-config 探针
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
 
 dimensions:
   - id: "cognitive-complexity"   # 必填,唯一
@@ -128,9 +140,8 @@ dimensions:
     gate: "per-file-count"       # 可选:total(默认) | per-file-count | per-key-value
     tolerance: 0                 # 可选,向变差方向的绝对容差
     timeout: "10m"               # 可选 Go duration,默认 10m
-    builtin: "eslint"            # 内置 adapter……
+    source: "frontend-eslint"    # 复用上面的完整报告……
     options:
-      command: "npx eslint src --format json --no-inline-config"
       rules: ["sonarjs/cognitive-complexity"]
 
   - id: "coverage"
@@ -140,6 +151,12 @@ dimensions:
     tolerance: 1
     command: "./scripts/coverage.sh"   # ……或一条自定义命令
 ```
+
+`verify` 会证明过滤的 ESLint rule 在至少一个代表文件上已启用，拼错/禁用
+rule 会 exit 2，而真正的干净零仍合法。Oxlint、golangci-lint 等可通过一个
+命名 `sarif` analyzer 共享报告；`valid_exit_codes` 区分“发现问题”和 fatal，
+`verify_rules: true` 可对 SARIF rule catalog 校验 selector。完整配置见
+[配方手册](./RECIPES.md)。
 
 ## 内置 adapter
 
@@ -157,7 +174,10 @@ dimensions:
 | `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
 | `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
 
-报告格式的生产工具会用非零退出码表示"有 findings/失败",所以 ingest 系 builtin 以**能否解析出合法报告**为准、不卡退出码。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一个维度:
+报告格式的生产工具常用非零退出码表示"有 findings/失败"，所以直接使用的
+ingest builtin 默认以**能否解析出合法报告**为准。命名 SARIF analyzer
+可以额外声明 `valid_exit_codes`，让其他退出码即使写出了可解析 JSON 也按
+fatal 处理。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一个维度:
 
 ```yaml
   - id: "line-coverage"
@@ -195,22 +215,24 @@ dimensions:
   direction: "lower-is-better"
   extract: lines            # value = 非空行数
 
-- id: golangci
-  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+- id: legacy-lint
+  command: "my-linter --format concise"
   direction: "lower-is-better"
   gate: "per-file-count"
   extract:
     regex: '^(?P<path>[^:]+):(?P<line>\d+):'   # value = 匹配数;path/line → breakdown
 ```
 
-另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:非 0 退出、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。细节见 [SPEC.md § Declarative extract layer](./SPEC.md)。
+另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:非 0 退出、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。若工具用非 0 表示“发现问题”,应接入共享 SARIF 等报告格式,不要用 `|| true` 把真正的崩溃也吞掉。细节见 [SPEC.md § Declarative extract layer](./SPEC.md)。
 
 ## gate 模式
 
 标量总数**始终**会被检查(带 `tolerance`)。在其之上再叠一层 per-breakdown 检查,防止局部回归躲在净零总数背后(文件 A 变好、文件 B 变差、总数不变):
 
 - **`total`**——只看标量。(把本已很长的文件改得更长不该失败;只有新文件越过限制、从而推动总数,才该失败。)
-- **`per-file-count`**——每个文件的**违规计数**不得上升。文件 = 每个 breakdown key 里第一个 `:` 之前的子串。数 key 个数而非值,所以代码在文件内挪动不会触发。
+- **`per-file-count`**——每个文件的**违规计数总和**不得上升。breakdown
+  value 表示同一 `path:line` 的 finding 数，因此同一行两个规则/匹配仍算
+  两个；同文件内只移动相同数量的 finding 仍不会触发。
 - **`per-key-value`**——基线里每个 key 的**值**不得变差(带容差)。新增的 key、删除的 key 都忽略。适合按包统计的覆盖率 / type-coverage。
 
 `tolerance` 是向变差方向的绝对容差;正好卡在边界上算通过。`higher-is-better` 与 `lower-is-better` 会把比较方向反过来。
@@ -227,6 +249,10 @@ $ pawl record --only line-coverage
 ```
 
 只有列出的维度会被重测;其余每个指标都逐字保留已提交的值。无关维度的 adapter 坏了也不挡路——它根本不会被运行。
+
+保留行会显示 `current —` / `preserved`；JSON 使用
+`measurement_state:"preserved"`、`current:null` 和 `snapshot_value`。部分
+record 不能输出 Code Climate，因为该格式无法区分旧快照值与当前测量。
 
 ## 看质量走势(`pawl trend`)
 

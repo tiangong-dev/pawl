@@ -75,7 +75,19 @@ type sarifLog struct {
 }
 
 type sarifRun struct {
-	Results []sarifResult `json:"results"`
+	Results   []sarifResult    `json:"results"`
+	Artifacts []map[string]any `json:"artifacts"`
+	Tool      struct {
+		Driver struct {
+			// Pointer distinguishes an omitted catalog from a legitimate empty
+			// one. Named analyzers can opt into fail-closed selector validation.
+			Rules *[]sarifRule `json:"rules"`
+		} `json:"driver"`
+	} `json:"tool"`
+}
+
+type sarifRule struct {
+	ID string `json:"id"`
 }
 
 type sarifResult struct {
@@ -112,6 +124,15 @@ func measureSarif(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	}
 	if log.Runs == nil {
 		return MeasureResult{}, fmt.Errorf("not a SARIF log: missing \"runs\" array (%.200s)", data)
+	}
+	if minFiles, ok := numberOption(dim.Options, "min_files"); ok {
+		artifacts := 0
+		for _, run := range *log.Runs {
+			artifacts += len(run.Artifacts)
+		}
+		if artifacts < int(minFiles) {
+			return MeasureResult{}, fmt.Errorf("SARIF report has %d artifact(s), expected at least %d", artifacts, int(minFiles))
+		}
 	}
 
 	ruleFilter := setOf(stringList(dim.Options["rules"]))

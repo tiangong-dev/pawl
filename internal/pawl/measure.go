@@ -33,13 +33,14 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 		err    error
 	}
 	outcomes := make([]outcome, len(cfg.Dimensions))
+	analyzerRuns := newAnalyzerRuns(cfg)
 	var wg sync.WaitGroup
 	for i, dim := range cfg.Dimensions {
 		fmt.Fprintf(stderr, "  measuring %s…\n", dim.ID)
 		wg.Add(1)
 		go func(i int, dim Dimension) {
 			defer wg.Done()
-			result, err := measureOne(cfg, dim, stderr)
+			result, err := measureOne(cfg, dim, stderr, analyzerRuns)
 			outcomes[i] = outcome{id: dim.ID, result: result, err: err}
 		}(i, dim)
 	}
@@ -60,6 +61,26 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 			continue
 		}
 		dim := cfg.Dimensions[i]
+		if dim.Gate == GatePerFileCount {
+			sum := 0.0
+			invalid := ""
+			for key, count := range o.result.Breakdown {
+				if math.IsNaN(count) || math.IsInf(count, 0) || count < 0 || count != math.Trunc(count) {
+					invalid = key
+					break
+				}
+				sum += count
+			}
+			if invalid != "" {
+				failures = append(failures, fmt.Sprintf("measuring %s failed: per-file-count breakdown entry %q must be a non-negative integer", o.id, invalid))
+				continue
+			}
+			if sum > o.result.Value+1e-9 {
+				failures = append(failures, fmt.Sprintf("measuring %s failed: per-file-count breakdown sum %s exceeds scalar value %s",
+					o.id, FormatNumber(sum), FormatNumber(o.result.Value)))
+				continue
+			}
+		}
 		unit := o.result.Unit
 		if unit == "" {
 			unit = "count"
@@ -85,7 +106,10 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 	return metrics, nil
 }
 
-func measureOne(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
+func measureOne(cfg *Config, dim Dimension, stderr io.Writer, analyzerRuns analyzerRuns) (MeasureResult, error) {
+	if dim.Source != "" {
+		return analyzerRuns.measure(cfg, dim, stderr)
+	}
 	if dim.Builtin != "" {
 		return measureBuiltin(cfg, dim, stderr)
 	}

@@ -39,6 +39,32 @@ func TestCheckPerFileCountBlocksNetZeroMasking(t *testing.T) {
 	}
 }
 
+func TestCheckPerFileCountBlocksMultiplicityIncreaseOnSameLine(t *testing.T) {
+	dir := t.TempDir()
+	mustRecord(t, dir, buildConfig("", dimDef{
+		id: "lint", direction: "lower-is-better", gate: "per-file-count",
+		command: `echo '{"value": 2, "breakdown": {"a.ts:10": 1, "b.ts:20": 1}}'`,
+	}))
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "lint", direction: "lower-is-better", gate: "per-file-count",
+		command: `echo '{"value": 2, "breakdown": {"a.ts:10": 2}}'`,
+	}))
+
+	res := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if res.exit != 1 {
+		t.Fatalf("check exit = %d, want 1\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	report := parseReport(t, res.stdout)
+	metric, ok := metricByID(report, "lint")
+	if !ok || len(metric.Regressions) != 1 {
+		t.Fatalf("metric/regressions = %+v/%+v, want one same-line contributor", metric, metric.Regressions)
+	}
+	regression := metric.Regressions[0]
+	if regression.Key == nil || *regression.Key != "a.ts:10" || regression.Base != 1 || regression.Current != 2 {
+		t.Fatalf("regression = %+v, want a.ts:10 with file count 1 → 2", regression)
+	}
+}
+
 // Tolerance never applies to per-file-count: a file gaining even one
 // offender regresses regardless of the dimension's declared tolerance.
 func TestCheckPerFileCountIgnoresTolerance(t *testing.T) {

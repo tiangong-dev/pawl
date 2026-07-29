@@ -331,10 +331,9 @@ func TestRecordOnlyEmptyListExitsTwo(t *testing.T) {
 	}
 }
 
-// --format json on record --only emits the same record verdict object shape
-// as a full record, with the merged current values: freshly measured for the
-// listed dimension, carried over for the preserved ones.
-func TestRecordOnlyFormatJSONEmitsMergedVerdict(t *testing.T) {
+// --format json distinguishes freshly measured evidence from a value merely
+// preserved in the written snapshot.
+func TestRecordOnlyFormatJSONMarksPreservedMetrics(t *testing.T) {
 	dir := t.TempDir()
 	mustRecord(t, dir, buildConfig("",
 		dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 3}'`},
@@ -361,15 +360,24 @@ func TestRecordOnlyFormatJSONEmitsMergedVerdict(t *testing.T) {
 	if !ok {
 		t.Fatalf("metrics missing \"a\": %+v", r.Metrics)
 	}
-	if ma.Current != 1 {
+	if ma.Current == nil || *ma.Current != 1 {
 		t.Errorf("a.current = %v, want 1 (freshly measured)", ma.Current)
+	}
+	if ma.MeasurementState != "measured" {
+		t.Errorf("a.measurement_state = %q, want measured", ma.MeasurementState)
 	}
 	mb, ok := metricByID(r, "b")
 	if !ok {
 		t.Fatalf("metrics missing \"b\": %+v", r.Metrics)
 	}
-	if mb.Current != 6 {
-		t.Errorf("b.current = %v, want 6 (preserved, not the new 99)", mb.Current)
+	if mb.Current != nil {
+		t.Errorf("b.current = %v, want null (not measured)", mb.Current)
+	}
+	if mb.MeasurementState != "preserved" {
+		t.Errorf("b.measurement_state = %q, want preserved", mb.MeasurementState)
+	}
+	if mb.SnapshotValue == nil || *mb.SnapshotValue != 6 {
+		t.Errorf("b.snapshot_value = %v, want 6 (preserved)", mb.SnapshotValue)
 	}
 
 	snap := readSnapshot(t, filepath.Join(dir, "pawl.snapshot.json"))
@@ -411,5 +419,29 @@ func TestRecordOnlyTextFooterNamesRecordedIDsAndPreservedCount(t *testing.T) {
 	countRe := regexp.MustCompile(`\b3\b`)
 	if !countRe.MatchString(res.stdout) {
 		t.Errorf("footer does not name the preserved-metric count (3): stdout=%s", res.stdout)
+	}
+	if !strings.Contains(res.stdout, "preserved") || !regexp.MustCompile(`b\s+20\s+—\s+—\s+preserved`).MatchString(res.stdout) {
+		t.Errorf("preserved metric is rendered as current evidence: stdout=%s", res.stdout)
+	}
+}
+
+func TestRecordOnlyRejectsCodeClimateBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	mustRecord(t, dir, buildConfig("",
+		dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 3}'`},
+		dimDef{id: "b", direction: "lower-is-better", command: `echo '{"value": 6}'`},
+	))
+	snapshotPath := filepath.Join(dir, "pawl.snapshot.json")
+	before := readFile(t, snapshotPath)
+
+	res := runPawl(t, dir, baseEnv(), "record", "--only", "a", "--format", "codeclimate")
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stderr, "partial measurement") {
+		t.Fatalf("stderr does not explain why Code Climate is unsafe: %s", res.stderr)
+	}
+	if after := readFile(t, snapshotPath); after != before {
+		t.Fatalf("snapshot changed despite rejected format\nbefore=%s\nafter=%s", before, after)
 	}
 }

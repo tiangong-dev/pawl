@@ -14,8 +14,9 @@ const defaultSnapshotName = "pawl.snapshot.json"
 const defaultTimeout = 10 * time.Minute
 
 // Dimension is one configured quality dimension, validated and ready to
-// measure. Exactly one of Command / Builtin is set. Extract is set only on a
-// Command dimension that derives its measurement from raw output declaratively.
+// measure. Exactly one of Command / Builtin / Source is set. Extract is set
+// only on a Command dimension that derives its measurement from raw output
+// declaratively.
 type Dimension struct {
 	ID        string
 	Title     string
@@ -27,6 +28,7 @@ type Dimension struct {
 	Builtin   string
 	Options   map[string]any
 	Extract   *ExtractSpec
+	Source    string
 }
 
 // GateSpecOf is the dimension's comparison contract for RegressionsOf.
@@ -45,10 +47,12 @@ type Config struct {
 	Dir          string
 	SnapshotPath string
 	Dimensions   []Dimension
+	Analyzers    map[string]Analyzer
 }
 
 type configFile struct {
 	Snapshot   string            `yaml:"snapshot"`
+	Analyzers  []analyzerConfig  `yaml:"analyzers"`
 	Dimensions []dimensionConfig `yaml:"dimensions"`
 }
 
@@ -63,6 +67,7 @@ type dimensionConfig struct {
 	Builtin   string         `yaml:"builtin"`
 	Options   map[string]any `yaml:"options"`
 	Extract   any            `yaml:"extract"`
+	Source    string         `yaml:"source"`
 }
 
 // LoadConfigLite resolves only the snapshot path (and config dir) from a
@@ -122,10 +127,20 @@ func LoadConfig(path string) (*Config, error) {
 		snapshotRel = defaultSnapshotName
 	}
 
-	cfg := &Config{Dir: dir, SnapshotPath: filepath.Join(dir, snapshotRel)}
+	cfg := &Config{Dir: dir, SnapshotPath: filepath.Join(dir, snapshotRel), Analyzers: map[string]Analyzer{}}
+	for i, rawAnalyzer := range raw.Analyzers {
+		analyzer, err := validateAnalyzer(i, rawAnalyzer)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := cfg.Analyzers[analyzer.ID]; exists {
+			return nil, fmt.Errorf("duplicate analyzer id %q", analyzer.ID)
+		}
+		cfg.Analyzers[analyzer.ID] = analyzer
+	}
 	seen := map[string]bool{}
 	for i, d := range raw.Dimensions {
-		dim, err := validateDimension(i, d)
+		dim, err := validateDimension(i, d, cfg.Analyzers)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +153,7 @@ func LoadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-func validateDimension(index int, d dimensionConfig) (Dimension, error) {
+func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyzer) (Dimension, error) {
 	fail := func(format string, args ...any) (Dimension, error) {
 		id := d.ID
 		if id == "" {
@@ -171,18 +186,37 @@ func validateDimension(index int, d dimensionConfig) (Dimension, error) {
 		}
 		timeout = parsed
 	}
-	if (d.Command == "") == (d.Builtin == "") {
-		return fail("exactly one of command / builtin is required")
+	inputs := 0
+	if d.Command != "" {
+		inputs++
+	}
+	if d.Builtin != "" {
+		inputs++
+	}
+	if d.Source != "" {
+		inputs++
+	}
+	if inputs != 1 {
+		return fail("exactly one of command / builtin / source is required")
 	}
 	if d.Builtin != "" {
 		if err := validateBuiltinOptions(d.Builtin, d.Options); err != nil {
 			return fail("%s", err)
 		}
 	}
+	if d.Source != "" {
+		analyzer, ok := analyzers[d.Source]
+		if !ok {
+			return fail("source %q names no configured analyzer", d.Source)
+		}
+		if err := validateAnalyzerSelector(analyzer.Builtin, d.Options); err != nil {
+			return fail("source %q: %v", d.Source, err)
+		}
+	}
 	var extract *ExtractSpec
 	if d.Extract != nil {
-		if d.Builtin != "" {
-			return fail("extract is an exec-adapter feature and cannot be set on a builtin dimension")
+		if d.Builtin != "" || d.Source != "" {
+			return fail("extract is an exec-adapter feature and cannot be set on a builtin/source dimension")
 		}
 		spec, err := parseExtract(d.Extract)
 		if err != nil {
@@ -201,6 +235,7 @@ func validateDimension(index int, d dimensionConfig) (Dimension, error) {
 		Builtin:   d.Builtin,
 		Options:   d.Options,
 		Extract:   extract,
+		Source:    d.Source,
 	}, nil
 }
 
@@ -224,6 +259,15 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 	case builtinEslint:
 		if command, _ := options["command"].(string); command == "" {
 			return fmt.Errorf("builtin %q requires a command option (an eslint invocation producing --format json on stdout)", builtin)
+		}
+		if _, err := strictStringList(options["rules"]); err != nil {
+			return fmt.Errorf("builtin %q rules: %v", builtin, err)
+		}
+		if _, err := strictStringList(options["verify"]); err != nil {
+			return fmt.Errorf("builtin %q verify: %v", builtin, err)
+		}
+		if err := validateMinFilesOption(options); err != nil {
+			return fmt.Errorf("builtin %q %v", builtin, err)
 		}
 	case builtinJscpd:
 		if command, _ := options["command"].(string); command == "" {
@@ -274,6 +318,9 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if _, err := strictStringList(options["rules"]); err != nil {
 			return fmt.Errorf("builtin %q rules: %v", builtin, err)
 		}
+		if err := validateMinFilesOption(options); err != nil {
+			return fmt.Errorf("builtin %q %v", builtin, err)
+		}
 	case builtinJUnit:
 		command, _ := options["command"].(string)
 		file, _ := options["file"].(string)
@@ -310,6 +357,18 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s)",
 			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd,
 			builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
+	}
+	return nil
+}
+
+func validateMinFilesOption(options map[string]any) error {
+	value, exists := options["min_files"]
+	if !exists {
+		return nil
+	}
+	n, ok := numberOption(options, "min_files")
+	if !ok || n < 0 || n != float64(int(n)) {
+		return fmt.Errorf("min_files must be a non-negative integer, got %v", value)
 	}
 	return nil
 }

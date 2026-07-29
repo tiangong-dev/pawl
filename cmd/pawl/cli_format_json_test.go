@@ -21,16 +21,18 @@ type jsonReport struct {
 }
 
 type jsonMetric struct {
-	ID          string           `json:"id"`
-	Title       string           `json:"title"`
-	Direction   string           `json:"direction"`
-	Gate        string           `json:"gate"`
-	Unit        string           `json:"unit"`
-	Base        *float64         `json:"base"`
-	Current     float64          `json:"current"`
-	Status      string           `json:"status"`
-	Improved    bool             `json:"improved"`
-	Regressions []jsonRegression `json:"regressions"`
+	ID               string           `json:"id"`
+	Title            string           `json:"title"`
+	Direction        string           `json:"direction"`
+	Gate             string           `json:"gate"`
+	Unit             string           `json:"unit"`
+	Base             *float64         `json:"base"`
+	Current          *float64         `json:"current"`
+	SnapshotValue    *float64         `json:"snapshot_value"`
+	MeasurementState string           `json:"measurement_state"`
+	Status           string           `json:"status"`
+	Improved         bool             `json:"improved"`
+	Regressions      []jsonRegression `json:"regressions"`
 }
 
 type jsonRegression struct {
@@ -65,7 +67,7 @@ func metricByID(r jsonReport, id string) (jsonMetric, bool) {
 }
 
 // check --format json emits one JSON object with the fixed top-level shape:
-// schema_version 1, command/mode/since set, exit_code mirroring the process
+// schema_version 2, command/mode/since set, exit_code mirroring the process
 // exit, and metrics sorted by id.
 func TestCheckFormatJSONStructure(t *testing.T) {
 	dir := t.TempDir()
@@ -78,8 +80,8 @@ func TestCheckFormatJSONStructure(t *testing.T) {
 
 	res := runPawl(t, dir, baseEnv(), "check", "--format", "json")
 	r := parseReport(t, res.stdout)
-	if r.SchemaVersion != 1 {
-		t.Errorf("schema_version = %d, want 1", r.SchemaVersion)
+	if r.SchemaVersion != 2 {
+		t.Errorf("schema_version = %d, want 2", r.SchemaVersion)
 	}
 	if r.Command != "check" {
 		t.Errorf("command = %q, want %q", r.Command, "check")
