@@ -27,6 +27,8 @@ func measureBuiltin(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult
 		return measurePatternCount(cfg, dim)
 	case builtinEslint:
 		return measureEslint(cfg, dim, stderr)
+	case builtinOxlint:
+		return measureOxlint(cfg, dim, stderr)
 	case builtinJscpd:
 		return measureJscpd(cfg, dim, stderr)
 	case builtinSwiftComplexity:

@@ -269,6 +269,29 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if err := validateMinFilesOption(options); err != nil {
 			return fmt.Errorf("builtin %q %v", builtin, err)
 		}
+	case builtinOxlint:
+		if command, _ := options["command"].(string); command == "" {
+			return fmt.Errorf("builtin %q requires a command option (an oxlint invocation producing --format json on stdout)", builtin)
+		}
+		if _, err := strictStringList(options["rules"]); err != nil {
+			return fmt.Errorf("builtin %q rules: %v", builtin, err)
+		}
+		if _, err := strictStringList(options["verify"]); err != nil {
+			return fmt.Errorf("builtin %q verify: %v", builtin, err)
+		}
+		levels, err := strictStringList(options["levels"])
+		if err != nil {
+			return fmt.Errorf("builtin %q levels: %v", builtin, err)
+		}
+		for _, level := range levels {
+			if !validAnalyzerLevel(builtinOxlint, level) {
+				return fmt.Errorf("builtin %q levels entry %q must be one of %s",
+					builtin, level, analyzerLevelsDescription(builtinOxlint))
+			}
+		}
+		if err := validateMinFilesOption(options); err != nil {
+			return fmt.Errorf("builtin %q %v", builtin, err)
+		}
 	case builtinJscpd:
 		if command, _ := options["command"].(string); command == "" {
 			return fmt.Errorf("builtin %q requires a command option (a jscpd invocation with --reporters json)", builtin)
@@ -354,9 +377,9 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
 		}
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinJscpd,
-			builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
+		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinOxlint,
+			builtinJscpd, builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
 	}
 	return nil
 }

@@ -93,11 +93,61 @@ commands are representative ESLint `--print-config` probes. They turn a missing,
 misspelled, or disabled filtered rule into exit 2 without treating a legitimate
 clean zero as suspicious.
 
-### Oxlint or golangci-lint via SARIF
+### Oxlint (Oxc)
 
-Both tools can feed several dimensions from one named SARIF analyzer. For
-golangci-lint, disable its default truncation and per-line deduplication or Pawl
-cannot recover findings the producer omitted:
+Oxlint has a first-class native JSON analyzer. It reports the number of scanned
+files directly, preserves multiple diagnostics on the same line, and runs only
+once when several dimensions select different rules or severities:
+
+```yaml
+analyzers:
+  - id: "frontend-oxlint"
+    builtin: "oxlint"
+    verify:
+      # Add representative files when nested configs/overrides differ.
+      - "npx oxlint --print-config src/probe.ts"
+    options:
+      command: "npx oxlint src --format json"
+      min_files: 1
+
+dimensions:
+  - id: "debugger-statements"
+    title: "Debugger statements"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-oxlint"
+    options:
+      # Selectors use native diagnostic codes. The matching config key for
+      # eslint(no-debugger) is no-debugger.
+      rules: ["eslint(no-debugger)"]
+
+  - id: "invalid-fetch-options"
+    title: "Invalid fetch options"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-oxlint"
+    options:
+      # unicorn/no-invalid-fetch-options in --print-config maps to this code.
+      rules: ["unicorn(no-invalid-fetch-options)"]
+      levels: ["error", "warning"]
+```
+
+Oxlint exit 0 (no error-level diagnostics) and exit 1 (errors found) are valid
+only when stdout is a complete native JSON report. A fatal invocation that also
+uses exit 1 emits no valid report and therefore fails measurement instead of
+becoming zero; every exit other than 0/1 is fatal. `verify` is optional, but
+recommended whenever `rules` selectors are used: every selected diagnostic code
+must map to an enabled rule in at least one `--print-config` result.
+
+Pin Oxlint in the project rather than invoking `@latest`; rules and defaults may
+grow in non-breaking Oxlint releases, and Pawl should record such changes as an
+intentional baseline update.
+
+### golangci-lint via SARIF
+
+golangci-lint can feed several dimensions from one named SARIF analyzer.
+Disable its default truncation and per-line deduplication or Pawl cannot recover
+findings the producer omitted:
 
 ```yaml
 analyzers:
@@ -119,14 +169,6 @@ dimensions:
     gate: "per-file-count"
     source: "go-lint"
 ```
-
-Oxlint uses the same shape with a command such as
-`oxlint src --format sarif > .pawl/oxlint.sarif`; its SARIF rule ids look like
-`eslint(no-debugger)` and can be selected by dimensions. When filtering rules,
-set `verify_rules: true` if the pinned Oxlint report includes
-`tool.driver.rules`; this makes a misspelled selector fail instead of measuring
-zero. Pin the analyzer version: rule identifiers, exit codes, and report
-metadata are part of the committed gate contract.
 
 `min_files` is also available as an opt-in completeness floor, but it counts
 SARIF `artifacts`. Enable it only after confirming the pinned producer emits

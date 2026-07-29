@@ -101,6 +101,16 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 		}
 		return validateAnalyzerReport(analyzer, report)
 	}
+	if analyzer.Builtin == builtinOxlint {
+		if err := verifyOxlintRules(cfg, dim, analyzer.Verify, requiredRules, stderr); err != nil {
+			return analyzerReport{}, err
+		}
+		report, err := runOxlintAnalyzer(cfg, dim, stderr)
+		if err != nil {
+			return analyzerReport{}, err
+		}
+		return validateAnalyzerReport(analyzer, report)
+	}
 
 	data, err := readNamedSarifReport(cfg, dim, analyzer.Options, stderr)
 	if err != nil {
@@ -276,7 +286,7 @@ func reduceAnalyzerReport(cfg *Config, analyzer Analyzer, dim Dimension, report 
 		}
 	}
 	unit := "findings"
-	if analyzer.Builtin == builtinEslint {
+	if analyzer.Builtin == builtinEslint || analyzer.Builtin == builtinOxlint {
 		unit = "issues"
 	}
 	result := findings.result(unit)
@@ -307,7 +317,7 @@ func verifyEslintRules(cfg *Config, dim Dimension, commands, requiredRules []str
 			return fmt.Errorf("eslint rule verification output is not --print-config JSON: %v", err)
 		}
 		for rule, severity := range config.Rules {
-			if eslintSeverityEnabled(severity) {
+			if lintRuleSeverityEnabled(severity) {
 				enabled[rule] = true
 			}
 		}
@@ -320,7 +330,7 @@ func verifyEslintRules(cfg *Config, dim Dimension, commands, requiredRules []str
 	return nil
 }
 
-func eslintSeverityEnabled(value any) bool {
+func lintRuleSeverityEnabled(value any) bool {
 	if list, ok := value.([]any); ok {
 		if len(list) == 0 {
 			return false
