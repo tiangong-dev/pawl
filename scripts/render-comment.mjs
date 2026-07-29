@@ -11,6 +11,7 @@ const cell = (v) => (v === null || v === undefined ? '—' : String(v))
 
 const delta = (m) => {
   if (m.base === null || m.base === undefined) return 'new'
+  if (m.current === null || m.current === undefined) return '—'
   const d = Math.round((m.current - m.base) * 100) / 100
   if (d === 0) return '±0'
   return d > 0 ? `+${d}` : `${d}`
@@ -25,6 +26,7 @@ const STATUS_CELL = {
   worse: '❌ worse',
   new: '🆕 new',
   'within-tolerance': '✅ within tolerance',
+  preserved: 'preserved',
 }
 const statusCell = (status) => STATUS_CELL[status] || status
 

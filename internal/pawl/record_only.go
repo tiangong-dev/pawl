@@ -36,6 +36,10 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		}
 		onlySet[id] = true
 	}
+	if format == "codeclimate" {
+		fmt.Fprintln(stderr, "record --only cannot emit codeclimate: a partial measurement is not a complete current findings report")
+		return 2
+	}
 
 	// An existing, well-formed snapshot is what --only preserves; "preserve the
 	// rest" is meaningless without a baseline.
@@ -105,7 +109,7 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 	}
 
 	if format == "json" {
-		rep := buildReport("record", &shownCfg, baseline, merged)
+		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -113,17 +117,41 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		}
 		return 0
 	}
-	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, &shownCfg, merged); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		return 0
-	}
-	printTable(stdout, &shownCfg, baseline, merged, nil)
+	printPartialRecordTable(stdout, &shownCfg, baseline, measured, merged)
 	recorded := append([]string(nil), only...)
 	sort.Strings(recorded)
 	fmt.Fprintf(stdout, "📸 re-recorded %s; preserved %d other metric(s) → %s\n",
 		strings.Join(recorded, ", "), preserved, displayPath(cfg.SnapshotPath))
 	return 0
+}
+
+func printPartialRecordTable(w io.Writer, cfg *Config, baseline *Snapshot, measured, merged map[string]Metric) {
+	idWidth := 6
+	for _, d := range cfg.Dimensions {
+		if len(d.ID) > idWidth {
+			idWidth = len(d.ID)
+		}
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintf(w, "%s  %9s  %9s  %6s  status\n", pad("metric", idWidth), "baseline", "current", "Δ")
+	fmt.Fprintln(w, strings.Repeat("-", idWidth+9+9+6+12))
+	for _, dim := range cfg.Dimensions {
+		if _, ok := merged[dim.ID]; !ok {
+			continue
+		}
+		var base *float64
+		if old, exists := baseline.Metrics[dim.ID]; exists {
+			base = floatPtr(old.Value)
+		}
+		if cur, wasMeasured := measured[dim.ID]; wasMeasured {
+			tolerance := dim.GateSpecOf().Tolerance
+			fmt.Fprintf(w, "%s  %9s  %9s  %6s  %s\n",
+				pad(dim.ID, idWidth), baseCell(base), FormatNumber(cur.Value),
+				fmtDelta(base, cur.Value), statusOf(dim.Direction, base, cur.Value, tolerance))
+			continue
+		}
+		fmt.Fprintf(w, "%s  %9s  %9s  %6s  preserved\n",
+			pad(dim.ID, idWidth), baseCell(base), "—", "—")
+	}
+	fmt.Fprintln(w, "")
 }

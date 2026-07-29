@@ -33,7 +33,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>]
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   record               measure every dimension and (over)write the snapshot
@@ -44,6 +44,7 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   trend [<id>]         print each metric's value across the committed snapshot's
                        git history — a fully local trend, no cloud
   version              print `pawl <version>` and exit 0
+  help [<command>]     print global or command help and exit 0
 ```
 
 - Run with no command, pawl defaults to `check` (so a bare `pawl` in CI is the
@@ -51,6 +52,8 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   empty-string argument is an unknown command (exit 2), so a wrapper passing an
   unset variable fails loud instead of silently running the default gate.
 - `-c <path>` selects the config file; default `./pawl.yaml`.
+- `-h` / `--help`, `pawl help`, and `pawl help <command>` print help without
+  reading config. An unknown command/topic remains a usage error (exit 2).
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
   for all); on any command other than `trend` it is a usage error (exit 2).
 - `--only <id>[,<id>…]` re-records only the named dimensions and preserves the
@@ -122,6 +125,16 @@ no existing config.
 # Optional. Snapshot path, resolved relative to the config file's directory.
 snapshot: "pawl.snapshot.json"
 
+analyzers:
+  - id: "frontend-lint"         # required, unique across analyzers
+    builtin: "eslint"           # eslint or sarif
+    timeout: "10m"              # applies to acquisition and verification
+    verify:                     # optional ESLint --print-config commands
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json"
+      min_files: 1              # optional completeness floor
+
 dimensions:
   - id: "nolint-count"          # required, unique across dimensions
     title: "nolint suppressions" # required, human-readable
@@ -129,25 +142,63 @@ dimensions:
     gate: "per-file-count"       # optional: total (default) | per-file-count | per-key-value
     tolerance: 0.0               # optional, absolute slack in the worse direction, default 0
     timeout: "10m"               # optional Go duration, default "10m"
-    command: "./scripts/count-nolint.sh"  # exec adapter (exactly one of command | builtin)
+    command: "./scripts/count-nolint.sh"  # exactly one of command | builtin | source
 
   - id: "file-length"
     title: "Files over 500 lines"
     direction: "lower-is-better"
-    builtin: "file-length"       # built-in adapter (exactly one of command | builtin)
+    builtin: "file-length"
     options:                     # builtin-specific options
       threshold: 500
       include: ["**/*.go"]
       exclude: ["vendor/**"]
+
+  - id: "eslint-rule"
+    title: "One ESLint rule"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-lint"      # filters the named analyzer's decoded findings
+    options:
+      rules: ["plugin/rule"]
 ```
 
 Validation errors (all exit 2): missing/duplicate `id`, missing `title`, missing or
-invalid `direction`, invalid `gate`, both or neither of `command`/`builtin`, unknown
+invalid `direction`, invalid `gate`, not exactly one of `command`/`builtin`/`source`, unknown
 `builtin` name, invalid builtin options (bad regexp, missing `include`, …),
 `extract` set on a `builtin` dimension (extract is an exec-adapter feature),
 unknown `extract` form, an `extract` object with neither/both of `regex`/`json_path`,
 an uncompilable `extract.regex`, an empty `extract.json_path`,
-zero dimensions, unparseable YAML, config file not found.
+an unknown named-analyzer acquisition option or dimension selector, zero
+dimensions, unparseable YAML, config file not found.
+
+### Named analyzers
+
+A named analyzer is the explicit sharing boundary for expensive tool scans. Pawl
+acquires and decodes it once per process invocation, then each referencing
+dimension applies pure `rules` / `levels` filters. Pawl never deduplicates
+anonymous dimensions merely because their command strings happen to match:
+timeouts, files, exit policies, decoders, and command side effects are part of
+the source identity.
+
+- `builtin: eslint`: `options.command` is required and uses ESLint's 0/1-valid,
+  2+-fatal exit contract. `verify` is an optional list of commands producing
+  ESLint `--print-config` JSON for representative files. Every rule selected by
+  a referencing dimension must be enabled in at least one verified config or
+  measurement fails; zero findings remains valid. `min_files` optionally
+  requires the JSON report to contain at least that many file results.
+- `builtin: sarif`: the normal SARIF `command` / `file` acquisition contract
+  applies. `min_files` optionally requires at least that many SARIF artifacts.
+  `valid_exit_codes` can declare the producer's successful/finding exit codes;
+  any other exit then fails even if a parseable report was written.
+  `verify_rules: true` makes every filtered rule id prove its presence in the
+  report's `tool.driver.rules` catalog, so a misspelling cannot become a clean
+  zero. It requires at least one `rules` selector and fails if the producer
+  omits that catalog. Referencing dimensions may filter `rules` and/or `levels`.
+- Acquisition options live on the analyzer; selectors live on referencing
+  dimensions. Unknown options/selectors fail validation instead of being
+  silently ignored.
+- `record --only` executes only analyzers needed by the selected dimensions. If
+  several selected dimensions share one analyzer, it still executes once.
 
 ## Exec adapter contract
 
@@ -235,8 +286,8 @@ The regexp is applied to each **non-empty** stdout line.
   semantics) and does **not** offer an "ignore unmatched lines" escape hatch.
 
 ```yaml
-- id: golangci
-  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+- id: legacy-lint
+  command: "my-linter --format concise"
   direction: "lower-is-better"
   gate: "per-file-count"
   extract:
@@ -532,11 +583,12 @@ alone, so the committed baseline for the rest stays exactly where it was.
 - A configured dimension that is neither listed nor present in the existing
   snapshot stays absent (it remains "new" until a full record, or an `--only`
   that names it).
-- Output honors `--format` as a full `record` does (text table, `json`,
-  `codeclimate`). The text footer names the re-recorded ids and the number of
-  preserved metrics instead of the plain `📸 snapshot written` line. The output
-  covers only the metrics actually written (measured or preserved); an
-  intentionally-absent dimension is omitted, never rendered as a measured `0`.
+- Text output shows preserved metrics with `current —`, delta `—`, and status
+  `preserved`. JSON uses `measurement_state:"preserved"`, `current:null`, and
+  `snapshot_value`; measured metrics use `measurement_state:"measured"`.
+  `record --only --format codeclimate` is a usage error (exit 2), because Code
+  Climate cannot mark a finding as preserved and a partial set cannot honestly
+  claim to be the current findings report.
 
 ## Snapshot — `pawl.snapshot.json`
 
@@ -593,11 +645,12 @@ on top stops a localized regression from hiding behind a net-zero total (file A
 improves, file B worsens, total unchanged).
 
 - **`total`** — scalar only.
-- **`per-file-count`** — offender count per file may not rise. Offender count =
-  number of breakdown KEYS grouped by the key's file part (the substring before
-  the first `:`; a key with no `:` is itself the file). Counting keys, not summing
-  values, keeps the gate robust to code moving around inside a file. A file
-  present only in the current breakdown regresses from 0. Tolerance does not
+- **`per-file-count`** — offender count per file may not rise. Offender count is
+  the sum of breakdown values grouped by the path part of the final numeric
+  `:<line>` suffix; a key without such a suffix is file-only. Values carry
+  finding multiplicity, so several rules or regexp matches on one line remain
+  several offenders. Moving the same multiplicity within a file is still
+  ignored. A file present only in current regresses from 0. Tolerance does not
   apply to per-file counts (only to the scalar).
 - **`per-key-value`** — every key of the BASELINE breakdown must not worsen
   (with tolerance, same `worse` predicate). Keys missing from the current
@@ -707,7 +760,7 @@ a `--since` suppression.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "command": "check",
   "mode": "full",
   "since": null,
@@ -721,6 +774,7 @@ a `--since` suppression.
       "unit": "issues",
       "base": 10,
       "current": 12,
+      "measurement_state": "measured",
       "status": "worse",
       "improved": false,
       "regressions": [
@@ -740,25 +794,37 @@ a `--since` suppression.
 }
 ```
 
-- Top level: `schema_version` (int, currently `1`), `command`
+- Top level: `schema_version` (int, currently `2`), `command`
   (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
   when `mode` is `since`, else `null`), `exit_code` (the process exit code), and
   `metrics` — an array **sorted by `id`**.
 - Each metric: `id`, `title`, `direction`, `gate` (`total` when unset), `unit`,
   `base` (the baseline value, `null` when the dimension is new), `current` (the
-  measured value), `status` (`new`/`worse`/`within-tolerance`/`better`/`same`,
+  measured value, or `null` for a preserved partial-record metric),
+  `measurement_state` (`measured`/`preserved`), optional `snapshot_value`
+  (the value written by partial record), `status`
+  (`new`/`worse`/`within-tolerance`/`better`/`same`/`preserved`,
   the emoji-free form of the table status), `improved` (bool — scalar strictly
   improved), and `regressions` (array, empty when none).
 - Each regression: `kind` (`total`/`per-file-count`/`per-key-value`), `key`
   (the breakdown key, `null` for a `total` regression), `path` and `line`
   (parsed from `key`; both `null` for `total`, `line` `null` when the key has no
   numeric line), `base` and `current` (the two compared numbers — for `total`
-  the scalar values, for `per-file-count` the offender counts, for
-  `per-key-value` the key's values), `message` (the exact text-mode detail line),
+  the scalar values, for `per-file-count` the contributing location key's
+  finding counts (the message also carries the file totals), for
+  `per-key-value` the key's values), `message` (a human-readable detail line),
   and `suppressed` (bool — `true` only in `--since` mode when this regression was
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are
   still listed (so the JSON is a faithful record) but do not affect `exit_code`.
+
+Schema 2 is a report-only migration: the committed snapshot format is unchanged,
+so upgrading does not require re-recording. Consumers of schema 1 must accept the
+nullable `current` field and the new `measurement_state` / optional
+`snapshot_value` fields before upgrading. The corrected `per-file-count`
+comparison can surface a regression that older versions missed when multiple
+findings shared one breakdown key; that is an intentional tightening, not a
+snapshot incompatibility.
 
 ## Code Quality output
 

@@ -61,18 +61,77 @@ Other patterns worth gating: `//nolint` (Go), `# type: ignore` (Python),
 ### ESLint issues
 
 ```yaml
-- id: "eslint"
-  title: "ESLint problems"
-  direction: "lower-is-better"
-  gate: "per-file-count"
-  builtin: "eslint"
-  options:
-    command: "npx eslint src --format json --no-inline-config"
-    # rules: ["sonarjs/cognitive-complexity"]   # optional: count only these rules
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"
+    verify:
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
+
+dimensions:
+  - id: "cognitive-complexity"
+    title: "Cognitive complexity"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["sonarjs/cognitive-complexity"]
+
+  - id: "type-escapes"
+    title: "Explicit any"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["@typescript-eslint/no-explicit-any"]
 ```
 
-Filter `rules` to gate one thing precisely — e.g. cognitive complexity via
-`sonarjs/cognitive-complexity`, or `@typescript-eslint/no-explicit-any`.
+The analyzer runs once; each dimension filters the decoded findings. `verify`
+commands are representative ESLint `--print-config` probes. They turn a missing,
+misspelled, or disabled filtered rule into exit 2 without treating a legitimate
+clean zero as suspicious.
+
+### Oxlint or golangci-lint via SARIF
+
+Both tools can feed several dimensions from one named SARIF analyzer. For
+golangci-lint, disable its default truncation and per-line deduplication or Pawl
+cannot recover findings the producer omitted:
+
+```yaml
+analyzers:
+  - id: "go-lint"
+    builtin: "sarif"
+    options:
+      command: >-
+        golangci-lint run
+        --output.sarif.path=.pawl/golangci.sarif
+        --max-issues-per-linter=0 --max-same-issues=0 --uniq-by-line=false
+        ./...
+      file: ".pawl/golangci.sarif"
+      valid_exit_codes: [0, 1] # 1 is golangci-lint's default "issues found"
+
+dimensions:
+  - id: "go-lint-findings"
+    title: "Go lint findings"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "go-lint"
+```
+
+Oxlint uses the same shape with a command such as
+`oxlint src --format sarif > .pawl/oxlint.sarif`; its SARIF rule ids look like
+`eslint(no-debugger)` and can be selected by dimensions. When filtering rules,
+set `verify_rules: true` if the pinned Oxlint report includes
+`tool.driver.rules`; this makes a misspelled selector fail instead of measuring
+zero. Pin the analyzer version: rule identifiers, exit codes, and report
+metadata are part of the committed gate contract.
+
+`min_files` is also available as an opt-in completeness floor, but it counts
+SARIF `artifacts`. Enable it only after confirming the pinned producer emits
+that optional catalog; locations inside `results` alone cannot prove how many
+files were scanned.
 
 ### Code duplication (jscpd)
 
@@ -100,17 +159,21 @@ Filter `rules` to gate one thing precisely — e.g. cognitive complexity via
     metric: "cognitive"   # or "cyclomatic"
 ```
 
-### golangci-lint (no builtin needed — `extract`)
+### Legacy line-oriented linter output (`extract`)
 
 ```yaml
-- id: "golangci"
-  title: "golangci-lint findings"
+- id: "legacy-lint"
+  title: "Legacy linter findings"
   direction: "lower-is-better"
   gate: "per-file-count"
-  command: "golangci-lint run ./... | grep -E '^[^:]+:[0-9]+:' || true"
+  command: "my-linter --format concise"
   extract:
     regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
 ```
+
+Use this only when the command exits 0 after a successful scan. If “findings
+found” is non-zero, prefer its SARIF output and declare `valid_exit_codes`;
+`|| true` also hides crashes and configuration failures.
 
 ---
 

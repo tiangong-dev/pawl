@@ -76,6 +76,14 @@ test('status "new" renders base "—", delta "new", and the 🆕 new icon cell',
   assert.match(body, /\| eslint \| — \| 3 \| new \| 🆕 new \|/)
 })
 
+test('a preserved partial-record metric never renders its snapshot value as current evidence', () => {
+  const body = renderCommentBody({
+    exit_code: 0,
+    metrics: [metric({ current: null, snapshot_value: 10, measurement_state: 'preserved', status: 'preserved' })],
+  })
+  assert.match(body, /\| eslint \| 10 \| — \| — \| preserved \|/)
+})
+
 test('status "within-tolerance" renders the ✅ within tolerance icon cell (space, not hyphen)', () => {
   const body = renderCommentBody({
     exit_code: 0,

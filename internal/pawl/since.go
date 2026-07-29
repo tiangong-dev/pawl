@@ -3,6 +3,7 @@ package pawl
 import (
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -86,7 +87,8 @@ func (s *sinceScope) scopeMetric(m *MetricReport, dim Dimension, base, cur Metri
 	// wouldn't raise, or dropping one it would — so they are enforced at full
 	// strength: the full-mode verdict stands, unscoped. A per-file-count dimension
 	// with no breakdown to attribute is treated the same way.
-	if gate != GatePerFileCount || len(cur.Breakdown) == 0 {
+	if gate != GatePerFileCount || len(cur.Breakdown) == 0 ||
+		!sameFindingTotal(base.Value, base.Breakdown) || !sameFindingTotal(cur.Value, cur.Breakdown) {
 		if len(m.Regressions) > 0 {
 			s.enforcedFull = append(s.enforcedFull, m.ID)
 		}
@@ -114,24 +116,23 @@ func (s *sinceScope) scopeMetric(m *MetricReport, dim Dimension, base, cur Metri
 	// edited line gained offenders (its value grew) — direction-agnostic, exactly
 	// what moves the full-mode count/scalar. Each worse key is live if its line
 	// was changed, suppressed if not, and (conservatively) live if unscopeable.
-	for _, key := range sortedKeys(cur.Breakdown) {
-		baseVal, isOld := base.Breakdown[key]
-		if isOld && cur.Breakdown[key] <= baseVal {
-			continue
+	for _, fileRegression := range perFileRegressions(base.Breakdown, cur.Breakdown) {
+		for _, key := range fileRegression.Contributors {
+			baseVal := base.Breakdown[key]
+			reg := keyRegression(string(gate), key, baseVal, cur.Breakdown[key],
+				fmt.Sprintf("%s  %s → %s", key, FormatNumber(baseVal), FormatNumber(cur.Breakdown[key])))
+			switch {
+			case reg.Line == nil || *reg.Line <= 0:
+				s.unscopeable++ // no attributable line → cannot prove pre-existing, gate it
+				live++
+			case s.added[s.repoPath(*reg.Path)][*reg.Line]:
+				live++ // an offender on a changed line
+			default:
+				reg.Suppressed = true
+				s.exempted++
+			}
+			out = append(out, reg)
 		}
-		reg := keyRegression(string(gate), key, baseVal, cur.Breakdown[key],
-			fmt.Sprintf("%s  %s → %s", key, FormatNumber(baseVal), FormatNumber(cur.Breakdown[key])))
-		switch {
-		case reg.Line == nil || *reg.Line <= 0:
-			s.unscopeable++ // no attributable line → cannot prove pre-existing, gate it
-			live++
-		case s.added[s.repoPath(*reg.Path)][*reg.Line]:
-			live++ // an offender on a changed line
-		default:
-			reg.Suppressed = true
-			s.exempted++
-		}
-		out = append(out, reg)
 	}
 
 	m.Regressions = out
@@ -142,8 +143,16 @@ func (s *sinceScope) scopeMetric(m *MetricReport, dim Dimension, base, cur Metri
 	if live > 0 {
 		m.Status = "worse"
 	} else {
-		m.Status = statusName(spec.Direction, m.Base, m.Current, spec.Tolerance)
+		m.Status = statusName(spec.Direction, m.Base, *m.Current, spec.Tolerance)
 	}
+}
+
+func sameFindingTotal(value float64, breakdown map[string]float64) bool {
+	sum := 0.0
+	for _, count := range breakdown {
+		sum += count
+	}
+	return math.Abs(value-sum) <= 1e-9
 }
 
 // repoPath maps a config-relative breakdown path to the repo-relative form the

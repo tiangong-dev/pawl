@@ -89,6 +89,11 @@ type eslintFileResult struct {
 // crash) is a measurement failure.
 func measureEslint(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	command, _ := dim.Options["command"].(string)
+	rules, _ := strictStringList(dim.Options["rules"])
+	verify, _ := strictStringList(dim.Options["verify"])
+	if err := verifyEslintRules(cfg, dim, verify, rules, stderr); err != nil {
+		return MeasureResult{}, err
+	}
 	stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, command)
 	if err != nil {
 		return MeasureResult{}, err
@@ -101,9 +106,12 @@ func measureEslint(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult,
 	if err := json.Unmarshal(stdout, &results); err != nil {
 		return MeasureResult{}, fmt.Errorf("stdout is not an ESLint JSON array: %v (stdout: %.200s)", err, stdout)
 	}
+	if minFiles, ok := numberOption(dim.Options, "min_files"); ok && len(results) < int(minFiles) {
+		return MeasureResult{}, fmt.Errorf("eslint scanned %d file(s), expected at least %d", len(results), int(minFiles))
+	}
 
 	ruleFilter := map[string]bool{}
-	for _, r := range stringList(dim.Options["rules"]) {
+	for _, r := range rules {
 		ruleFilter[r] = true
 	}
 

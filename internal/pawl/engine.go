@@ -29,6 +29,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	only := ""
 	onlyProvided := false
 	versionRequested := false
+	helpRequested := false
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -76,6 +77,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			since = args[i]
 		case args[i] == "--version":
 			versionRequested = true
+		case args[i] == "-h" || args[i] == "--help":
+			helpRequested = true
 		case strings.HasPrefix(args[i], "-"):
 			fmt.Fprintf(stderr, "unknown flag %q\n", args[i])
 			return 2
@@ -93,6 +96,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		// `pawl "$PAWL_COMMAND"` with the variable unset fails loud instead
 		// of silently running the default gate.
 		command = positional[0]
+	} else if helpRequested {
+		command = "help"
 	} else if versionRequested {
 		// `pawl --version` is the version command, not an implicit check —
 		// otherwise the default would make check-scoped flags (--since) look
@@ -105,9 +110,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "record", "check", "diff", "baseline-guard", "trend", "version":
+	case "init", "record", "check", "diff", "baseline-guard", "trend", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -115,7 +120,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// forgotten) fails loud instead of silently running a different,
 	// state-writing command.
 	maxOperands := 0
-	if command == "trend" || command == "baseline-guard" {
+	if command == "trend" || command == "baseline-guard" || command == "help" {
 		maxOperands = 1
 	}
 	if len(positional) > 1+maxOperands {
@@ -142,6 +147,25 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	if command == "trend" && format == "codeclimate" {
 		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")
 		return 2
+	}
+	if (command == "help" || helpRequested) && format != "text" {
+		fmt.Fprintln(stderr, "--format is not valid on `help`")
+		return 2
+	}
+	if helpRequested || command == "help" {
+		topic := command
+		if command == "help" {
+			topic = ""
+			if len(positional) > 1 {
+				topic = positional[1]
+			}
+		}
+		if !validHelpTopic(topic) {
+			fmt.Fprintf(stderr, "unknown help topic %q\n", topic)
+			return 2
+		}
+		printHelp(stdout, topic)
+		return 0
 	}
 	// version never reads config — it must work in any directory. A --version
 	// riding on a valid, validly-flagged command (`pawl check --version`) also
@@ -441,16 +465,6 @@ func fmtDelta(base *float64, cur float64) string {
 	return FormatNumber(d)
 }
 
-func round2(v float64) float64 {
-	scaled := v * 100
-	if scaled >= 0 {
-		scaled = float64(int64(scaled + 0.5))
-	} else {
-		scaled = float64(int64(scaled - 0.5))
-	}
-	return scaled / 100
-}
-
 func baseCell(base *float64) string {
 	if base == nil {
 		return "—"
@@ -472,8 +486,4 @@ func displayPath(path string) string {
 		}
 	}
 	return path
-}
-
-func onCI() bool {
-	return os.Getenv("GITHUB_ACTIONS") != ""
 }
