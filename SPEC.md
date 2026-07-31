@@ -33,7 +33,7 @@ pawl stays a small, verifiable binary over a clean adapter contract.
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>] [--dry-run] [--accept-worse] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   record               measure every dimension and (over)write the snapshot
@@ -60,6 +60,11 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   rest of the committed snapshot; valid only on `record`, specified in
   [§ Partial record](#partial-record---only). On any other command it is a
   usage error (exit 2).
+- `--dry-run` previews what `record` (with or without `--only`) would write —
+  same table, nothing written — and `--accept-worse` explicitly authorizes
+  writing a dimension worse than the committed baseline. Both are valid only on
+  `record`; specified in [§ Accepted debt](#accepted-debt). On any other
+  command either is a usage error (exit 2).
 - `--format <text|json|codeclimate>` selects the output format of
   `record`/`check`/`diff`; default `text`. `json` is specified in
   [§ Machine-readable output](#machine-readable-output); `codeclimate` in
@@ -95,7 +100,7 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 | code | meaning |
 |------|---------|
 | 0 | pass (including `diff` with regressions, and legitimate baseline-guard skips) |
-| 1 | `check`: at least one dimension regressed; `baseline-guard`: snapshot regressed vs `<ref>` |
+| 1 | `check`: at least one dimension regressed; `baseline-guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
 | 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`/`diff`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
@@ -590,6 +595,88 @@ alone, so the committed baseline for the rest stays exactly where it was.
   Climate cannot mark a finding as preserved and a partial set cannot honestly
   claim to be the current findings report.
 
+## Accepted debt (`--dry-run`, `--accept-worse`)
+
+A full `record` (or `record --only`) that would write a dimension worse than
+the value currently committed at `SnapshotPath` is refused by default —
+otherwise the person running `record` to lock in one win can silently bless a
+regression in a dimension they weren't looking at. Accepting debt is an
+explicit act, not a side effect of locking in a gain.
+
+- **Default (neither flag given):** if any measured dimension regressed
+  against the committed baseline (per its own gate mode — the same predicate
+  `check`'s exit code uses, so a per-file-count or per-key-value regression
+  that leaves the scalar unchanged still counts), record writes **nothing**
+  and exits 1. Text output prints the table, then — for each regressed
+  dimension — the same gate-aware detail lines `check`'s `❌ regressions:`
+  block would print (not just a scalar `base → current`, since that alone
+  would misrepresent a per-file-count/per-key-value regression that left the
+  scalar unchanged or even improved), and points at `--accept-worse`.
+  `--format json` renders the normal record verdict with `exit_code: 1` and
+  every regressed metric's `status: "worse"`.
+- **`--accept-worse`:** authorizes the write. Every dimension that would have
+  been refused is written as-is, and text output additionally prints one
+  `Pawl-Accept: <id> <value>` line per accepted dimension (`<value>` is the
+  dimension's scalar total, matching what `baseline-guard`'s own violation
+  check compares) — the trailer to add to the commit that includes the
+  snapshot change, so `baseline-guard` (see below) can recognize it as
+  deliberate. `--format json` additionally sets `accepted_worse` on the
+  verdict — see [§ Machine-readable output](#machine-readable-output) — so an
+  automated caller can build the same trailer without re-deriving it from
+  `metrics[].status`.
+- **`--dry-run`:** previews what record would do — the same table, plus a
+  summary of which dimensions would change (`id base→current`, `id
+  new→current` for a dimension with no prior baseline, or `id current
+  (breakdown changed)` when the scalar held but the per-file/per-key
+  breakdown didn't — a net-zero-scalar regression still writes different
+  bytes) — and writes **nothing**, regardless of `--accept-worse`. Its exit
+  code matches what a real record would produce: 1 if it would have been
+  refused (worse dimensions present and `--accept-worse` not given), 0
+  otherwise — **the refusal check runs before `--dry-run` is considered**, so
+  `record --dry-run` alone on a regression refuses exactly like a real record
+  would, it does not preview past the refusal. Combined with
+  `--accept-worse`, it previews the `Pawl-Accept` trailer lines without
+  writing them. `--format json` sets `dry_run: true` on the verdict
+  unconditionally under `--dry-run` — including on a refusal, so a caller can
+  tell a `--dry-run` refusal apart from a real one that hit the same exit
+  code.
+- Both flags apply identically under `--only`, scoped to the listed
+  dimensions only — a preserved (unlisted) dimension is copied verbatim from
+  the baseline and can never be "worse".
+
+### `Pawl-Accept` trailers and `baseline-guard`
+
+`baseline-guard <ref>` (see [§ baseline-guard](#baseline-guard)) reads every
+commit message in `<ref>..HEAD` for lines of the form `Pawl-Accept: <id>
+<value>`. A metric that regressed against `<ref>` is downgraded from a
+violation to an accepted notice when:
+
+1. at least one trailer names that metric's id, **and**
+2. the metric's current value is no worse (per its recorded direction and
+   tolerance) than the **worst** value declared across all matching trailers
+   in range — multiple trailers for the same id accumulate; the gate honors
+   the most debt any of them declared.
+
+A trailer for an id the working tree's snapshot doesn't regress on is simply
+unused. A trailer line that fails to parse (no id, or a non-numeric value) is
+skipped — a malformed trailer must never silently disable the gate. Trailers
+outside `<ref>..HEAD` (already on `<ref>`, or on an unrelated branch) are not
+read and do not count. `git log <ref>..HEAD` failing (e.g. a shallow clone
+missing the needed history) is a measurement failure: exit 2, not a silent
+"no trailers found".
+
+The accepted-value comparison, not string equality, means the trailer stays
+valid even if the exact committed number shifts slightly between when it was
+written and when CI re-derives it (e.g. a rebase re-running the same
+`--accept-worse` record with a marginally different measurement) — it only
+has to not be worse than what was declared.
+
+The snapshot file itself is never touched by acceptance: nothing about
+`--accept-worse` is written into `pawl.snapshot.json`, so `baseline-guard`'s
+anti-tamper comparison (`base` vs `pr`, both read straight off disk) is
+exactly as before. The trailer lives in git history, which is what
+`baseline-guard` audits.
+
 ## Snapshot — `pawl.snapshot.json`
 
 ```json
@@ -712,8 +799,11 @@ Then:
   warning (`::warning::…` under `GITHUB_ACTIONS`, `⚠️  …` otherwise), not a
   failure — deleting a dimension is legitimate; the orphan check covers honesty.
 - A metric that worsened (per its recorded `direction`, default
-  `lower-is-better` if missing; slack = its recorded `tolerance`) → violation
-  line `<id>: <base> → <cur>`; any violation ⇒ exit 1.
+  `lower-is-better` if missing; slack = its recorded `tolerance`) is a
+  violation **unless** a `Pawl-Accept` trailer in `<ref>..HEAD` covers it (see
+  [§ Accepted debt](#accepted-debt)), in which case it is printed as an
+  accepted-regression notice instead. Any remaining violation → line
+  `<id>: <base> → <cur>`, exit 1.
 - Otherwise: consistency message, exit 0.
 
 A metric present only in the working tree (newly added dimension) is ignored.
@@ -746,7 +836,10 @@ file-length          3          4      +1  ❌ worse
   worsened key; a `total`-gate (or detail-less) regression a single file-less
   `::error title=pawl: <id>::<title> regressed: <base> → <cur>`. Annotations are
   additive — the human-readable `❌ regressions:` block always prints too.
-- `record` prints the table, writes the snapshot, prints `📸 snapshot written to <path>`.
+- `record` prints the table, then either writes the snapshot and prints
+  `📸 snapshot written to <path>`, or — per [§ Accepted debt](#accepted-debt) —
+  refuses with a `❌ record refused` block (nothing written), or, under
+  `--dry-run`, previews with a `🔍 dry run` line (nothing written either way).
 
 ## Machine-readable output
 
@@ -756,7 +849,15 @@ to stdout and nothing else (no table, no `❌ regressions:` block, no emoji, and
 annotations). stderr (the `measuring <id>…` progress lines) is unchanged. The
 exit code is identical to text mode. This is pawl's own stable verdict schema —
 deliberately not rdjson, which cannot express a scalar total, an improvement, or
-a `--since` suppression.
+a `--since` suppression. `record --dry-run` sets `dry_run: true` on the object
+(omitted, not `false`, on every other invocation — including on a refusal, so
+a `--dry-run` refusal is distinguishable from a real one at the same exit
+code); it is otherwise the normal record verdict shape, exit code included.
+`record --accept-worse` (with or without `--dry-run`) sets `accepted_worse` to
+one `{"id", "value"}` entry per dimension written (or, under `--dry-run`,
+would-be-written) worse than the committed baseline — `value` is the same
+number the text-mode `Pawl-Accept: <id> <value>` trailer hint prints. Omitted
+when nothing was accepted as worse.
 
 ```json
 {
@@ -796,13 +897,20 @@ a `--since` suppression.
 
 - Top level: `schema_version` (int, currently `2`), `command`
   (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
-  when `mode` is `since`, else `null`), `exit_code` (the process exit code), and
+  when `mode` is `since`, else `null`), `dry_run` (bool, present only when
+  `true` — `record --dry-run`), `accepted_worse` (array, present only when
+  non-empty — `record --accept-worse`; see [§ Accepted
+  debt](#accepted-debt)), `exit_code` (the process exit code), and
   `metrics` — an array **sorted by `id`**.
 - Each metric: `id`, `title`, `direction`, `gate` (`total` when unset), `unit`,
   `base` (the baseline value, `null` when the dimension is new), `current` (the
   measured value, or `null` for a preserved partial-record metric),
-  `measurement_state` (`measured`/`preserved`), optional `snapshot_value`
-  (the value written by partial record), `status`
+  `measurement_state` (`measured`/`preserved`), optional `snapshot_value` — for
+  a `preserved` metric, the value already on disk (present regardless of
+  whether this invocation writes, since a preserved value is unchanged either
+  way); for a `measured` metric, the value actually written, so it is present
+  only when the write happened (omitted on a refusal or under `--dry-run`,
+  where `current` alone still reports what was measured) — `status`
   (`new`/`worse`/`within-tolerance`/`better`/`same`/`preserved`,
   the emoji-free form of the table status), `improved` (bool — scalar strictly
   improved), and `regressions` (array, empty when none).

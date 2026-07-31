@@ -229,13 +229,28 @@ func OrphanedMetrics(dimensionIDs []string, baseline map[string]Metric) []string
 	return out
 }
 
+// GuardViolation is one metric that worsened between two recorded snapshots,
+// as compared directly (not via a fresh measurement) — the shape
+// baseline-guard needs to decide whether a Pawl-Accept trailer covers it.
+type GuardViolation struct {
+	ID        string
+	Direction Direction
+	Base      float64
+	Current   float64
+	Tolerance float64
+}
+
+func (v GuardViolation) String() string {
+	return fmt.Sprintf("%s: %s → %s", v.ID, FormatNumber(v.Base), FormatNumber(v.Current))
+}
+
 // BaselineGuardViolations compares two recorded snapshots' metrics directly:
 // violations are metrics that worsened per their recorded direction (empty
 // direction reads as lower-is-better, the conservative default for
 // hand-crafted snapshots) and recorded tolerance; removed are metrics present
 // in base but missing from pr. A metric only in pr has no baseline to
 // violate and is ignored. Both lists are sorted by id.
-func BaselineGuardViolations(base, pr map[string]Metric) (violations, removed []string) {
+func BaselineGuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string) {
 	for _, id := range sortedMetricKeys(base) {
 		b := base[id]
 		p, ok := pr[id]
@@ -252,10 +267,47 @@ func BaselineGuardViolations(base, pr map[string]Metric) (violations, removed []
 			tolerance = *b.Tolerance
 		}
 		if Worse(direction, b.Value, p.Value, tolerance) {
-			violations = append(violations, fmt.Sprintf("%s: %s → %s", id, FormatNumber(b.Value), FormatNumber(p.Value)))
+			violations = append(violations, GuardViolation{
+				ID: id, Direction: direction, Base: b.Value, Current: p.Value, Tolerance: tolerance,
+			})
 		}
 	}
 	return violations, removed
+}
+
+// WorseDimension is one configured dimension whose fresh measurement
+// regressed against the committed baseline, found by the same gate-mode-aware
+// predicate check's exit code uses (not the scalar-only table status) — so
+// record's write gate never disagrees with what check would fail on.
+type WorseDimension struct {
+	ID      string
+	Base    float64
+	Current float64
+}
+
+// WorseDimensions scans dims for a regression between baseline and current,
+// skipping any dimension with no baseline entry (nothing to regress against)
+// or no fresh measurement (not part of this record). It is the single
+// predicate behind record's default refusal to silently write a worse value.
+func WorseDimensions(dims []Dimension, baseline, current map[string]Metric) []WorseDimension {
+	var out []WorseDimension
+	for _, dim := range dims {
+		b, ok := baseline[dim.ID]
+		if !ok {
+			continue
+		}
+		c, ok := current[dim.ID]
+		if !ok {
+			continue
+		}
+		regressions := StructuredRegressions(dim.GateSpecOf(),
+			MetricSample{Value: b.Value, Breakdown: b.Breakdown},
+			MetricSample{Value: c.Value, Breakdown: c.Breakdown})
+		if len(regressions) > 0 {
+			out = append(out, WorseDimension{ID: dim.ID, Base: b.Value, Current: c.Value})
+		}
+	}
+	return out
 }
 
 // SnapshotShapeErrors validates a parsed (json.Unmarshal into any) snapshot's

@@ -20,7 +20,7 @@ func TestBaselineGuardViolations(t *testing.T) {
 		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 7}}
 		violations, removed := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, []string{"a: 5 → 7"})
+		wantViolations(t, violations, []string{"a: 5 → 7"})
 		wantLines(t, removed, nil)
 	})
 
@@ -28,47 +28,47 @@ func TestBaselineGuardViolations(t *testing.T) {
 		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
 		violations, _ := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, nil)
+		wantViolations(t, violations, nil)
 
 		pr2 := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 3}}
 		violations2, _ := pawl.BaselineGuardViolations(base, pr2)
-		wantLines(t, violations2, nil)
+		wantViolations(t, violations2, nil)
 	})
 
 	t.Run("empty direction defaults to lower-is-better", func(t *testing.T) {
 		base := map[string]pawl.Metric{"b": {Direction: "", Value: 5}}
 		pr := map[string]pawl.Metric{"b": {Direction: "", Value: 7}}
 		violations, _ := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, []string{"b: 5 → 7"})
+		wantViolations(t, violations, []string{"b: 5 → 7"})
 	})
 
 	t.Run("recorded tolerance is honored", func(t *testing.T) {
 		base := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 5, Tolerance: f64(2)}}
 		within := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 7, Tolerance: f64(2)}}
 		violations, _ := pawl.BaselineGuardViolations(base, within)
-		wantLines(t, violations, nil)
+		wantViolations(t, violations, nil)
 
 		beyond := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 8, Tolerance: f64(2)}}
 		violations2, _ := pawl.BaselineGuardViolations(base, beyond)
-		wantLines(t, violations2, []string{"c: 5 → 8"})
+		wantViolations(t, violations2, []string{"c: 5 → 8"})
 	})
 
 	t.Run("higher-is-better honors its own direction", func(t *testing.T) {
 		base := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 10}}
 		worse := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 8}}
 		violations, _ := pawl.BaselineGuardViolations(base, worse)
-		wantLines(t, violations, []string{"h: 10 → 8"})
+		wantViolations(t, violations, []string{"h: 10 → 8"})
 
 		better := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 12}}
 		violations2, _ := pawl.BaselineGuardViolations(base, better)
-		wantLines(t, violations2, nil)
+		wantViolations(t, violations2, nil)
 	})
 
 	t.Run("a metric missing from pr is removed, not a violation", func(t *testing.T) {
 		base := map[string]pawl.Metric{"d": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{}
 		violations, removed := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, nil)
+		wantViolations(t, violations, nil)
 		wantLines(t, removed, []string{"d"})
 	})
 
@@ -76,7 +76,7 @@ func TestBaselineGuardViolations(t *testing.T) {
 		base := map[string]pawl.Metric{}
 		pr := map[string]pawl.Metric{"e": {Direction: pawl.LowerIsBetter, Value: 100}}
 		violations, removed := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, nil)
+		wantViolations(t, violations, nil)
 		wantLines(t, removed, nil)
 	})
 
@@ -92,7 +92,7 @@ func TestBaselineGuardViolations(t *testing.T) {
 			"a": {Direction: pawl.LowerIsBetter, Value: 20},
 		}
 		violations, removed := pawl.BaselineGuardViolations(base, pr)
-		wantLines(t, violations, []string{"a: 10 → 20", "z: 10 → 20"})
+		wantViolations(t, violations, []string{"a: 10 → 20", "z: 10 → 20"})
 		wantLines(t, removed, []string{"b", "y"})
 	})
 }
@@ -107,4 +107,15 @@ func wantLines(t *testing.T, got, want []string) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("lines = %#v, want %#v", got, want)
 	}
+}
+
+// wantViolations compares GuardViolation.String() against the pinned
+// "<id>: <base> → <current>" lines the rest of this file already expects.
+func wantViolations(t *testing.T, got []pawl.GuardViolation, want []string) {
+	t.Helper()
+	lines := make([]string, 0, len(got))
+	for _, v := range got {
+		lines = append(lines, v.String())
+	}
+	wantLines(t, lines, want)
 }

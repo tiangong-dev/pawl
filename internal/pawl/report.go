@@ -12,12 +12,38 @@ import (
 // improvement, or a `--since` suppression, which are pawl's own semantics.
 // See SPEC.md § Machine-readable output.
 type Report struct {
-	SchemaVersion int            `json:"schema_version"`
-	Command       string         `json:"command"`
-	Mode          string         `json:"mode"`
-	Since         *string        `json:"since"`
-	ExitCode      int            `json:"exit_code"`
-	Metrics       []MetricReport `json:"metrics"`
+	SchemaVersion int                  `json:"schema_version"`
+	Command       string               `json:"command"`
+	Mode          string               `json:"mode"`
+	Since         *string              `json:"since"`
+	DryRun        bool                 `json:"dry_run,omitempty"`
+	AcceptedWorse []AcceptedWorseEntry `json:"accepted_worse,omitempty"`
+	ExitCode      int                  `json:"exit_code"`
+	Metrics       []MetricReport       `json:"metrics"`
+}
+
+// AcceptedWorseEntry is one dimension record wrote (or, under --dry-run,
+// would write) worse than the committed baseline — the machine-readable twin
+// of the `Pawl-Accept: <id> <value>` trailer hint text mode prints, so a
+// `--format json`/`--format codeclimate` caller can build the same commit
+// trailer without re-deriving it from Metrics/status.
+type AcceptedWorseEntry struct {
+	ID    string  `json:"id"`
+	Value float64 `json:"value"`
+}
+
+// acceptedWorseEntries converts the write gate's WorseDimension list (in the
+// order accepted, i.e. only ever populated when --accept-worse or --dry-run
+// let the write proceed) into the Report-facing shape.
+func acceptedWorseEntries(worse []WorseDimension) []AcceptedWorseEntry {
+	if len(worse) == 0 {
+		return nil
+	}
+	out := make([]AcceptedWorseEntry, 0, len(worse))
+	for _, w := range worse {
+		out = append(out, AcceptedWorseEntry{ID: w.ID, Value: w.Current})
+	}
+	return out
 }
 
 // MetricReport is one dimension's verdict. Base is nil for a new dimension
@@ -95,13 +121,17 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 // buildPartialRecordReport distinguishes observations made by this invocation
 // from values copied out of the old snapshot. A preserved value is written to
 // SnapshotValue while Current is null: it was recorded, but it was not current
-// evidence.
-func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric) *Report {
+// evidence. wroteToDisk must be false for a refused or --dry-run invocation —
+// a measured dimension's SnapshotValue means "what is now on disk", which is
+// only true once the write actually happened; a preserved dimension's
+// SnapshotValue is the committed value either way, since a preserved metric
+// is by definition identical to what's already on disk.
+func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, wroteToDisk bool) *Report {
 	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full"}
 	dims := append([]Dimension(nil), cfg.Dimensions...)
 	sort.Slice(dims, func(i, j int) bool { return dims[i].ID < dims[j].ID })
 	for _, dim := range dims {
-		written, ok := merged[dim.ID]
+		mergedValue, ok := merged[dim.ID]
 		if !ok {
 			continue
 		}
@@ -114,7 +144,7 @@ func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged 
 			Title:       dim.Title,
 			Direction:   dim.Direction,
 			Gate:        gate,
-			Unit:        written.Unit,
+			Unit:        mergedValue.Unit,
 			Regressions: []Regression{},
 		}
 		baseMetric, hadBase := baseline.Metrics[dim.ID]
@@ -123,12 +153,14 @@ func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged 
 		}
 		if cur, wasMeasured := measured[dim.ID]; wasMeasured {
 			m.Current = floatPtr(cur.Value)
-			m.SnapshotValue = floatPtr(cur.Value)
+			if wroteToDisk {
+				m.SnapshotValue = floatPtr(cur.Value)
+			}
 			m.MeasurementState = "measured"
 			m.Status = statusName(dim.Direction, m.Base, cur.Value, dim.GateSpecOf().Tolerance)
 			m.Improved = hadBase && Better(dim.Direction, baseMetric.Value, cur.Value)
 		} else {
-			m.SnapshotValue = floatPtr(written.Value)
+			m.SnapshotValue = floatPtr(mergedValue.Value)
 			m.MeasurementState = "preserved"
 			m.Status = "preserved"
 		}

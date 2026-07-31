@@ -143,13 +143,16 @@ the gate, any reporter consumes the JSON. `--format codeclimate` emits a
 ([clean-as-you-code](#diff-scoped-checking)). `record --only <id>[,<id>…]`
 re-records just those dimensions and preserves the rest of the committed
 baseline, so a win on one metric locks in without re-blessing the others.
+`record` refuses to write a dimension worse than the committed baseline
+unless you pass `--accept-worse`; `--dry-run` previews what a record would
+write without writing it ([accepted debt](#accepting-debt---accept-worse---dry-run)).
 
 ### Exit codes
 
 | code | meaning |
 |------|---------|
 | **0** | pass (also `diff` with regressions, and legitimate `baseline-guard` skips) |
-| **1** | `check`: a dimension regressed · `baseline-guard`: the snapshot regressed vs `<ref>` |
+| **1** | `check`: a dimension regressed · `baseline-guard`: the snapshot regressed vs `<ref>` (and isn't covered by an accepted-debt trailer) · `record`: refused a worse value without `--accept-worse` |
 | **2** | cannot measure/compare honestly: bad config, missing/malformed snapshot, tool crash, timeout, unknown command, … |
 
 The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
@@ -329,6 +332,41 @@ Preserved rows show `current —` / `preserved`; JSON uses
 `measurement_state:"preserved"`, `current:null`, and `snapshot_value`. A partial
 record cannot emit Code Climate because that format has no way to distinguish a
 preserved finding from current evidence.
+
+## Accepting debt (`--accept-worse`, `--dry-run`)
+
+`record` (with or without `--only`) refuses to write a dimension worse than the
+committed baseline — a full record must not silently bless a regression in a
+dimension nobody was looking at:
+
+```console
+$ pawl record
+❌ record refused — 1 dimension(s) would be recorded worse than the committed baseline:
+  • complexity  12 → 15
+re-run with --accept-worse to record this as accepted debt, or fix the regression first.
+```
+
+`--accept-worse` writes it anyway and prints the trailer to add to your commit
+message, so `baseline-guard` can tell the regression was deliberate rather than
+hand-edited:
+
+```console
+$ pawl record --accept-worse
+📸 snapshot written to pawl.snapshot.json
+⚠️  recorded worse — add these trailers to the commit that includes the snapshot:
+    Pawl-Accept: complexity 15
+baseline-guard treats a worsened metric without a matching trailer as unauthorized.
+```
+
+`baseline-guard <ref>` reads `Pawl-Accept: <id> <value>` trailers from every
+commit in `<ref>..HEAD`; a regression whose current value is no worse than the
+declared one is printed as an accepted notice instead of a violation. The
+trailer lives in git history, not in the snapshot file, so the anti-tamper
+comparison itself is unchanged.
+
+`--dry-run` previews the table (and, combined with `--accept-worse`, the
+trailer lines) without writing anything; its exit code matches what a real
+record would do.
 
 ## Watching the trend (`pawl trend`)
 
