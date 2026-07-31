@@ -40,13 +40,15 @@ Global flags:
 
 Command flags:
   record --only <ids>     re-record only comma-separated dimensions
+  record --dry-run        preview what record would write, without writing
+  record --accept-worse   record a dimension even if it comes back worse
   check --since <ref>     scope located findings to added lines
   trend --limit <n>       limit history entries`)
 		return
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
-		"record":         "pawl record [--only <id>[,<id>…]] [--format text|json|codeclimate]",
+		"record":         "pawl record [--only <id>[,<id>…]] [--dry-run] [--accept-worse] [--format text|json|codeclimate]",
 		"check":          "pawl check [--since <ref>] [--format text|json|codeclimate]",
 		"diff":           "pawl diff [--format text|json|codeclimate]",
 		"baseline-guard": "pawl baseline-guard [<ref>]",

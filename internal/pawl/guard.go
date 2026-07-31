@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -97,16 +98,112 @@ func runBaselineGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	var accepted, remaining []GuardViolation
 	if len(violations) > 0 {
-		fmt.Fprintf(stdout, "baseline-guard: snapshot regressed against %s:\n", ref)
+		trailers, err := acceptedTrailers(cfg.Dir, ref)
+		if err != nil {
+			fmt.Fprintf(stderr, "baseline-guard: could not read commit trailers between %s and HEAD: %v\n", ref, err)
+			return 2
+		}
 		for _, v := range violations {
+			if declared, ok := trailers[v.ID]; ok && trailerAccepts(v, declared) {
+				accepted = append(accepted, v)
+			} else {
+				remaining = append(remaining, v)
+			}
+		}
+	}
+
+	if len(accepted) > 0 {
+		lines := make([]string, 0, len(accepted))
+		for _, v := range accepted {
+			lines = append(lines, v.String())
+		}
+		message := fmt.Sprintf("baseline-guard: %d accepted regression(s) (Pawl-Accept trailer found): %s",
+			len(accepted), strings.Join(lines, "; "))
+		if onCI() {
+			// The whole message goes in the notice (not just the header) — a
+			// GitHub annotation is one line, and the bulleted detail below is
+			// only visible in the raw log, not the PR-level annotation.
+			fmt.Fprintf(stdout, "::notice::%s\n", message)
+		} else {
+			fmt.Fprintln(stdout, message)
+		}
+		for _, v := range accepted {
+			fmt.Fprintf(stdout, "  • %s\n", v)
+		}
+	}
+
+	if len(remaining) > 0 {
+		fmt.Fprintf(stdout, "baseline-guard: snapshot regressed against %s:\n", ref)
+		for _, v := range remaining {
 			fmt.Fprintf(stdout, "  • %s\n", v)
 		}
 		return 1
 	}
 
+	if len(accepted) > 0 {
+		// Not "consistent" — it isn't, some metric(s) regressed; they were
+		// just explicitly authorized. Saying so avoids printing an accepted
+		// regression immediately followed by a claim that nothing changed.
+		fmt.Fprintf(stdout, "baseline-guard: no unauthorized regression against %s.\n", ref)
+		return 0
+	}
+
 	fmt.Fprintf(stdout, "baseline-guard: snapshot is consistent with %s.\n", ref)
 	return 0
+}
+
+// acceptedTrailers scans the commits in ref..HEAD for `Pawl-Accept: <id>
+// <value>` trailer lines and groups the declared values by dimension id. A
+// line that doesn't parse (no numeric value) is skipped rather than treated
+// as an error — a malformed trailer must fall back to "not accepted", never
+// silently disable the gate.
+func acceptedTrailers(dir, ref string) (map[string][]float64, error) {
+	out, code, gitErr := gitOutput(dir, "log", "--format=%B%x00", ref+"..HEAD")
+	if code != 0 {
+		return nil, fmt.Errorf("git log %s..HEAD: %s", ref, gitErr)
+	}
+	declared := map[string][]float64{}
+	for _, msg := range strings.Split(out, "\x00") {
+		for _, line := range strings.Split(msg, "\n") {
+			rest, ok := strings.CutPrefix(strings.TrimSpace(line), "Pawl-Accept:")
+			if !ok {
+				continue
+			}
+			rest = strings.TrimSpace(rest)
+			sep := strings.LastIndex(rest, " ")
+			if sep < 0 {
+				continue
+			}
+			id := strings.TrimSpace(rest[:sep])
+			value, err := strconv.ParseFloat(strings.TrimSpace(rest[sep+1:]), 64)
+			if id == "" || err != nil {
+				continue
+			}
+			declared[id] = append(declared[id], value)
+		}
+	}
+	return declared, nil
+}
+
+// trailerAccepts reports whether v's current value is no worse than the
+// worst value declared for it — the trailer author knowingly accepted debt up
+// to that point, and the current snapshot must not have moved past it.
+// Multiple trailers for the same id (accumulated across a branch's commits)
+// take the single most-permissive declared value. v.Tolerance is the
+// metric's own recorded slack (same as the rest of this file's honoring of
+// the committed baseline's tolerance), so the effective ceiling is the
+// declared value plus that tolerance, not the declared value exactly — a
+// trailer is a debt ceiling, not a promise of the precise recorded number.
+func trailerAccepts(v GuardViolation, declared []float64) bool {
+	worst := declared[0]
+	for _, d := range declared[1:] {
+		if Worse(v.Direction, worst, d, 0) {
+			worst = d
+		}
+	}
+	return !Worse(v.Direction, worst, v.Current, v.Tolerance)
 }
 
 // gitOutput runs one git command against dir and returns trimmed stdout, the

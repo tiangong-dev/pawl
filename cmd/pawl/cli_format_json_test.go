@@ -12,12 +12,19 @@ import (
 // (a new dimension's base, a total regression's key/path/line) from a zero
 // value. Shared by the --format json and --since json tests.
 type jsonReport struct {
-	SchemaVersion int          `json:"schema_version"`
-	Command       string       `json:"command"`
-	Mode          string       `json:"mode"`
-	Since         *string      `json:"since"`
-	ExitCode      int          `json:"exit_code"`
-	Metrics       []jsonMetric `json:"metrics"`
+	SchemaVersion int                 `json:"schema_version"`
+	Command       string              `json:"command"`
+	Mode          string              `json:"mode"`
+	Since         *string             `json:"since"`
+	DryRun        bool                `json:"dry_run"`
+	AcceptedWorse []jsonAcceptedWorse `json:"accepted_worse"`
+	ExitCode      int                 `json:"exit_code"`
+	Metrics       []jsonMetric        `json:"metrics"`
+}
+
+type jsonAcceptedWorse struct {
+	ID    string  `json:"id"`
+	Value float64 `json:"value"`
 }
 
 type jsonMetric struct {

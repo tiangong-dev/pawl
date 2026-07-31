@@ -28,6 +28,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	limitSet := false
 	only := ""
 	onlyProvided := false
+	dryRun := false
+	acceptWorse := false
 	versionRequested := false
 	helpRequested := false
 	var positional []string
@@ -61,6 +63,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			i++
 			only = args[i]
 			onlyProvided = true
+		case args[i] == "--dry-run":
+			dryRun = true
+		case args[i] == "--accept-worse":
+			acceptWorse = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -134,6 +140,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// rather than a silent version print.
 	if onlyProvided && command != "record" {
 		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+		return 2
+	}
+	if dryRun && command != "record" {
+		fmt.Fprintf(stderr, "--dry-run is only valid on `record`, not %q\n", command)
+		return 2
+	}
+	if acceptWorse && command != "record" {
+		fmt.Fprintf(stderr, "--accept-worse is only valid on `record`, not %q\n", command)
 		return 2
 	}
 	if since != "" && command != "check" {
@@ -215,12 +229,12 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
 			return 2
 		}
-		return runRecordOnly(cfg, ids, format, stdout, stderr)
+		return runRecordOnly(cfg, ids, format, dryRun, acceptWorse, stdout, stderr)
 	}
-	return runMeasureCommand(cfg, command, format, since, stdout, stderr)
+	return runMeasureCommand(cfg, command, format, since, dryRun, acceptWorse, stdout, stderr)
 }
 
-func runMeasureCommand(cfg *Config, command, format, since string, stdout, stderr io.Writer) int {
+func runMeasureCommand(cfg *Config, command, format, since string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
 	baseline, parsedBaseline, err := ReadSnapshotFile(cfg.SnapshotPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -256,7 +270,7 @@ func runMeasureCommand(cfg *Config, command, format, since string, stdout, stder
 	}
 
 	if command == "record" {
-		return finishRecord(cfg, format, baseline, current, stdout, stderr)
+		return finishRecord(cfg, format, baseline, current, dryRun, acceptWorse, stdout, stderr)
 	}
 
 	// check / diff. The report is the machine-readable and diff-scoped source of
@@ -297,36 +311,6 @@ func runMeasureCommand(cfg *Config, command, format, since string, stdout, stder
 		return exit
 	}
 	return renderCheckTextLegacy(cfg, command, baseline, current, stdout)
-}
-
-// finishRecord writes the snapshot, then prints either the human table + 📸 line
-// or, under --format json, the verdict object. The snapshot write happens BEFORE
-// any stdout so a write failure exits 2 without having already emitted an
-// `exit_code: 0` verdict it can't take back.
-func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[string]Metric, stdout, stderr io.Writer) int {
-	if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-	if format == "json" {
-		rep := buildReport("record", cfg, baseline, current)
-		rep.ExitCode = 0
-		if err := renderReportJSON(stdout, rep); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		return 0
-	}
-	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, cfg, current); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		return 0
-	}
-	printTable(stdout, cfg, baseline, current, nil)
-	fmt.Fprintf(stdout, "📸 snapshot written to %s\n", displayPath(cfg.SnapshotPath))
-	return 0
 }
 
 // renderCheckTextLegacy is the byte-for-byte human default output for

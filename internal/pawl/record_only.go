@@ -21,9 +21,13 @@ func parseOnly(s string) []string {
 // runRecordOnly re-measures only the named dimensions and writes a snapshot
 // that preserves every other configured metric's committed value — the surgical
 // counterpart to a full record, so a win on one dimension can be locked in
-// without re-blessing (or accidentally blessing a regression in) the rest.
-// See SPEC.md § Partial record.
-func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.Writer) int {
+// without re-blessing (or accidentally blessing a regression in) the rest. A
+// listed dimension that comes back worse than the committed baseline is
+// refused (exit 1, nothing written) unless dryRun or acceptWorse says
+// otherwise — the same accepted-debt gate a full record applies, scoped to
+// just the dimensions this invocation actually measured. See SPEC.md §
+// Partial record and § Accepted debt.
+func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
 	byID := map[string]bool{}
 	for _, d := range cfg.Dimensions {
 		byID[d.ID] = true
@@ -91,11 +95,6 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		}
 	}
 
-	if err := WriteSnapshotFile(cfg.SnapshotPath, merged); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
-
 	// Render only the metrics actually in the written snapshot. A configured
 	// dimension that is neither listed nor preserved is intentionally absent, and
 	// bare `current[id]` indexing in the renderers would otherwise invent a
@@ -108,8 +107,24 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 		}
 	}
 
+	// Only the listed (freshly measured) dimensions can possibly be worse — a
+	// preserved value is copied verbatim from the baseline and can never regress.
+	worse := WorseDimensions(sub.Dimensions, baseline.Metrics, measured)
+	if len(worse) > 0 && !acceptWorse {
+		return refuseRecordOnly(&shownCfg, format, baseline, measured, merged, worse, dryRun, stdout, stderr)
+	}
+	if dryRun {
+		return previewRecordOnly(&shownCfg, format, baseline, measured, merged, only, preserved, worse, stdout, stderr)
+	}
+
+	if err := WriteSnapshotFile(cfg.SnapshotPath, merged); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+
 	if format == "json" {
-		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged)
+		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged, true)
+		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -122,6 +137,58 @@ func runRecordOnly(cfg *Config, only []string, format string, stdout, stderr io.
 	sort.Strings(recorded)
 	fmt.Fprintf(stdout, "📸 re-recorded %s; preserved %d other metric(s) → %s\n",
 		strings.Join(recorded, ", "), preserved, displayPath(cfg.SnapshotPath))
+	printAcceptedWorseTrailers(stdout, worse)
+	return 0
+}
+
+// refuseRecordOnly is runRecordOnly's default path when worse is non-empty
+// and --accept-worse was not given: nothing is written, exit 1, regardless of
+// dryRun — see refuseRecord's comment for why dryRun still matters for the
+// JSON dry_run field even on a refusal.
+func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
+	if format == "json" {
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, false)
+		rep.DryRun = dryRun
+		rep.ExitCode = 1
+		if err := renderReportJSON(stdout, rep); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		return 1
+	}
+	printPartialRecordTable(stdout, shownCfg, baseline, measured, merged)
+	fmt.Fprintf(stdout, "❌ record --only refused — %d dimension(s) would be recorded worse than the committed baseline:\n", len(worse))
+	printWorseDetail(stdout, shownCfg.Dimensions, baseline.Metrics, measured)
+	fmt.Fprintln(stdout, "re-run with --accept-worse to record this as accepted debt, or fix the regression first.")
+	return 1
+}
+
+// previewRecordOnly is runRecordOnly's --dry-run path, reached only once the
+// write would not be refused: same rendering as a real record --only,
+// nothing written, exit 0.
+func previewRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, only []string, preserved int, worse []WorseDimension, stdout, stderr io.Writer) int {
+	if format == "json" {
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, false)
+		rep.DryRun = true
+		rep.AcceptedWorse = acceptedWorseEntries(worse)
+		rep.ExitCode = 0
+		if err := renderReportJSON(stdout, rep); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		return 0
+	}
+	printPartialRecordTable(stdout, shownCfg, baseline, measured, merged)
+	recorded := append([]string(nil), only...)
+	sort.Strings(recorded)
+	fmt.Fprintf(stdout, "🔍 dry run — nothing written. record --only would re-record %s; preserve %d other metric(s).\n",
+		strings.Join(recorded, ", "), preserved)
+	if len(worse) > 0 {
+		fmt.Fprintln(stdout, "⚠️  this would record the following as accepted debt (--accept-worse):")
+		for _, w := range worse {
+			fmt.Fprintf(stdout, "    Pawl-Accept: %s %s\n", w.ID, FormatNumber(w.Current))
+		}
+	}
 	return 0
 }
 

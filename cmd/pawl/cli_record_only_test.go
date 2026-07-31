@@ -61,7 +61,7 @@ func TestRecordOnlyMultipleIDs(t *testing.T) {
 		dimDef{id: "c", direction: "lower-is-better", command: `echo '{"value": 33}'`},
 	))
 
-	res := runPawl(t, dir, baseEnv(), "record", "--only", "a,b")
+	res := runPawl(t, dir, baseEnv(), "record", "--only", "a,b", "--accept-worse") // a and b both regress here; that is incidental to this test
 	if res.exit != 0 {
 		t.Fatalf("record --only a,b exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -238,7 +238,7 @@ func TestRecordOnlyDropsOrphanedMetric(t *testing.T) {
 		dimDef{id: "c", direction: "lower-is-better", command: `echo '{"value": 3}'`},
 	))
 
-	res := runPawl(t, dir, baseEnv(), "record", "--only", "a")
+	res := runPawl(t, dir, baseEnv(), "record", "--only", "a", "--accept-worse") // a regresses here; that is incidental to this test
 	if res.exit != 0 {
 		t.Fatalf("record --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -270,7 +270,7 @@ func TestRecordOnlyLeavesUnlistedNewDimensionAbsent(t *testing.T) {
 		dimDef{id: "b", direction: "lower-is-better", command: `echo '{"value": 5}'`},
 	))
 
-	res := runPawl(t, dir, baseEnv(), "record", "--only", "a")
+	res := runPawl(t, dir, baseEnv(), "record", "--only", "a", "--accept-worse") // a regresses here; that is incidental to this test
 	if res.exit != 0 {
 		t.Fatalf("record --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -406,7 +406,7 @@ func TestRecordOnlyTextFooterNamesRecordedIDsAndPreservedCount(t *testing.T) {
 		dimDef{id: "d", direction: "lower-is-better", command: `echo '{"value": 80}'`},
 	))
 
-	res := runPawl(t, dir, baseEnv(), "record", "--only", "a")
+	res := runPawl(t, dir, baseEnv(), "record", "--only", "a", "--accept-worse") // a regresses here; that is incidental to this test
 	if res.exit != 0 {
 		t.Fatalf("record --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
