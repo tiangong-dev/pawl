@@ -125,7 +125,7 @@ jobs:
             header="## Recent commits"
           fi
           [[ -z "$notes" ]] && notes="_No new commits._"
-          printf '%s — \`npm i -D @pawl-tools/cli@%s\`\n\n%s\n\n%s\n' \
+          printf '%s — `npm i -D @pawl-tools/cli@%s`\n\n%s\n\n%s\n' \
             "$header" "$VERSION" "Prebuilt binaries are attached below." "$notes" > /tmp/notes.md
 
           gh release create "$tag" --title "$tag" --notes-file /tmp/notes.md archives/*
