@@ -63,7 +63,7 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 - `--dry-run` previews what `record` (with or without `--only`) would write —
   same table, nothing written — and `--accept-worse` explicitly authorizes
   writing a dimension worse than the committed baseline. Both are valid only on
-  `record`; specified in [§ Accepted debt](#accepted-debt). On any other
+  `record`; specified in [§ Accepted debt](#accepted-debt---dry-run---accept-worse). On any other
   command either is a usage error (exit 2).
 - `--format <text|json|codeclimate>` selects the output format of
   `record`/`check`/`diff`; default `text`. `json` is specified in
@@ -801,7 +801,7 @@ Then:
 - A metric that worsened (per its recorded `direction`, default
   `lower-is-better` if missing; slack = its recorded `tolerance`) is a
   violation **unless** a `Pawl-Accept` trailer in `<ref>..HEAD` covers it (see
-  [§ Accepted debt](#accepted-debt)), in which case it is printed as an
+  [§ Accepted debt](#accepted-debt---dry-run---accept-worse)), in which case it is printed as an
   accepted-regression notice instead. Any remaining violation → line
   `<id>: <base> → <cur>`, exit 1.
 - Otherwise: consistency message, exit 0.
@@ -837,7 +837,7 @@ file-length          3          4      +1  ❌ worse
   `::error title=pawl: <id>::<title> regressed: <base> → <cur>`. Annotations are
   additive — the human-readable `❌ regressions:` block always prints too.
 - `record` prints the table, then either writes the snapshot and prints
-  `📸 snapshot written to <path>`, or — per [§ Accepted debt](#accepted-debt) —
+  `📸 snapshot written to <path>`, or — per [§ Accepted debt](#accepted-debt---dry-run---accept-worse) —
   refuses with a `❌ record refused` block (nothing written), or, under
   `--dry-run`, previews with a `🔍 dry run` line (nothing written either way).
 
@@ -900,7 +900,7 @@ when nothing was accepted as worse.
   when `mode` is `since`, else `null`), `dry_run` (bool, present only when
   `true` — `record --dry-run`), `accepted_worse` (array, present only when
   non-empty — `record --accept-worse`; see [§ Accepted
-  debt](#accepted-debt)), `exit_code` (the process exit code), and
+  debt](#accepted-debt---dry-run---accept-worse)), `exit_code` (the process exit code), and
   `metrics` — an array **sorted by `id`**.
 - Each metric: `id`, `title`, `direction`, `gate` (`total` when unset), `unit`,
   `base` (the baseline value, `null` when the dimension is new), `current` (the

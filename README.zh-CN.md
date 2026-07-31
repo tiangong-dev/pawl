@@ -103,14 +103,14 @@ pawl check
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
-**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。`record --only <id>[,<id>…]` 只重录这些维度、保留其余已提交基线原样——把某个指标的改进单独锁定,不牵动别的维度。
+**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。`record --only <id>[,<id>…]` 只重录这些维度、保留其余已提交基线原样——把某个指标的改进单独锁定,不牵动别的维度。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
 
 ### 退出码
 
 | 码 | 含义 |
 |------|---------|
 | **0** | 通过(也包括带回归的 `diff`、以及 `baseline-guard` 的合理跳过) |
-| **1** | `check`:某维度回归 · `baseline-guard`:快照相对 `<ref>` 变差 |
+| **1** | `check`:某维度回归 · `baseline-guard`:快照相对 `<ref>` 变差(且未被 accepted-debt trailer 覆盖) · `record`:未传 `--accept-worse` 时拒绝写入更差的值 |
 | **2** | 无法诚实测量/对比:配置错误、快照缺失/损坏、工具崩溃、超时、未知命令…… |
 
 **1 与 2 的区分是承重的**:`1` 表示"测量正常,代码变差了";`2` 表示"没能诚实测量",绝不能被当成通过。
@@ -253,6 +253,31 @@ $ pawl record --only line-coverage
 保留行会显示 `current —` / `preserved`；JSON 使用
 `measurement_state:"preserved"`、`current:null` 和 `snapshot_value`。部分
 record 不能输出 Code Climate，因为该格式无法区分旧快照值与当前测量。
+
+## 接受技术债(`--accept-worse`、`--dry-run`)
+
+`record`(无论带不带 `--only`)默认拒绝把某个维度写成比已提交基线更差的值——一次全量 record 不该在没人盯着的维度上,悄悄放行一次回归:
+
+```console
+$ pawl record
+❌ record refused — 1 dimension(s) would be recorded worse than the committed baseline:
+  • complexity  12 → 15
+re-run with --accept-worse to record this as accepted debt, or fix the regression first.
+```
+
+`--accept-worse` 会照样写入,并打印一行 trailer(提交信息末尾的 `Key: value` 元数据)供你贴进提交信息,好让 `baseline-guard` 分辨这次回归是故意接受的,而不是手改基线:
+
+```console
+$ pawl record --accept-worse
+📸 snapshot written to pawl.snapshot.json
+⚠️  recorded worse — add these trailers to the commit that includes the snapshot:
+    Pawl-Accept: complexity 15
+baseline-guard treats a worsened metric without a matching trailer as unauthorized.
+```
+
+`baseline-guard <ref>` 会读取 `<ref>..HEAD` 之间每个提交里的 `Pawl-Accept: <id> <value>` trailer;只要某个回归维度的当前值不比 trailer 里声明的值更差,就把它打印成"已接受"提示而非违规。trailer 存在 git 历史里,不进快照文件,防篡改对比本身(基线 vs 当前)因此完全不受影响。
+
+`--dry-run` 只预览表格(叠加 `--accept-worse` 时还会预览 trailer 那几行)、不写入任何东西;它的退出码和一次真实 record 会给出的一致。
 
 ## 看质量走势(`pawl trend`)
 
