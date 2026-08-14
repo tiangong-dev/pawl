@@ -144,8 +144,29 @@ when nothing was accepted as worse.
   (`new`/`worse`/`within-tolerance`/`better`/`same`/`preserved`,
   the emoji-free form of the table status), `improved` (bool — scalar strictly
   improved), `next_action` (on `check`/`diff` only, and only when `improved` is
-  true: the exact command `pawl record --only <id>`; omitted otherwise), and
-  `regressions` (array, empty when none).
+  true: the exact command `pawl record --only <id>`; omitted otherwise),
+  `regressions` (array, empty when none), and optional `artifact`.
+- `artifact` (present only when the measurement read a file off disk) is
+  `{path, modified, age_seconds, generated}`: the path as configured (relative
+  to the config dir), the file's mtime as an RFC 3339 timestamp, its age in
+  whole seconds at measurement time, and whether this invocation's own
+  `command` produced it. It is provenance, never a gate: it cannot change
+  `exit_code`, and no age is an error.
+  A dimension configured with `file:` and no `command:` measures whatever is on
+  disk. A report written last week parses exactly like one written a second ago
+  and yields a number the verdict presents like any other — so the gate can be
+  measuring the past while reading as current. pawl cannot tell from the bytes
+  whether the artifact matches the working tree, so it reports what it does
+  know and leaves the judgment to the reader. When `generated` is true the file
+  is this run's own output and the age is ~0 by construction; the field is
+  still present so a consumer never has to know which builtins write their own
+  reports. `age_seconds` may be negative if the artifact carries a future mtime
+  (clock skew, an extracted archive) — the sign is preserved rather than
+  clamped, because the oddity is the signal. Artifact metadata is verdict-only:
+  it never enters the committed snapshot, which must move only when a measured
+  number moves.
+  Text mode prints the same fact to **stderr**, next to the `measuring <id>…`
+  progress lines and only when `generated` is false; stdout stays the table.
 - Each regression: `kind` (`total`/`per-file-count`/`per-key-value`), `key`
   (the breakdown key, `null` for a `total` regression), `path` and `line`
   (parsed from `key`; both `null` for `total`, `line` `null` when the key has no
@@ -157,6 +178,10 @@ when nothing was accepted as worse.
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are
   still listed (so the JSON is a faithful record) but do not affect `exit_code`.
+
+`artifact` is an additive optional field: it appears only where it has
+something to say, so a schema-2 consumer that ignores unknown keys is
+unaffected and the version does not move for it.
 
 Schema 2 is a report-only migration: the committed snapshot format is unchanged,
 so upgrading does not require re-recording. Consumers of schema 1 must accept the

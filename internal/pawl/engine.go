@@ -287,18 +287,18 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 		}
 	}
 
-	current, err := MeasureAll(measure, stderr)
+	current, artifacts, err := MeasureAll(measure, stderr)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
 
 	if command == "record" {
-		return finishRecord(full, format, baseline, current, dryRun, acceptWorse, stdout, stderr)
+		return finishRecord(full, format, baseline, current, artifacts, dryRun, acceptWorse, stdout, stderr)
 	}
 
 	// check / diff. The report is the machine-readable and diff-scoped source of
 	// truth; the legacy text path stays the byte-for-byte human default.
-	rep := buildReport(command, measure, baseline, current)
+	rep := buildReport(command, measure, baseline, current, artifacts)
 	rep.Only = onlyIDs
 	var scope *sinceScope
 	if since != "" {

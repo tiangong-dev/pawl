@@ -81,13 +81,17 @@ type MetricReport struct {
 	Improved         bool         `json:"improved"`
 	NextAction       string       `json:"next_action,omitempty"`
 	Regressions      []Regression `json:"regressions"`
-	EnforcedInFull   bool         `json:"-"`
+	// Artifact names the file this dimension's measurement read, when it read
+	// one — a `file:` dimension with no `command:` is only as fresh as whatever
+	// happens to be on disk, and the number alone cannot say so.
+	Artifact       *ArtifactInfo `json:"artifact,omitempty"`
+	EnforcedInFull bool          `json:"-"`
 }
 
 // buildReport assembles the full-mode verdict for a command from the baseline
 // and a fresh measurement. Metrics are sorted by id (a stable machine contract).
 // The gate defaults to "total" in the output when a dimension left it unset.
-func buildReport(command string, cfg *Config, baseline *Snapshot, current map[string]Metric) *Report {
+func buildReport(command string, cfg *Config, baseline *Snapshot, current map[string]Metric, artifacts map[string]*ArtifactInfo) *Report {
 	rep := &Report{SchemaVersion: 2, Command: command, Mode: "full"}
 	if baseline == nil {
 		baseline = &Snapshot{} // first record: no baseline to compare against.
@@ -113,6 +117,7 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 			Current:          floatPtr(cur.Value),
 			MeasurementState: "measured",
 			Regressions:      []Regression{},
+			Artifact:         artifacts[dim.ID],
 		}
 		if b, ok := baseline.Metrics[dim.ID]; ok {
 			base := b.Value
@@ -144,7 +149,7 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 // only true once the write actually happened; a preserved dimension's
 // SnapshotValue is the committed value either way, since a preserved metric
 // is by definition identical to what's already on disk.
-func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, only []string, wroteToDisk bool) *Report {
+func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, artifacts map[string]*ArtifactInfo, only []string, wroteToDisk bool) *Report {
 	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full", Only: only}
 	dims := append([]Dimension(nil), cfg.Dimensions...)
 	sort.Slice(dims, func(i, j int) bool { return dims[i].ID < dims[j].ID })
@@ -171,6 +176,9 @@ func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged 
 		}
 		if cur, wasMeasured := measured[dim.ID]; wasMeasured {
 			m.Current = floatPtr(cur.Value)
+			// Only a dimension this invocation measured can have read a file;
+			// a preserved value's provenance is the earlier run's, not ours.
+			m.Artifact = artifacts[dim.ID]
 			if wroteToDisk {
 				m.SnapshotValue = floatPtr(cur.Value)
 			}

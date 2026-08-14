@@ -26,6 +26,10 @@ type analyzerReport struct {
 	FilesScanned       int
 	RuleCatalog        map[string]bool
 	RuleCatalogPresent bool
+	// Artifact is the file the analyzer read, if it read one. One analyzer run
+	// feeds every dimension that sources it, so they all report the same
+	// provenance — which is accurate: they all read that one file.
+	Artifact *ArtifactInfo
 }
 
 type analyzerRun struct {
@@ -112,7 +116,7 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 		return validateAnalyzerReport(analyzer, report)
 	}
 
-	data, err := readNamedSarifReport(cfg, dim, analyzer.Options, stderr)
+	data, artifact, err := readNamedSarifReport(cfg, dim, analyzer.Options, stderr)
 	if err != nil {
 		return analyzerReport{}, err
 	}
@@ -120,6 +124,7 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 	if err != nil {
 		return analyzerReport{}, err
 	}
+	report.Artifact = artifact
 	if verify, _ := analyzer.Options["verify_rules"].(bool); verify {
 		if len(requiredRules) == 0 {
 			return analyzerReport{}, fmt.Errorf("verify_rules requires at least one referencing dimension with a rules selector")
@@ -140,7 +145,7 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 // declare valid_exit_codes when its producer distinguishes "findings found"
 // from fatal errors; unlike the legacy generic SARIF builtin, that lets Pawl
 // reject a parseable-but-fatal run without hard-coding one tool's conventions.
-func readNamedSarifReport(cfg *Config, dim Dimension, options map[string]any, stderr io.Writer) ([]byte, error) {
+func readNamedSarifReport(cfg *Config, dim Dimension, options map[string]any, stderr io.Writer) ([]byte, *ArtifactInfo, error) {
 	command, _ := options["command"].(string)
 	fileRel, _ := options["file"].(string)
 	validExitCodes, _ := strictExitCodeList(options["valid_exit_codes"])
@@ -158,22 +163,23 @@ func readNamedSarifReport(cfg *Config, dim Dimension, options map[string]any, st
 	}
 
 	if fileRel == "" {
-		return run()
+		data, err := run()
+		return data, nil, err
 	}
 	filePath := filepath.Join(cfg.Dir, fileRel)
 	if command != "" {
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-			return nil, fmt.Errorf("clearing stale %s: %v", fileRel, err)
+			return nil, nil, fmt.Errorf("clearing stale %s: %v", fileRel, err)
 		}
 		if _, err := run(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %v", fileRel, err)
+		return nil, nil, fmt.Errorf("reading %s: %v", fileRel, err)
 	}
-	return data, nil
+	return data, statArtifact(cfg, fileRel, command != ""), nil
 }
 
 func formatExitCodes(codes map[int]bool) string {
@@ -291,6 +297,7 @@ func reduceAnalyzerReport(cfg *Config, analyzer Analyzer, dim Dimension, report 
 	}
 	result := findings.result(unit)
 	result.Value = total
+	result.Artifact = report.Artifact
 	return result, nil
 }
 

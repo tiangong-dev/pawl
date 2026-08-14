@@ -28,6 +28,17 @@ to actually analyze/run — pin the tool and its invocation so that can't happen
 - `command` + `file` — the command produces the file (stale-artifact guard: any
   pre-existing `file` is deleted first).
 
+`file` alone has no stale-artifact guard, and cannot: pawl is being told to read
+a report someone else produces, so there is nothing to delete and re-run. The
+guard it can offer is disclosure — every measurement that reads a file reports
+the file's mtime and age in the verdict (`artifact`, specified in
+[§ Machine-readable output](../engine/verdict.md#machine-readable-output)), and
+in text mode on stderr. That is provenance only; no age changes an exit code,
+because a mtime is not evidence of staleness (a checkout, a `touch`, or a
+restored cache all rewrite it) and a gate that fails on false positives gets
+switched off. A pipeline that needs the guard should give the dimension the
+`command` that produces the report.
+
 ### `sarif`
 
 Counts results in a [SARIF](https://sarifweb.azurewebsites.net/) log — the

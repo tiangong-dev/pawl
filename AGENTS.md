@@ -19,6 +19,10 @@ until you know *why*.
 5. A verdict carrying a top-level `only` array measured just those dimensions —
    exit 0 there is not a green full gate. Report it as what it is, and do not
    pass it on as the gate's answer.
+6. A metric carrying `artifact` read that file off disk. `generated: false` with
+   a large `age_seconds` means the number describes that old report, not the
+   current tree — regenerate the artifact before you trust the value or record
+   it. The age never changes the exit code; judging it is your job.
 
 ## This repository
 

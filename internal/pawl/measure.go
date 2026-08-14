@@ -21,13 +21,20 @@ type MeasureResult struct {
 	Value     float64
 	Unit      string
 	Breakdown map[string]float64
+	// Artifact is the file this measurement read, when it read one. It is
+	// provenance for the verdict only — it is deliberately kept off Metric,
+	// which is the snapshot's value type and must move only when a number does.
+	Artifact *ArtifactInfo
 }
 
 // MeasureAll runs every dimension's measurement concurrently — one slow
 // adapter must not serialize the batch behind it. Progress lines go to
 // stderr as each measurement starts. Any single failure fails the whole
 // batch: "could not measure" must never degrade into a fabricated value.
-func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
+// The artifacts map carries, for each dimension that read a file, which file it
+// read and how old it was — provenance the verdict reports and the snapshot
+// does not.
+func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, map[string]*ArtifactInfo, error) {
 	type outcome struct {
 		id     string
 		result MeasureResult
@@ -48,6 +55,7 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 	wg.Wait()
 
 	metrics := map[string]Metric{}
+	artifacts := map[string]*ArtifactInfo{}
 	var failures []measureFailure
 	for i, o := range outcomes {
 		if o.err != nil {
@@ -93,11 +101,22 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 			Breakdown: o.result.Breakdown,
 			Tolerance: dim.Tolerance,
 		}
+		if o.result.Artifact != nil {
+			artifacts[o.id] = o.result.Artifact
+		}
 	}
 	if len(failures) > 0 {
-		return nil, &measureError{failures: failures}
+		return nil, nil, &measureError{failures: failures}
 	}
-	return metrics, nil
+	// Config order, after the concurrent phase, so the notes are deterministic
+	// and never interleave with a parallel adapter's own stderr.
+	for _, dim := range cfg.Dimensions {
+		if art := artifacts[dim.ID]; art != nil && !art.Generated {
+			fmt.Fprintf(stderr, "  %s read %s (%s old — nothing in this run produced it)\n",
+				dim.ID, art.Path, formatArtifactAge(art.AgeSeconds))
+		}
+	}
+	return metrics, artifacts, nil
 }
 
 type measureFailure struct {

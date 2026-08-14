@@ -97,7 +97,7 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 	// Measure only the listed dimensions — an unrelated broken adapter must not
 	// block locking in the win.
 	sub := configWithOnly(cfg, onlySet)
-	measured, err := MeasureAll(sub, stderr)
+	measured, artifacts, err := MeasureAll(sub, stderr)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
@@ -134,10 +134,10 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 	// preserved value is copied verbatim from the baseline and can never regress.
 	worse := WorseDimensions(sub.Dimensions, baseline.Metrics, measured)
 	if len(worse) > 0 && !acceptWorse {
-		return refuseRecordOnly(&shownCfg, format, baseline, measured, merged, only, worse, dryRun, stdout, stderr)
+		return refuseRecordOnly(&shownCfg, format, baseline, measured, merged, artifacts, only, worse, dryRun, stdout, stderr)
 	}
 	if dryRun {
-		return previewRecordOnly(&shownCfg, format, baseline, measured, merged, only, preserved, worse, stdout, stderr)
+		return previewRecordOnly(&shownCfg, format, baseline, measured, merged, artifacts, only, preserved, worse, stdout, stderr)
 	}
 
 	if err := WriteSnapshotFile(cfg.SnapshotPath, merged); err != nil {
@@ -146,7 +146,7 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 	}
 
 	if format == "json" {
-		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged, only, true)
+		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged, artifacts, only, true)
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -166,9 +166,9 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 // and --accept-worse was not given: nothing is written, exit 1, regardless of
 // dryRun — see refuseRecord's comment for why dryRun still matters for the
 // JSON dry_run field even on a refusal.
-func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, only []string, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
+func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, artifacts map[string]*ArtifactInfo, only []string, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, only, false)
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, artifacts, only, false)
 		rep.DryRun = dryRun
 		rep.ExitCode = 1
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -187,9 +187,9 @@ func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measu
 // previewRecordOnly is runRecordOnly's --dry-run path, reached only once the
 // write would not be refused: same rendering as a real record --only,
 // nothing written, exit 0.
-func previewRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, only []string, preserved int, worse []WorseDimension, stdout, stderr io.Writer) int {
+func previewRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, artifacts map[string]*ArtifactInfo, only []string, preserved int, worse []WorseDimension, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, only, false)
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, artifacts, only, false)
 		rep.DryRun = true
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
