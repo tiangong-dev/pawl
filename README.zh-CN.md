@@ -372,6 +372,7 @@ pawl 是门禁,不是分析器。闭环是一条命令:
 2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
 3. 指标 `status: better` 时跑该 metric 的 `next_action`(`pawl record --only <id>`),不要全量 `record`。
 4. Exit 1 / `failure_class: regression` → 改代码。Exit 2 / `could-not-measure` → 修环境(`error`、`failed_metrics`),不要伪造数字。CI:全量 `pawl check`(不要 `--only`)。
+5. 裁决里带顶层 `only` 数组时,本次只测了这些维度——它的 exit 0 不等于全量门禁通过。
 
 针对 AI 生成债务的现成配方见 [RECIPES.md](./RECIPES.md#ai-generated-debt)。
 

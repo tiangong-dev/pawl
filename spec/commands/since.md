@@ -14,7 +14,15 @@ scanner: it still requires the snapshot (missing snapshot → exit 2, like
 so staged and unstaged edits are included) unioned with every line of every
 untracked, non-ignored file from `git ls-files --others --exclude-standard --full-name`.
 The added (`+`) lines give `map[repo-relative path]set<new line number>`.
-Untracked files are treated as all-added. In CI the working tree matches HEAD,
+Untracked files are treated as all-added; an untracked entry that is not a
+readable **regular** file (a dangling symlink, a socket, a file whose
+permissions deny reading) is skipped, not an error — measurement skips
+non-regular files too, so no offender can hide behind one. The diff is run with
+`--src-prefix=a/ --dst-prefix=b/` and every git invocation with
+`-c core.quotePath=false`, so a developer's `diff.mnemonicPrefix`,
+`diff.noprefix`, `diff.srcPrefix`/`dstPrefix`, or a non-ASCII filename cannot
+rewrite the paths pawl parses (a path that fails to parse would empty the
+added-line set and silently exempt every new offender). In CI the working tree matches HEAD,
 so this is the same set as the committed range `<merge-base>..HEAD`. Locally it
 is what an agent that has not committed yet actually changed. Breakdown keys are
 config-dir-relative, git paths are repo-toplevel-relative, so keys are converted

@@ -224,12 +224,11 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return runBaselineGuard(cfg, ref, stdout, stderr)
 	}
 	if command == "record" && onlyProvided {
-		ids := parseOnly(only)
-		if len(ids) == 0 {
-			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
-			return 2
+		onlySet, onlyIDs, code := resolveOnlyIDs(cfg, only, "record", stderr)
+		if code != 0 {
+			return code
 		}
-		return runRecordOnly(cfg, ids, format, dryRun, acceptWorse, stdout, stderr)
+		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, stdout, stderr)
 	}
 	if command == "status" {
 		return runStatus(cfg, format, stdout, stderr)
@@ -241,8 +240,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return runRank(cfg, format, stdout, stderr)
 	}
 	measureCfg := cfg
+	var onlyIDs []string
 	if (command == "check" || command == "diff") && onlyProvided {
-		onlySet, code := resolveOnlyIDs(cfg, only, command, stderr)
+		onlySet, ids, code := resolveOnlyIDs(cfg, only, command, stderr)
 		if code != 0 {
 			return code
 		}
@@ -250,19 +250,21 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "%s --only cannot emit codeclimate: a partial measurement is not a complete current findings report\n", command)
 			return 2
 		}
+		onlyIDs = ids
 		measureCfg = configWithOnly(cfg, onlySet)
 	}
-	return runMeasureCommand(cfg, measureCfg, command, format, since, dryRun, acceptWorse, stdout, stderr)
+	return runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, stdout, stderr)
 }
 
-func runMeasureCommand(full, measure *Config, command, format, since string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+	runScope := reportScope{command: command, since: since, only: onlyIDs}
 	baseline, parsedBaseline, err := ReadSnapshotFile(full.SnapshotPath)
 	if err != nil {
-		return abortCouldNotMeasure(command, format, err.Error(), nil, stdout, stderr)
+		return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 	}
 	if command != "record" {
 		if baseline == nil {
-			return abortCouldNotMeasure(command, format,
+			return abortCouldNotMeasure(runScope, format,
 				fmt.Sprintf("no %s yet — run `pawl record` first.", full.SnapshotPath),
 				nil, stdout, stderr)
 		}
@@ -271,14 +273,14 @@ func runMeasureCommand(full, measure *Config, command, format, since string, dry
 			for _, e := range shapeErrors {
 				msg += "  • " + e + "\n"
 			}
-			return abortCouldNotMeasure(command, format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
+			return abortCouldNotMeasure(runScope, format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
 		}
 		ids := make([]string, 0, len(full.Dimensions))
 		for _, d := range full.Dimensions {
 			ids = append(ids, d.ID)
 		}
 		if orphans := OrphanedMetrics(ids, baseline.Metrics); len(orphans) > 0 {
-			return abortCouldNotMeasure(command, format,
+			return abortCouldNotMeasure(runScope, format,
 				fmt.Sprintf("orphaned metric(s) in %s — deleting a dimension must also drop it from the snapshot (re-run `pawl record`): %s",
 					full.SnapshotPath, strings.Join(orphans, ", ")),
 				nil, stdout, stderr)
@@ -287,7 +289,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, dry
 
 	current, err := MeasureAll(measure, stderr)
 	if err != nil {
-		return abortCouldNotMeasure(command, format, err.Error(), failedMetricIDs(err), stdout, stderr)
+		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
 
 	if command == "record" {
@@ -297,11 +299,12 @@ func runMeasureCommand(full, measure *Config, command, format, since string, dry
 	// check / diff. The report is the machine-readable and diff-scoped source of
 	// truth; the legacy text path stays the byte-for-byte human default.
 	rep := buildReport(command, measure, baseline, current)
+	rep.Only = onlyIDs
 	var scope *sinceScope
 	if since != "" {
 		s, err := applySinceScope(full, rep, baseline, current, since)
 		if err != nil {
-			return abortCouldNotMeasure(command, format, err.Error(), nil, stdout, stderr)
+			return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 		}
 		scope = s
 	}

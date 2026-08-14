@@ -19,12 +19,14 @@ func parseOnly(s string) []string {
 }
 
 // resolveOnlyIDs validates `--only` against the config. An empty list or an
-// unknown id is a usage error (exit 2) before anything is measured.
-func resolveOnlyIDs(cfg *Config, only, command string, stderr io.Writer) (map[string]bool, int) {
+// unknown id is a usage error (exit 2) before anything is measured. The
+// returned id slice is deduplicated and sorted — it is what the verdict
+// reports as its `only` scope, so it must not vary with argument order.
+func resolveOnlyIDs(cfg *Config, only, command string, stderr io.Writer) (map[string]bool, []string, int) {
 	ids := parseOnly(only)
 	if len(ids) == 0 {
 		fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
-		return nil, 2
+		return nil, nil, 2
 	}
 	byID := map[string]bool{}
 	for _, d := range cfg.Dimensions {
@@ -34,11 +36,16 @@ func resolveOnlyIDs(cfg *Config, only, command string, stderr io.Writer) (map[st
 	for _, id := range ids {
 		if !byID[id] {
 			fmt.Fprintf(stderr, "%s --only: no dimension %q in the config.\n", command, id)
-			return nil, 2
+			return nil, nil, 2
 		}
 		onlySet[id] = true
 	}
-	return onlySet, 0
+	sorted := make([]string, 0, len(onlySet))
+	for id := range onlySet {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	return onlySet, sorted, 0
 }
 
 func configWithOnly(cfg *Config, onlySet map[string]bool) *Config {
@@ -61,11 +68,8 @@ func configWithOnly(cfg *Config, onlySet map[string]bool) *Config {
 // otherwise — the same accepted-debt gate a full record applies, scoped to
 // just the dimensions this invocation actually measured. See
 // spec/commands/record.md § Partial record and § Accepted debt.
-func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
-	onlySet, code := resolveOnlyIDs(cfg, strings.Join(only, ","), "record", stderr)
-	if code != 0 {
-		return code
-	}
+func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+	runScope := reportScope{command: "record", only: only}
 	if format == "codeclimate" {
 		fmt.Fprintln(stderr, "record --only cannot emit codeclimate: a partial measurement is not a complete current findings report")
 		return 2
@@ -75,10 +79,10 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 	// rest" is meaningless without a baseline.
 	baseline, parsed, err := ReadSnapshotFile(cfg.SnapshotPath)
 	if err != nil {
-		return abortCouldNotMeasure("record", format, err.Error(), nil, stdout, stderr)
+		return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 	}
 	if baseline == nil {
-		return abortCouldNotMeasure("record", format,
+		return abortCouldNotMeasure(runScope, format,
 			fmt.Sprintf("record --only needs an existing %s to preserve — run a full `pawl record` first.", cfg.SnapshotPath),
 			nil, stdout, stderr)
 	}
@@ -87,7 +91,7 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 		for _, e := range shapeErrors {
 			msg += "  • " + e + "\n"
 		}
-		return abortCouldNotMeasure("record", format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
+		return abortCouldNotMeasure(runScope, format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
 	}
 
 	// Measure only the listed dimensions — an unrelated broken adapter must not
@@ -95,7 +99,7 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 	sub := configWithOnly(cfg, onlySet)
 	measured, err := MeasureAll(sub, stderr)
 	if err != nil {
-		return abortCouldNotMeasure("record", format, err.Error(), failedMetricIDs(err), stdout, stderr)
+		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
 
 	// Merge: freshly measured listed dims + preserved values for every other
@@ -130,7 +134,7 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 	// preserved value is copied verbatim from the baseline and can never regress.
 	worse := WorseDimensions(sub.Dimensions, baseline.Metrics, measured)
 	if len(worse) > 0 && !acceptWorse {
-		return refuseRecordOnly(&shownCfg, format, baseline, measured, merged, worse, dryRun, stdout, stderr)
+		return refuseRecordOnly(&shownCfg, format, baseline, measured, merged, only, worse, dryRun, stdout, stderr)
 	}
 	if dryRun {
 		return previewRecordOnly(&shownCfg, format, baseline, measured, merged, only, preserved, worse, stdout, stderr)
@@ -142,7 +146,7 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 	}
 
 	if format == "json" {
-		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged, true)
+		rep := buildPartialRecordReport(&shownCfg, baseline, measured, merged, only, true)
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -152,10 +156,8 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 		return 0
 	}
 	printPartialRecordTable(stdout, &shownCfg, baseline, measured, merged)
-	recorded := append([]string(nil), only...)
-	sort.Strings(recorded)
 	fmt.Fprintf(stdout, "📸 re-recorded %s; preserved %d other metric(s) → %s\n",
-		strings.Join(recorded, ", "), preserved, displayPath(cfg.SnapshotPath))
+		strings.Join(only, ", "), preserved, displayPath(cfg.SnapshotPath))
 	printAcceptedWorseTrailers(stdout, worse)
 	return 0
 }
@@ -164,9 +166,9 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 // and --accept-worse was not given: nothing is written, exit 1, regardless of
 // dryRun — see refuseRecord's comment for why dryRun still matters for the
 // JSON dry_run field even on a refusal.
-func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
+func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, only []string, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, false)
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, only, false)
 		rep.DryRun = dryRun
 		rep.ExitCode = 1
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -187,7 +189,7 @@ func refuseRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measu
 // nothing written, exit 0.
 func previewRecordOnly(shownCfg *Config, format string, baseline *Snapshot, measured, merged map[string]Metric, only []string, preserved int, worse []WorseDimension, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, false)
+		rep := buildPartialRecordReport(shownCfg, baseline, measured, merged, only, false)
 		rep.DryRun = true
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
@@ -198,10 +200,8 @@ func previewRecordOnly(shownCfg *Config, format string, baseline *Snapshot, meas
 		return 0
 	}
 	printPartialRecordTable(stdout, shownCfg, baseline, measured, merged)
-	recorded := append([]string(nil), only...)
-	sort.Strings(recorded)
 	fmt.Fprintf(stdout, "🔍 dry run — nothing written. record --only would re-record %s; preserve %d other metric(s).\n",
-		strings.Join(recorded, ", "), preserved)
+		strings.Join(only, ", "), preserved)
 	if len(worse) > 0 {
 		fmt.Fprintln(stdout, "⚠️  this would record the following as accepted debt (--accept-worse):")
 		for _, w := range worse {

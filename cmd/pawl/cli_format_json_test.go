@@ -16,6 +16,7 @@ type jsonReport struct {
 	Command       string              `json:"command"`
 	Mode          string              `json:"mode"`
 	Since         *string             `json:"since"`
+	Only          []string            `json:"only"`
 	DryRun        bool                `json:"dry_run"`
 	AcceptedWorse []jsonAcceptedWorse `json:"accepted_worse"`
 	ExitCode      int                 `json:"exit_code"`

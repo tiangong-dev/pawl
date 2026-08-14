@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -63,5 +65,36 @@ func TestSinceUntrackedFileOffenderFails(t *testing.T) {
 	}
 	if !strings.Contains(res.stdout, "b.go") {
 		t.Errorf("stdout should name the untracked file: %s", res.stdout)
+	}
+}
+
+// An untracked entry that is not a readable regular file — a dangling symlink,
+// a socket, a file whose permissions deny reading — must not decide whether the
+// gate can produce a verdict. Measurement skips non-regular files too, so an
+// offender can never hide behind one.
+func TestSinceSkipsUnreadableUntrackedEntry(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", patternCountSinceConfig())
+	writeFile(t, dir, "a.go", "package a\n// NOLINT keep\n")
+	runPawl(t, dir, gitEnv(homeDir), "record")
+	base := gitCommitAll(t, dir, homeDir, "base")
+
+	if err := os.Symlink(filepath.Join(dir, "no-such-target"), filepath.Join(dir, "dangling.link")); err != nil {
+		t.Skipf("cannot create a symlink here (%v) — this platform has no way to stage the case", err)
+	}
+
+	res := runPawl(t, dir, gitEnv(homeDir), "check", "--since", base)
+	if res.exit != 0 {
+		t.Fatalf("exit = %d, want 0 (a dangling untracked symlink is not a measurement failure)\nstdout=%s\nstderr=%s",
+			res.exit, res.stdout, res.stderr)
+	}
+
+	// …and skipping it must not cost the real untracked offender next to it.
+	writeFile(t, dir, "b.go", "package b\n// NOLINT new file\n")
+	res = runPawl(t, dir, gitEnv(homeDir), "check", "--since", base)
+	if res.exit != 1 {
+		t.Fatalf("exit = %d, want 1 (untracked offender beside the dangling symlink)\nstdout=%s\nstderr=%s",
+			res.exit, res.stdout, res.stderr)
 	}
 }

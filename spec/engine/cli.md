@@ -35,7 +35,10 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   committed snapshot, specified in [§ Partial record](../commands/record.md#partial-record---only).
   On `check` and `diff` it measures and compares only those dimensions (the
   inner loop: a broken or regressed unlisted adapter does not block). The
-  orphan check still uses the full config. `--format codeclimate` with `--only`
+  orphan check still uses the full config. `--format json` reports the narrowed
+  set as the top-level `only` array on every command, so a partial verdict never
+  reads as a full one — see [§ Machine-readable output](verdict.md#machine-readable-output).
+  `--format codeclimate` with `--only`
   is a usage error (exit 2) on every command — a partial measurement is not a
   complete current findings report. On any other command `--only` is a usage
   error (exit 2).

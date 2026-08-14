@@ -90,7 +90,9 @@ when nothing was accepted as worse.
 
 - Top level: `schema_version` (int, currently `2`), `command`
   (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
-  when `mode` is `since`, else `null`), `dry_run` (bool, present only when
+  when `mode` is `since`, else `null`), `only` (array, present only under
+  `--only`: the measured dimension ids, deduplicated and sorted — see below),
+  `dry_run` (bool, present only when
   `true` — `record --dry-run`), `accepted_worse` (array, present only when
   non-empty — `record --accept-worse`; see [§ Accepted
   debt](../commands/record.md#accepted-debt---dry-run---accept-worse)), `exit_code` (the process exit code),
@@ -98,12 +100,24 @@ when nothing was accepted as worse.
   when `exit_code` is 2, **omitted** on a pass), optional `error` / `failed_metrics`
   (exit 2 only), optional `watch` (`check`/`diff` only), and
   `metrics` — an array **sorted by `id`**.
+- `only` makes a narrowed run self-describing. `check --only a` measures one
+  dimension and can exit 0 while the full gate would exit 1, so the object must
+  say what it covered: a consumer that only sees `metrics` cannot tell a green
+  subset from a green full gate once the JSON leaves the invocation that
+  produced it. It is present on `record`/`check`/`diff` whenever `--only` was
+  given (on `record` alongside the per-metric `measurement_state`), omitted
+  otherwise, and it survives onto the exit-2 object below. `mode` is unaffected:
+  `--only` narrows *which dimensions* are measured, `--since` narrows *which
+  lines* count, and the two compose.
 - Exit 2 with `--format json` on `record`/`check`/`diff` still prints the human
   diagnostic on stderr, and also emits the verdict object on stdout:
   `failure_class` is `"could-not-measure"`, `error` is that diagnostic, and
   `failed_metrics` lists the dimension ids that failed to measure (omitted when
   the run never reached a dimension — missing snapshot, orphan, `--since` git
-  failure). `metrics` is `[]`. Usage errors (unknown command, mis-scoped flag)
+  failure). `metrics` is `[]`. The object still describes the invocation's
+  coverage: `mode`/`since` reflect `--since` (a `--since` run that could not
+  resolve its ref is still `mode: "since"`), and `only` the narrowed dimension
+  set. Usage errors (unknown command, mis-scoped flag)
   and a missing/invalid config still print stderr only — there is no gate in
   progress. Text and codeclimate modes are unchanged (stderr only on exit 2).
 - `watch` (`check`/`diff` only, omitted when empty or on `record`): files this

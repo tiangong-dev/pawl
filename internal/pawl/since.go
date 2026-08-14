@@ -172,7 +172,14 @@ func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
 	}
 	// Working tree vs merge-base (staged + unstaged). Untracked files are not
 	// in this diff; they are unioned in below.
-	diff, code, gitErr := gitOutput(dir, "diff", "--unified=0", "--no-ext-diff", mergeBase)
+	//
+	// The header prefixes are pinned: diff.mnemonicPrefix (which renames a//b/
+	// to c//w/), diff.noprefix, and diff.srcPrefix/dstPrefix are all developer
+	// preferences that would make every `+++ b/<path>` header parse to the wrong
+	// path — an empty added-line set, which reads as "nothing changed" and
+	// exempts every new offender as pre-existing debt.
+	diff, code, gitErr := gitOutput(dir, "diff", "--unified=0", "--no-ext-diff",
+		"--src-prefix=a/", "--dst-prefix=b/", mergeBase)
 	if code != 0 {
 		return nil, "", fmt.Errorf("git diff failed: %s", gitErr)
 	}
@@ -204,9 +211,19 @@ func addUntrackedLines(dir string, added map[string]map[int]bool) error {
 		if rel == "" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(toplevel, rel))
+		path := filepath.Join(toplevel, rel)
+		// Only a readable regular file can carry an offender: measurement skips
+		// everything else (walkIncluded), so a dangling symlink, a socket, or a
+		// file whose permissions deny reading cannot hide one from the scope.
+		// Failing on them instead would let an ordinary working tree turn the
+		// gate into "could not measure".
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("reading untracked %s: %w", rel, err)
+			continue
 		}
 		n := lineCount(data)
 		if n == 0 {

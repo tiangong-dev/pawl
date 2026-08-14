@@ -16,6 +16,7 @@ type Report struct {
 	Command       string               `json:"command"`
 	Mode          string               `json:"mode"`
 	Since         *string              `json:"since"`
+	Only          []string             `json:"only,omitempty"`
 	DryRun        bool                 `json:"dry_run,omitempty"`
 	AcceptedWorse []AcceptedWorseEntry `json:"accepted_worse,omitempty"`
 	ExitCode      int                  `json:"exit_code"`
@@ -143,8 +144,8 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 // only true once the write actually happened; a preserved dimension's
 // SnapshotValue is the committed value either way, since a preserved metric
 // is by definition identical to what's already on disk.
-func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, wroteToDisk bool) *Report {
-	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full"}
+func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, only []string, wroteToDisk bool) *Report {
+	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full", Only: only}
 	dims := append([]Dimension(nil), cfg.Dimensions...)
 	sort.Slice(dims, func(i, j int) bool { return dims[i].ID < dims[j].ID })
 	for _, dim := range dims {
@@ -234,24 +235,45 @@ func renderReportJSON(w io.Writer, rep *Report) error {
 	return err
 }
 
+// reportScope is what an invocation knows about its own coverage before it has
+// a verdict: which command, whether --since narrowed it to changed lines, and
+// which dimensions --only limited it to. Both the verdict and the exit-2 abort
+// carry it, so a consumer never has to infer coverage from which metrics happen
+// to be present — an exit-0 subset must not read as a green full gate.
+type reportScope struct {
+	command string
+	since   string
+	only    []string
+}
+
+func (s reportScope) apply(rep *Report) {
+	rep.Command = s.command
+	rep.Only = s.only
+	if s.since != "" {
+		ref := s.since
+		rep.Mode = "since"
+		rep.Since = &ref
+	}
+}
+
 // abortCouldNotMeasure is the --format json path for an exit-2 gate: the
 // human diagnostic stays on stderr, and stdout gets the same verdict object
 // (failure_class: could-not-measure) so an agent does not have to parse
 // unstructured stderr. Usage errors never reach here.
-func abortCouldNotMeasure(command, format, msg string, failedIDs []string, stdout, stderr io.Writer) int {
+func abortCouldNotMeasure(scope reportScope, format, msg string, failedIDs []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stderr, msg)
 	if format != "json" {
 		return 2
 	}
 	rep := &Report{
 		SchemaVersion: 2,
-		Command:       command,
 		Mode:          "full",
 		ExitCode:      2,
 		Error:         msg,
 		FailedMetrics: failedIDs,
 		Metrics:       []MetricReport{},
 	}
+	scope.apply(rep)
 	if err := renderReportJSON(stdout, rep); err != nil {
 		fmt.Fprintln(stderr, err)
 	}

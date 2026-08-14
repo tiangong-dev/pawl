@@ -16,6 +16,9 @@ until you know *why*.
    `failure_class: "could-not-measure"` / exit 2 → fix the environment
    (`error`, `failed_metrics`). Do not invent snapshot numbers.
    CI must run a full `pawl check` with no `--only`.
+5. A verdict carrying a top-level `only` array measured just those dimensions —
+   exit 0 there is not a green full gate. Report it as what it is, and do not
+   pass it on as the gate's answer.
 
 ## This repository
 

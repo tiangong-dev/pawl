@@ -499,6 +499,7 @@ pawl is a gate, not an analyzer. The loop is one command:
 2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
 3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
 4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
+5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
 
 Copy-paste dimensions that catch AI-shaped debt are in [RECIPES.md](./RECIPES.md#ai-generated-debt).
 

@@ -133,6 +133,28 @@ func TestCheckJSONCouldNotMeasureNamesFailedDimension(t *testing.T) {
 	}
 }
 
+// An exit-2 object must describe the invocation that produced it. A --since run
+// that could not resolve its ref is still a since run: reporting mode "full"
+// tells an agent branching on mode that the whole gate was measured.
+func TestCheckJSONCouldNotMeasureKeepsSinceScope(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	mustRecord(t, dir, buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 1}'`}))
+	gitCommitAll(t, dir, homeDir, "base")
+
+	res := runPawl(t, dir, gitEnv(homeDir), "check", "--since", "no-such-ref", "--format", "json")
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	if r.Mode != "since" {
+		t.Errorf("mode = %q, want since", r.Mode)
+	}
+	if r.Since == nil || *r.Since != "no-such-ref" {
+		t.Errorf("since = %v, want no-such-ref", r.Since)
+	}
+}
+
 // Usage errors happen before a gate is running: --format json must not mint a
 // verdict object, or agents will treat a typo as a measurement failure.
 func TestCheckJSONUsageErrorHasNoVerdict(t *testing.T) {

@@ -102,6 +102,48 @@ func TestCheckOnlyCodeclimateExitsTwo(t *testing.T) {
 	}
 }
 
+// A --only verdict must say so in the JSON itself. Without it, `check --only a`
+// (exit 0, one metric) is indistinguishable from a green full gate once the
+// object leaves the invocation that produced it — a CI aggregator, a PR
+// comment, a subagent handed the blob.
+func TestOnlyJSONNamesNarrowedScope(t *testing.T) {
+	dir := t.TempDir()
+	config := twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`)
+	mustRecord(t, dir, config)
+
+	full := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if r := parseReport(t, full.stdout); r.Only != nil {
+		t.Errorf("full check reported only = %v, want it omitted", r.Only)
+	}
+
+	for _, command := range []string{"check", "diff", "record"} {
+		t.Run(command, func(t *testing.T) {
+			res := runPawl(t, dir, baseEnv(), command, "--only", "b,a", "--format", "json")
+			r := parseReport(t, res.stdout)
+			if len(r.Only) != 2 || r.Only[0] != "a" || r.Only[1] != "b" {
+				t.Errorf("%s --only b,a reported only = %v, want [a b] (sorted)", command, r.Only)
+			}
+		})
+	}
+}
+
+// The same scope has to survive onto the exit-2 object, which is the one an
+// agent reads when it cannot trust the verdict.
+func TestOnlyJSONNamesScopeOnCouldNotMeasure(t *testing.T) {
+	dir := t.TempDir()
+	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
+	writeFile(t, dir, "pawl.yaml", twoDimConfig(`sh -c 'echo broken >&2; exit 1'`, `echo '{"value": 1}'`))
+
+	res := runPawl(t, dir, baseEnv(), "check", "--only", "a", "--format", "json")
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2 (a is broken)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	if len(r.Only) != 1 || r.Only[0] != "a" {
+		t.Errorf("only = %v, want [a]", r.Only)
+	}
+}
+
 func TestCheckOnlyStillCatchesOrphansAgainstFullConfig(t *testing.T) {
 	dir := t.TempDir()
 	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
