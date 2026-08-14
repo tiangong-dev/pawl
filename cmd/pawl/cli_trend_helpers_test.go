@@ -105,7 +105,7 @@ func trendRowFields(t *testing.T, stdout, shortSHA string) []string {
 	return nil
 }
 
-// trendReport is the `trend --format json` schema (SPEC.md § Trend).
+// trendReport is the `trend --format json` schema (spec/commands/trend.md).
 type trendReport struct {
 	SchemaVersion int           `json:"schema_version"`
 	Command       string        `json:"command"`

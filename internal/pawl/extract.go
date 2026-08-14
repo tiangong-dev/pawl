@@ -12,7 +12,7 @@ import (
 // The declarative extract layer. A command dimension may set `extract` to derive
 // its measurement from the tool's raw output, so trivial metrics need no wrapper
 // script that only reformats into the `{value,unit,breakdown}` JSON contract.
-// See SPEC.md § Declarative extract layer.
+// See spec/adapters/extract.md.
 
 const (
 	extractNumber   = "number"

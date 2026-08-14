@@ -1,6 +1,6 @@
 package main
 
-// Integration tests for `pawl version` / `pawl --version`, per SPEC.md:
+// Integration tests for `pawl version` / `pawl --version`, per spec/engine/cli.md:
 // both print exactly "pawl <version>\n" to stdout, exit 0, empty stderr,
 // and must not read pawl.yaml. The version string defaults to "dev" and is
 // overridden at build time via -ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=x.y.z".

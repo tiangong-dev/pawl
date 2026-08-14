@@ -14,15 +14,19 @@ import (
 
 const (
 	builtinFileLength   = "file-length"
+	builtinFileBytes    = "file-bytes"
 	builtinPatternCount = "pattern-count"
 )
 
 const defaultFileLengthThreshold = 500
+const defaultFileBytesThreshold = 32768
 
 func measureBuiltin(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	switch dim.Builtin {
 	case builtinFileLength:
 		return measureFileLength(cfg, dim)
+	case builtinFileBytes:
+		return measureFileBytes(cfg, dim)
 	case builtinPatternCount:
 		return measurePatternCount(cfg, dim)
 	case builtinEslint:
@@ -51,7 +55,19 @@ func measureBuiltin(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult
 // development: an over-long file burns the context window before any work
 // begins. Pure filesystem scan — survives any linter/build change.
 func measureFileLength(cfg *Config, dim Dimension) (MeasureResult, error) {
-	threshold := intOption(dim.Options, "threshold", defaultFileLengthThreshold)
+	return measureFileOver(cfg, dim, defaultFileLengthThreshold, "lines", lineCount)
+}
+
+// measureFileBytes is the byte-size twin of file-length: a closer proxy for
+// token cost than line count, still a language-agnostic filesystem scan.
+func measureFileBytes(cfg *Config, dim Dimension) (MeasureResult, error) {
+	return measureFileOver(cfg, dim, defaultFileBytesThreshold, "bytes", func(data []byte) int {
+		return len(data)
+	})
+}
+
+func measureFileOver(cfg *Config, dim Dimension, fallback int, unit string, sizeOf func([]byte) int) (MeasureResult, error) {
+	threshold := intOption(dim.Options, "threshold", fallback)
 	include := stringList(dim.Options["include"])
 	exclude := stringList(dim.Options["exclude"])
 
@@ -62,9 +78,9 @@ func measureFileLength(cfg *Config, dim Dimension) (MeasureResult, error) {
 		if err != nil {
 			return err
 		}
-		lines := lineCount(data)
-		if lines > threshold {
-			breakdown[rel] = float64(lines)
+		n := sizeOf(data)
+		if n > threshold {
+			breakdown[rel] = float64(n)
 			count++
 		}
 		return nil
@@ -74,7 +90,7 @@ func measureFileLength(cfg *Config, dim Dimension) (MeasureResult, error) {
 	}
 	return MeasureResult{
 		Value:     count,
-		Unit:      fmt.Sprintf("files > %d lines", threshold),
+		Unit:      fmt.Sprintf("files > %d %s", threshold, unit),
 		Breakdown: breakdown,
 	}, nil
 }

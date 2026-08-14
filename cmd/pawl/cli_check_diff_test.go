@@ -156,7 +156,7 @@ func TestCheckImprovementReporting(t *testing.T) {
 	if ci.exit != 0 {
 		t.Fatalf("check under CI exit = %d, want 0\nstdout=%s\nstderr=%s", ci.exit, ci.stdout, ci.stderr)
 	}
-	want := "::notice::pawl improved: m — run `pawl record` to lock in the gains."
+	want := "::notice::pawl improved: m — run `pawl record --only m` to lock in the gains."
 	if !strings.Contains(ci.stdout, want) {
 		t.Errorf("CI stdout missing exact notice line %q: %s", want, ci.stdout)
 	}

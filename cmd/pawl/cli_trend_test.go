@@ -2,7 +2,7 @@ package main
 
 // Integration tests for `pawl trend`: it reconstructs each metric's value
 // over time from the committed snapshot file's own git history — read-only,
-// never measures. See SPEC.md § Trend. Shared fixtures/helpers live in
+// never measures. See spec/commands/trend.md. Shared fixtures/helpers live in
 // cli_trend_helpers_test.go.
 
 import (

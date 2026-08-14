@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"sort"
 	"sync"
 	"time"
 )
@@ -47,17 +48,17 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 	wg.Wait()
 
 	metrics := map[string]Metric{}
-	var failures []string
+	var failures []measureFailure
 	for i, o := range outcomes {
 		if o.err != nil {
-			failures = append(failures, fmt.Sprintf("measuring %s failed: %v", o.id, o.err))
+			failures = append(failures, measureFailure{id: o.id, message: o.err.Error()})
 			continue
 		}
 		// A measured value must be finite. The exec path already enforces this;
 		// this guards the builtin path too, so a NaN/Inf can never be stored (a
 		// NaN silently never compares "worse", which would read as a pass).
 		if math.IsNaN(o.result.Value) || math.IsInf(o.result.Value, 0) {
-			failures = append(failures, fmt.Sprintf("measuring %s failed: value is not finite (%v)", o.id, o.result.Value))
+			failures = append(failures, measureFailure{id: o.id, message: fmt.Sprintf("value is not finite (%v)", o.result.Value)})
 			continue
 		}
 		dim := cfg.Dimensions[i]
@@ -72,12 +73,12 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 				sum += count
 			}
 			if invalid != "" {
-				failures = append(failures, fmt.Sprintf("measuring %s failed: per-file-count breakdown entry %q must be a non-negative integer", o.id, invalid))
+				failures = append(failures, measureFailure{id: o.id, message: fmt.Sprintf("per-file-count breakdown entry %q must be a non-negative integer", invalid)})
 				continue
 			}
 			if sum > o.result.Value+1e-9 {
-				failures = append(failures, fmt.Sprintf("measuring %s failed: per-file-count breakdown sum %s exceeds scalar value %s",
-					o.id, FormatNumber(sum), FormatNumber(o.result.Value)))
+				failures = append(failures, measureFailure{id: o.id, message: fmt.Sprintf("per-file-count breakdown sum %s exceeds scalar value %s",
+					FormatNumber(sum), FormatNumber(o.result.Value))})
 				continue
 			}
 		}
@@ -94,16 +95,45 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, error) {
 		}
 	}
 	if len(failures) > 0 {
-		var b bytes.Buffer
-		for i, f := range failures {
-			if i > 0 {
-				b.WriteString("\n")
-			}
-			b.WriteString(f)
-		}
-		return nil, fmt.Errorf("%s", b.String())
+		return nil, &measureError{failures: failures}
 	}
 	return metrics, nil
+}
+
+type measureFailure struct {
+	id      string
+	message string
+}
+
+// measureError is the structured form of a batch measurement failure: the
+// Error() string stays the historical "measuring <id> failed: …" diagnostic
+// on stderr, while failedMetricIDs can name the dimensions in JSON.
+type measureError struct {
+	failures []measureFailure
+}
+
+func (e *measureError) Error() string {
+	var b bytes.Buffer
+	for i, f := range e.failures {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "measuring %s failed: %s", f.id, f.message)
+	}
+	return b.String()
+}
+
+func failedMetricIDs(err error) []string {
+	var me *measureError
+	if !errors.As(err, &me) {
+		return nil
+	}
+	ids := make([]string, 0, len(me.failures))
+	for _, f := range me.failures {
+		ids = append(ids, f.id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func measureOne(cfg *Config, dim Dimension, stderr io.Writer, analyzerRuns analyzerRuns) (MeasureResult, error) {

@@ -1,6 +1,6 @@
 package main
 
-// Integration tests for the SPEC.md contract that every command rejects
+// Integration tests for the spec/engine/cli.md contract that every command rejects
 // extra positional operands: check/diff/record/init/version take none,
 // trend takes at most one (the metric id), baseline-guard takes at most
 // one (the ref). A stray extra operand is a usage error (exit 2, stderr

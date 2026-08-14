@@ -7,7 +7,7 @@ import (
 
 func validHelpTopic(topic string) bool {
 	switch topic {
-	case "", "init", "record", "check", "diff", "baseline-guard", "trend", "version":
+	case "", "init", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version":
 		return true
 	default:
 		return false
@@ -30,6 +30,9 @@ Commands:
   diff                    report changes without failing on regressions
   baseline-guard [ref]    ensure the snapshot did not regress
   trend [id]              show snapshot history
+  status                  print the committed snapshot (no measure)
+  constraints             print configured thresholds and globs
+  rank                    rank files by line or byte size
   version                 print the version
 
 Global flags:
@@ -40,19 +43,24 @@ Global flags:
 
 Command flags:
   record --only <ids>     re-record only comma-separated dimensions
+  check --only <ids>      measure and gate only those dimensions
+  diff --only <ids>       measure and compare only those dimensions
   record --dry-run        preview what record would write, without writing
   record --accept-worse   record a dimension even if it comes back worse
-  check --since <ref>     scope located findings to added lines
+  check --since <ref>     scope located findings to the working tree since <ref>
   trend --limit <n>       limit history entries`)
 		return
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
 		"record":         "pawl record [--only <id>[,<id>…]] [--dry-run] [--accept-worse] [--format text|json|codeclimate]",
-		"check":          "pawl check [--since <ref>] [--format text|json|codeclimate]",
-		"diff":           "pawl diff [--format text|json|codeclimate]",
+		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--format text|json|codeclimate]",
+		"diff":           "pawl diff [--only <id>[,<id>…]] [--format text|json|codeclimate]",
 		"baseline-guard": "pawl baseline-guard [<ref>]",
 		"trend":          "pawl trend [<id>] [--limit <n>] [--format text|json]",
+		"status":         "pawl status [--format text|json]",
+		"constraints":    "pawl constraints [--format text|json]",
+		"rank":           "pawl rank [--format text|json]",
 		"version":        "pawl version",
 	}[topic])
 }

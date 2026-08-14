@@ -284,8 +284,8 @@ func TestRecordOnlyLeavesUnlistedNewDimensionAbsent(t *testing.T) {
 	}
 }
 
-// --only is valid only on record; on any other command it is a usage error,
-// exit 2, never silently accepted or ignored.
+// --only is valid on record, check, and diff; on any other command it is a
+// usage error, exit 2, never silently accepted or ignored.
 func TestRecordOnlyRejectedOnOtherCommands(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
@@ -298,9 +298,11 @@ func TestRecordOnlyRejectedOnOtherCommands(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"check", []string{"check", "--only", "a"}},
-		{"diff", []string{"diff", "--only", "a"}},
 		{"baseline-guard", []string{"baseline-guard", "--only", "a", base}},
+		{"trend", []string{"trend", "--only", "a"}},
+		{"status", []string{"status", "--only", "a"}},
+		{"constraints", []string{"constraints", "--only", "a"}},
+		{"rank", []string{"rank", "--only", "a"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

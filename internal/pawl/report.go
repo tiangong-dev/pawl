@@ -10,7 +10,7 @@ import (
 // Report is pawl's stable machine-readable verdict — the `--format json` shape.
 // It is deliberately not rdjson: rdjson cannot express a scalar total, an
 // improvement, or a `--since` suppression, which are pawl's own semantics.
-// See SPEC.md § Machine-readable output.
+// See spec/engine/verdict.md § Machine-readable output.
 type Report struct {
 	SchemaVersion int                  `json:"schema_version"`
 	Command       string               `json:"command"`
@@ -19,7 +19,23 @@ type Report struct {
 	DryRun        bool                 `json:"dry_run,omitempty"`
 	AcceptedWorse []AcceptedWorseEntry `json:"accepted_worse,omitempty"`
 	ExitCode      int                  `json:"exit_code"`
+	FailureClass  string               `json:"failure_class,omitempty"`
+	Error         string               `json:"error,omitempty"`
+	FailedMetrics []string             `json:"failed_metrics,omitempty"`
+	Watch         []WatchEntry         `json:"watch,omitempty"`
 	Metrics       []MetricReport       `json:"metrics"`
+}
+
+// WatchEntry is one near- or over-threshold file the current invocation
+// touched — advisory headroom, never part of the exit-code verdict.
+type WatchEntry struct {
+	ID        string  `json:"id"`
+	Path      string  `json:"path"`
+	Kind      string  `json:"kind"`
+	Value     float64 `json:"value"`
+	Threshold float64 `json:"threshold"`
+	Headroom  float64 `json:"headroom"`
+	Status    string  `json:"status"`
 }
 
 // AcceptedWorseEntry is one dimension record wrote (or, under --dry-run,
@@ -62,6 +78,7 @@ type MetricReport struct {
 	MeasurementState string       `json:"measurement_state"`
 	Status           string       `json:"status"`
 	Improved         bool         `json:"improved"`
+	NextAction       string       `json:"next_action,omitempty"`
 	Regressions      []Regression `json:"regressions"`
 	EnforcedInFull   bool         `json:"-"`
 }
@@ -184,14 +201,59 @@ func hasLiveRegression(rep *Report) bool {
 	return false
 }
 
+// annotateReport fills mechanical agent-facing fields from the already-computed
+// verdict: failure_class mirrors the 1-vs-2 exit split, and next_action on an
+// improved check/diff metric is the surgical record command that locks it in.
+func annotateReport(rep *Report) {
+	switch rep.ExitCode {
+	case 1:
+		rep.FailureClass = "regression"
+	case 2:
+		rep.FailureClass = "could-not-measure"
+	}
+	if rep.Command != "check" && rep.Command != "diff" {
+		return
+	}
+	for i := range rep.Metrics {
+		if rep.Metrics[i].Improved {
+			rep.Metrics[i].NextAction = "pawl record --only " + rep.Metrics[i].ID
+		}
+	}
+}
+
 // renderReportJSON writes the verdict as one indented JSON object plus a
 // trailing newline — stdout stays pure machine output (no table, no emoji, no
 // GitHub annotations).
 func renderReportJSON(w io.Writer, rep *Report) error {
+	annotateReport(rep)
 	data, err := json.MarshalIndent(rep, "", "  ")
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(w, "%s\n", data)
 	return err
+}
+
+// abortCouldNotMeasure is the --format json path for an exit-2 gate: the
+// human diagnostic stays on stderr, and stdout gets the same verdict object
+// (failure_class: could-not-measure) so an agent does not have to parse
+// unstructured stderr. Usage errors never reach here.
+func abortCouldNotMeasure(command, format, msg string, failedIDs []string, stdout, stderr io.Writer) int {
+	fmt.Fprintln(stderr, msg)
+	if format != "json" {
+		return 2
+	}
+	rep := &Report{
+		SchemaVersion: 2,
+		Command:       command,
+		Mode:          "full",
+		ExitCode:      2,
+		Error:         msg,
+		FailedMetrics: failedIDs,
+		Metrics:       []MetricReport{},
+	}
+	if err := renderReportJSON(stdout, rep); err != nil {
+		fmt.Fprintln(stderr, err)
+	}
+	return 2
 }

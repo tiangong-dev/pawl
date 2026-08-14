@@ -15,7 +15,7 @@ import (
 // Report-format ingest builtins: sarif, junit, coverage. Each reads one of the
 // ecosystem's standard machine report formats so a tool that already emits it
 // becomes a pawl dimension with no wrapper — pawl sits on top of the tools it
-// trusts rather than reimplementing them. See SPEC.md § Report-format ingest.
+// trusts rather than reimplementing them. See spec/adapters/ingest.md.
 
 const (
 	builtinSarif    = "sarif"

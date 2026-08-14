@@ -5,7 +5,7 @@ snapshots it and `pawl check` fails a PR when it regresses. Mix and match — a
 real config is a handful of these.
 
 New to pawl? Run `pawl init` for a working starter config, then paste the
-dimensions you want from here. Full behavioral contract: [SPEC.md](./SPEC.md).
+dimensions you want from here. Full behavioral contract: [SPEC.md](./SPEC.md) ([spec/](./spec/README.md)).
 
 **Picking a gate** (the `gate:` field):
 
@@ -36,6 +36,38 @@ duplication, long files); `higher-is-better` for good things that must not drop
     exclude: ["**/*.snap", "**/*.min.*"]
 ```
 
+Pair a second dimension on the same builtin with `per-key-value` so already-long
+files cannot keep growing (the usual AI failure mode). `total` still catches a
+*new* file crossing the limit; `per-key-value` ignores new keys, so the two are
+complements, not duplicates.
+
+```yaml
+- id: "file-length-growth"
+  title: "Already-long files must not grow"
+  direction: "lower-is-better"
+  gate: "per-key-value"
+  builtin: "file-length"
+  options:
+    threshold: 500
+    include: ["src/**/*"]
+    exclude: ["**/*.snap", "**/*.min.*"]
+```
+
+### Large files by bytes
+
+Closer proxy for token cost than line count. Same pairing as `file-length`.
+
+```yaml
+- id: "file-bytes"
+  title: "Files over 32 KiB"
+  direction: "lower-is-better"
+  builtin: "file-bytes"
+  options:
+    threshold: 32768
+    include: ["src/**/*"]
+    exclude: ["**/*.snap", "**/*.min.*"]
+```
+
 ### Escape hatches / suppressions
 
 The generic "count the debt marker" dimension. Swap `pattern` for your stack:
@@ -53,6 +85,44 @@ The generic "count the debt marker" dimension. Swap `pattern` for your stack:
 
 Other patterns worth gating: `//nolint` (Go), `# type: ignore` (Python),
 `eslint-disable`, `try!` / `as!` (Swift), `!important` (CSS), `console\.log`.
+
+### AI-generated debt
+
+These are the markers agent-written code tends to introduce. They are all
+`pattern-count` — no language parser. Use them on the inner loop
+(`pawl check --only …`); keep ESLint / coverage on CI.
+
+```yaml
+- id: "todos"
+  title: "TODO / FIXME markers"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  builtin: "pattern-count"
+  options:
+    pattern: "TODO|FIXME"
+    include: ["src/**/*"]
+
+- id: "lint-suppressions"
+  title: "Lint / type suppressions"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  builtin: "pattern-count"
+  options:
+    pattern: "eslint-disable|@ts-(ignore|expect-error|nocheck)|nolint|# type: ignore"
+    include: ["src/**/*"]
+
+- id: "skipped-tests"
+  title: "Skipped tests"
+  direction: "lower-is-better"
+  gate: "per-file-count"
+  builtin: "pattern-count"
+  options:
+    pattern: "\\.(skip|only)\\(|xtest|xdescribe|it\\.skip|describe\\.skip|test\\.skip"
+    include: ["**/*.{test,spec}.*", "**/test/**", "**/tests/**"]
+```
+
+Swap `include` / `pattern` for the stack. Combine with the `file-length` +
+`file-length-growth` pair above so new code cannot hide in already-long files.
 
 ---
 
@@ -331,8 +401,8 @@ has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: �
 
 For the full raw-JSON contract, the four `extract` forms, and the exec adapter
 environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see
-[SPEC.md § Exec adapter contract](./SPEC.md) and
-[§ Declarative extract layer](./SPEC.md).
+[SPEC.md § Exec adapter contract](./spec/adapters/exec.md) and
+[§ Declarative extract layer](./spec/adapters/extract.md).
 
 ---
 

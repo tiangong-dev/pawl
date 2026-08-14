@@ -12,7 +12,7 @@ import (
 // runTrend reconstructs each metric's value over time from the committed
 // snapshot file's own git history — a fully local trend, no cloud. It never
 // measures: it walks git log for the snapshot path, parses the snapshot at each
-// commit that touched it, and prints the series. See SPEC.md § Trend.
+// commit that touched it, and prints the series. See spec/commands/trend.md.
 func runTrend(cfg *Config, metricID string, limit int, format string, stdout, stderr io.Writer) int {
 	// Meta notes (skip warnings, the truncation line) go to stdout in text mode
 	// but stderr in json mode, so `--format json` stdout stays pure JSON.

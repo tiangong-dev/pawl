@@ -347,7 +347,15 @@ func ImprovementNotice(improvedIDs []string, onCI bool) string {
 	if !onCI || len(improvedIDs) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("::notice::pawl improved: %s — run `pawl record` to lock in the gains.", strings.Join(improvedIDs, ", "))
+	return fmt.Sprintf("::notice::pawl improved: %s — run `%s` to lock in the gains.",
+		strings.Join(improvedIDs, ", "), recordOnlyCommand(improvedIDs))
+}
+
+// recordOnlyCommand is the mechanical next step after a scalar improvement:
+// re-record just those dimensions so a full record cannot silently bless
+// regressions elsewhere.
+func recordOnlyCommand(ids []string) string {
+	return "pawl record --only " + strings.Join(ids, ",")
 }
 
 // GitHubAnnotations renders GitHub Actions `::error::` workflow commands for one

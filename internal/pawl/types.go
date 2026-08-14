@@ -1,7 +1,7 @@
 // Package pawl is a language-agnostic anti-regression quality gate: each
 // dimension measures one number, record snapshots the numbers, check fails when
-// any dimension regresses against the snapshot. See SPEC.md for the frozen
-// behavioral contract this package implements.
+// any dimension regresses against the snapshot. The frozen behavioral contract
+// this package implements lives under spec/ (SPEC.md is the index).
 package pawl
 
 type Direction string

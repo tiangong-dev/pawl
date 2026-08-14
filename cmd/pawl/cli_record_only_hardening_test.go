@@ -55,14 +55,14 @@ func TestRecordOnlyOmitsUnlistedAbsentDimFromOutput(t *testing.T) {
 	}
 }
 
-// --only is a record-only flag; it is a usage error on `version` too, not a
-// silent version print (the version short-circuit must not swallow it).
+// --only on version is a usage error, not a silent version print (the
+// version short-circuit must not swallow it).
 func TestRecordOnlyRejectedOnVersion(t *testing.T) {
 	dir := t.TempDir()
 	for _, args := range [][]string{{"version", "--only", "a"}, {"--version", "--only", "a"}} {
 		res := runPawl(t, dir, baseEnv(), args...)
 		if res.exit != 2 {
-			t.Errorf("pawl %v exit = %d, want 2 (--only is only valid on record)\nstdout=%s\nstderr=%s", args, res.exit, res.stdout, res.stderr)
+			t.Errorf("pawl %v exit = %d, want 2 (--only is only valid on record, check, or diff)\nstdout=%s\nstderr=%s", args, res.exit, res.stdout, res.stderr)
 		}
 	}
 }

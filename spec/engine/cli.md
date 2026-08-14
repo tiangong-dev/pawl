@@ -1,0 +1,87 @@
+Part of the pawl engine contract. See [spec/README.md](../README.md).
+
+## CLI
+
+```
+pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>] [--dry-run] [--accept-worse] [-h|--help]
+
+  init                 scaffold a starter pawl.yaml (never overwrites)
+  record               measure every dimension and (over)write the snapshot
+  check                measure + compare; exit 1 on any regression — the CI gate
+  diff                 measure + compare, print the table, always exit 0
+  baseline-guard <ref> compare the working tree's snapshot against the version
+                       committed at <ref> — the anti-tamper gate
+  trend [<id>]         print each metric's value across the committed snapshot's
+                       git history — a fully local trend, no cloud
+  status               print the committed snapshot without measuring
+  constraints          print configured thresholds, globs, and patterns
+  rank                 rank included files by line or byte size (including
+                       under-threshold files)
+  version              print `pawl <version>` and exit 0
+  help [<command>]     print global or command help and exit 0
+```
+
+- Run with no command, pawl defaults to `check` (so a bare `pawl` in CI is the
+  gate, not a usage error). "No command" means zero positional arguments — an
+  empty-string argument is an unknown command (exit 2), so a wrapper passing an
+  unset variable fails loud instead of silently running the default gate.
+- `-c <path>` selects the config file; default `./pawl.yaml`.
+- `-h` / `--help`, `pawl help`, and `pawl help <command>` print help without
+  reading config. An unknown command/topic remains a usage error (exit 2).
+- `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
+  for all); on any command other than `trend` it is a usage error (exit 2).
+- `--only <id>[,<id>…]` limits which dimensions this invocation measures.
+  On `record` it re-records those dimensions and preserves the rest of the
+  committed snapshot, specified in [§ Partial record](../commands/record.md#partial-record---only).
+  On `check` and `diff` it measures and compares only those dimensions (the
+  inner loop: a broken or regressed unlisted adapter does not block). The
+  orphan check still uses the full config. `--format codeclimate` with `--only`
+  is a usage error (exit 2) on every command — a partial measurement is not a
+  complete current findings report. On any other command `--only` is a usage
+  error (exit 2).
+- `--dry-run` previews what `record` (with or without `--only`) would write —
+  same table, nothing written — and `--accept-worse` explicitly authorizes
+  writing a dimension worse than the committed baseline. Both are valid only on
+  `record`; specified in [§ Accepted debt](../commands/record.md#accepted-debt---dry-run---accept-worse). On any other
+  command either is a usage error (exit 2).
+- `--format <text|json|codeclimate>` selects the output format of
+  `record`/`check`/`diff`; default `text`. `json` is specified in
+  [§ Machine-readable output](verdict.md#machine-readable-output); `codeclimate` in
+  [§ Code Quality output](verdict.md#code-quality-output).
+  `baseline-guard` ignores `--format` (its output is not tabular). `trend`,
+  `status`, `constraints`, and `rank` honor `text` (default) and `json`;
+  `--format codeclimate` on any of them is a usage error (exit 2).
+- `--since <ref>` scopes `check` (only) to lines changed in the **working
+  tree** since `<ref>`, specified in [§ Diff-scoped checking](../commands/since.md#diff-scoped-checking).
+  `--since` on any command other than `check` is a usage error (exit 2).
+- Unknown command → stderr message naming valid commands, exit 2.
+- Extra positional operands are usage errors (exit 2): `trend` takes at most
+  one operand (the metric id) and `baseline-guard` one (the ref); every other
+  command takes none. This keeps a mistyped invocation (`pawl record only x` —
+  the dashes of `--only` forgotten) from silently running a different,
+  state-writing command.
+- `pawl version` and `pawl --version` print exactly `pawl <version>\n` to
+  stdout and exit 0 **without reading any config file** — they must work in a
+  directory with no `pawl.yaml`. A `--version` riding on a **valid,
+  validly-flagged** command (`pawl check --version`) also prints the version;
+  any usage error in the invocation — an unknown command, a mis-scoped flag, a
+  disallowed format (`trend --format codeclimate`) — outranks the version
+  print and exits 2. Unknown-command outranks mis-scoped-flag in diagnostics. The version string defaults to `dev` and is
+  overridden at build time via
+  `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
+- `pawl init` writes a commented starter config to the config path (honoring
+  `-c`) **without reading any existing config** — it is the zero-friction
+  on-ramp, specified in [§ init](../commands/init.md#init). If a file already exists at that path
+  it refuses (exit 2) rather than overwrite.
+
+### Exit codes
+
+| code | meaning |
+|------|---------|
+| 0 | pass (including `diff` with regressions, and legitimate baseline-guard skips) |
+| 1 | `check`: at least one dimension regressed; `baseline-guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
+| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`/`diff`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
+
+The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
+2 means "could not measure/compare honestly" and must never read as a pass.
+

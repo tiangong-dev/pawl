@@ -103,3 +103,51 @@ func TestBuiltinFileLengthEmptyFileIsZeroLines(t *testing.T) {
 		t.Errorf("value = %v, want 0 (an empty file has 0 lines, even with threshold 0)", m.Value)
 	}
 }
+
+// Pairing total + per-key-value on file-length: a new file crossing the
+// threshold moves the total; growing an already-long file is caught only by
+// per-key-value. Together they close the "inflate a grandfathered file" hole.
+func TestFileLengthTotalPlusPerKeyValuePair(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "long.txt", nLines(12))
+	cfg := buildConfig("",
+		dimDef{
+			id: "file-length", direction: "lower-is-better", gate: "total",
+			builtin:     "file-length",
+			optionLines: []string{"threshold = 10", `include = ["**/*.txt"]`},
+		},
+		dimDef{
+			id: "file-length-growth", direction: "lower-is-better", gate: "per-key-value",
+			builtin:     "file-length",
+			optionLines: []string{"threshold = 10", `include = ["**/*.txt"]`},
+		},
+	)
+	mustRecord(t, dir, cfg)
+
+	writeFile(t, dir, "long.txt", nLines(20))
+	res := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if res.exit != 1 {
+		t.Fatalf("growing a long file exit = %d, want 1\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	total, _ := metricByID(r, "file-length")
+	if total.Status == "worse" {
+		t.Errorf("total gate status = %q, want same (count of over-limit files did not move)", total.Status)
+	}
+	growth, _ := metricByID(r, "file-length-growth")
+	if growth.Status != "worse" {
+		t.Errorf("per-key-value status = %q, want worse", growth.Status)
+	}
+
+	writeFile(t, dir, "long.txt", nLines(12))
+	writeFile(t, dir, "new.txt", nLines(15))
+	res = runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if res.exit != 1 {
+		t.Fatalf("new over-limit file exit = %d, want 1\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r = parseReport(t, res.stdout)
+	total, _ = metricByID(r, "file-length")
+	if total.Status != "worse" {
+		t.Errorf("total gate status = %q, want worse (new over-limit file)", total.Status)
+	}
+}

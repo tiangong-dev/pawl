@@ -18,6 +18,40 @@ func parseOnly(s string) []string {
 	return ids
 }
 
+// resolveOnlyIDs validates `--only` against the config. An empty list or an
+// unknown id is a usage error (exit 2) before anything is measured.
+func resolveOnlyIDs(cfg *Config, only, command string, stderr io.Writer) (map[string]bool, int) {
+	ids := parseOnly(only)
+	if len(ids) == 0 {
+		fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
+		return nil, 2
+	}
+	byID := map[string]bool{}
+	for _, d := range cfg.Dimensions {
+		byID[d.ID] = true
+	}
+	onlySet := map[string]bool{}
+	for _, id := range ids {
+		if !byID[id] {
+			fmt.Fprintf(stderr, "%s --only: no dimension %q in the config.\n", command, id)
+			return nil, 2
+		}
+		onlySet[id] = true
+	}
+	return onlySet, 0
+}
+
+func configWithOnly(cfg *Config, onlySet map[string]bool) *Config {
+	sub := *cfg
+	sub.Dimensions = nil
+	for _, d := range cfg.Dimensions {
+		if onlySet[d.ID] {
+			sub.Dimensions = append(sub.Dimensions, d)
+		}
+	}
+	return &sub
+}
+
 // runRecordOnly re-measures only the named dimensions and writes a snapshot
 // that preserves every other configured metric's committed value — the surgical
 // counterpart to a full record, so a win on one dimension can be locked in
@@ -25,20 +59,12 @@ func parseOnly(s string) []string {
 // listed dimension that comes back worse than the committed baseline is
 // refused (exit 1, nothing written) unless dryRun or acceptWorse says
 // otherwise — the same accepted-debt gate a full record applies, scoped to
-// just the dimensions this invocation actually measured. See SPEC.md §
-// Partial record and § Accepted debt.
+// just the dimensions this invocation actually measured. See
+// spec/commands/record.md § Partial record and § Accepted debt.
 func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
-	byID := map[string]bool{}
-	for _, d := range cfg.Dimensions {
-		byID[d.ID] = true
-	}
-	onlySet := map[string]bool{}
-	for _, id := range only {
-		if !byID[id] {
-			fmt.Fprintf(stderr, "record --only: no dimension %q in the config.\n", id)
-			return 2
-		}
-		onlySet[id] = true
+	onlySet, code := resolveOnlyIDs(cfg, strings.Join(only, ","), "record", stderr)
+	if code != 0 {
+		return code
 	}
 	if format == "codeclimate" {
 		fmt.Fprintln(stderr, "record --only cannot emit codeclimate: a partial measurement is not a complete current findings report")
@@ -49,34 +75,27 @@ func runRecordOnly(cfg *Config, only []string, format string, dryRun, acceptWors
 	// rest" is meaningless without a baseline.
 	baseline, parsed, err := ReadSnapshotFile(cfg.SnapshotPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		return abortCouldNotMeasure("record", format, err.Error(), nil, stdout, stderr)
 	}
 	if baseline == nil {
-		fmt.Fprintf(stderr, "record --only needs an existing %s to preserve — run a full `pawl record` first.\n", cfg.SnapshotPath)
-		return 2
+		return abortCouldNotMeasure("record", format,
+			fmt.Sprintf("record --only needs an existing %s to preserve — run a full `pawl record` first.", cfg.SnapshotPath),
+			nil, stdout, stderr)
 	}
 	if shapeErrors := SnapshotShapeErrors(parsed); len(shapeErrors) > 0 {
-		fmt.Fprintf(stderr, "%s has an invalid shape:\n", cfg.SnapshotPath)
+		msg := cfg.SnapshotPath + " has an invalid shape:\n"
 		for _, e := range shapeErrors {
-			fmt.Fprintf(stderr, "  • %s\n", e)
+			msg += "  • " + e + "\n"
 		}
-		return 2
+		return abortCouldNotMeasure("record", format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
 	}
 
 	// Measure only the listed dimensions — an unrelated broken adapter must not
 	// block locking in the win.
-	sub := *cfg
-	sub.Dimensions = nil
-	for _, d := range cfg.Dimensions {
-		if onlySet[d.ID] {
-			sub.Dimensions = append(sub.Dimensions, d)
-		}
-	}
-	measured, err := MeasureAll(&sub, stderr)
+	sub := configWithOnly(cfg, onlySet)
+	measured, err := MeasureAll(sub, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		return abortCouldNotMeasure("record", format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
 
 	// Merge: freshly measured listed dims + preserved values for every other

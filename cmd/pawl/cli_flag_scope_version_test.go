@@ -1,8 +1,8 @@
 package main
 
 // Integration tests for command-scoped flags on the version path, per
-// SPEC.md: --since is valid only on `check`, --limit only on `trend`, and
-// --only only on `record`. Attaching a scoped flag to `version` (subcommand
+// spec/engine/cli.md: --since is valid only on `check`, --limit only on `trend`, and
+// --only only on `record`, `check`, or `diff`. Attaching a scoped flag to `version` (subcommand
 // or bare --version) is a usage error: exit 2, a stderr message naming the
 // offending flag, and no version text on stdout — the mis-scoped flag must
 // never be silently accepted and swallowed.

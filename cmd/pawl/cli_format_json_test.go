@@ -19,7 +19,21 @@ type jsonReport struct {
 	DryRun        bool                `json:"dry_run"`
 	AcceptedWorse []jsonAcceptedWorse `json:"accepted_worse"`
 	ExitCode      int                 `json:"exit_code"`
+	FailureClass  string              `json:"failure_class"`
+	Error         string              `json:"error"`
+	FailedMetrics []string            `json:"failed_metrics"`
+	Watch         []jsonWatch         `json:"watch"`
 	Metrics       []jsonMetric        `json:"metrics"`
+}
+
+type jsonWatch struct {
+	ID        string  `json:"id"`
+	Path      string  `json:"path"`
+	Kind      string  `json:"kind"`
+	Value     float64 `json:"value"`
+	Threshold float64 `json:"threshold"`
+	Headroom  float64 `json:"headroom"`
+	Status    string  `json:"status"`
 }
 
 type jsonAcceptedWorse struct {
@@ -39,6 +53,7 @@ type jsonMetric struct {
 	MeasurementState string           `json:"measurement_state"`
 	Status           string           `json:"status"`
 	Improved         bool             `json:"improved"`
+	NextAction       string           `json:"next_action"`
 	Regressions      []jsonRegression `json:"regressions"`
 }
 
