@@ -20,7 +20,7 @@ var starterConfig string
 
 // runInit scaffolds a starter config at configPath. It refuses to overwrite an
 // existing file — a scaffolder that clobbered a hand-tuned config would be worse
-// than useless. See SPEC.md § init.
+// than useless. See spec/commands/init.md.
 func runInit(configPath string, stdout, stderr io.Writer) int {
 	abs, err := filepath.Abs(configPath)
 	if err != nil {

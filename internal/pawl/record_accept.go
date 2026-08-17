@@ -19,7 +19,7 @@ import (
 // reaches the preview path. When it does write, the snapshot write happens
 // BEFORE any stdout so a write failure exits 2 without having already
 // emitted an `exit_code: 0` verdict it can't take back.
-func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[string]Metric, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[string]Metric, artifacts map[string]*ArtifactInfo, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
 	baselineMetrics := map[string]Metric{}
 	if baseline != nil {
 		baselineMetrics = baseline.Metrics
@@ -27,18 +27,20 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 	worse := WorseDimensions(cfg.Dimensions, baselineMetrics, current)
 
 	if len(worse) > 0 && !acceptWorse {
-		return refuseRecord(cfg, format, baseline, baselineMetrics, current, worse, dryRun, stdout, stderr)
+		return refuseRecord(cfg, format, baseline, baselineMetrics, current, artifacts, worse, dryRun, stdout, stderr)
 	}
 	if dryRun {
-		return previewRecord(cfg, format, baseline, baselineMetrics, current, worse, stdout, stderr)
+		return previewRecord(cfg, format, baseline, baselineMetrics, current, artifacts, worse, stdout, stderr)
 	}
 
 	if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		// A snapshot that could not be written is exit 2 like any other
+		// could-not-measure, and owes --format json the same verdict object:
+		// exit 2 with an empty stdout is indistinguishable from a broken parse.
+		return abortCouldNotMeasure(reportScope{command: "record"}, format, err.Error(), nil, stdout, stderr)
 	}
 	if format == "json" {
-		rep := buildReport("record", cfg, baseline, current)
+		rep := buildReport("record", cfg, baseline, current, artifacts)
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -70,9 +72,9 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 // convention (emit current offenders, but the gate's exit code wins) rather
 // than inventing a different shape for record, plus a stderr line — findings
 // mode has no field to say "and nothing was written".
-func refuseRecord(cfg *Config, format string, baseline *Snapshot, baselineMetrics, current map[string]Metric, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
+func refuseRecord(cfg *Config, format string, baseline *Snapshot, baselineMetrics, current map[string]Metric, artifacts map[string]*ArtifactInfo, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildReport("record", cfg, baseline, current)
+		rep := buildReport("record", cfg, baseline, current, artifacts)
 		rep.DryRun = dryRun
 		rep.ExitCode = 1
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -100,9 +102,9 @@ func refuseRecord(cfg *Config, format string, baseline *Snapshot, baselineMetric
 // previewRecord is finishRecord's --dry-run path, reached only once the
 // write would not be refused (no worse dimensions, or --accept-worse was
 // given): same rendering as a real record, nothing written, exit 0.
-func previewRecord(cfg *Config, format string, baseline *Snapshot, baselineMetrics, current map[string]Metric, worse []WorseDimension, stdout, stderr io.Writer) int {
+func previewRecord(cfg *Config, format string, baseline *Snapshot, baselineMetrics, current map[string]Metric, artifacts map[string]*ArtifactInfo, worse []WorseDimension, stdout, stderr io.Writer) int {
 	if format == "json" {
-		rep := buildReport("record", cfg, baseline, current)
+		rep := buildReport("record", cfg, baseline, current, artifacts)
 		rep.DryRun = true
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0

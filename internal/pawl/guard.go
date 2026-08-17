@@ -209,8 +209,24 @@ func trailerAccepts(v GuardViolation, declared []float64) bool {
 // gitOutput runs one git command against dir and returns trimmed stdout, the
 // exit code, and trimmed stderr — callers branch on the exit code, so git
 // failing must never look like empty-but-successful output.
+//
+// core.quotePath is pinned off for every invocation: it defaults to on, which
+// octal-escapes every non-ASCII byte in a path. A path pawl cannot match drops
+// out of the changed-file set silently, and a gate that quietly stops seeing a
+// file is worse than one that fails.
 func gitOutput(dir string, args ...string) (string, int, string) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	stdout, code, stderr := gitOutputRaw(dir, args...)
+	return strings.TrimSpace(stdout), code, stderr
+}
+
+// gitOutputRaw is gitOutput without the stdout trim, for `-z` output. Its
+// records are NUL-separated and a path may legitimately begin or end with a
+// blank, so trimming the payload as one string corrupts the first and last
+// record. A corrupted path fails to stat and drops out of the changed-file
+// set — the silent narrowing --since must never do.
+func gitOutputRaw(dir string, args ...string) (string, int, string) {
+	fixed := []string{"-C", dir, "-c", "core.quotePath=false"}
+	cmd := exec.Command("git", append(fixed, args...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -222,5 +238,5 @@ func gitOutput(dir string, args ...string) (string, int, string) {
 			code = 1
 		}
 	}
-	return strings.TrimSpace(stdout.String()), code, strings.TrimSpace(stderr.String())
+	return stdout.String(), code, strings.TrimSpace(stderr.String())
 }

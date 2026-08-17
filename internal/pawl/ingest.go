@@ -15,7 +15,7 @@ import (
 // Report-format ingest builtins: sarif, junit, coverage. Each reads one of the
 // ecosystem's standard machine report formats so a tool that already emits it
 // becomes a pawl dimension with no wrapper — pawl sits on top of the tools it
-// trusts rather than reimplementing them. See SPEC.md § Report-format ingest.
+// trusts rather than reimplementing them. See spec/adapters/ingest.md.
 
 const (
 	builtinSarif    = "sarif"
@@ -29,30 +29,30 @@ const (
 // guard is a parseable report (the caller's job), not exit 0 — but a command
 // that could not run at all (timeout, spawn failure) or a `file` that never
 // materialized is still a measurement failure, never a silent zero.
-func readIngestReport(cfg *Config, dim Dimension, stderr io.Writer, command, fileRel string) ([]byte, error) {
+func readIngestReport(cfg *Config, dim Dimension, stderr io.Writer, command, fileRel string) ([]byte, *ArtifactInfo, error) {
 	if fileRel != "" {
 		filePath := filepath.Join(cfg.Dir, fileRel)
 		if command != "" {
 			// The command produces the file — a leftover from an earlier run
 			// must never satisfy this measurement.
 			if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-				return nil, fmt.Errorf("clearing stale %s: %v", fileRel, err)
+				return nil, nil, fmt.Errorf("clearing stale %s: %v", fileRel, err)
 			}
 			if _, _, err := runAdapterCommand(cfg, dim, stderr, command); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %v", fileRel, err)
+			return nil, nil, fmt.Errorf("reading %s: %v", fileRel, err)
 		}
-		return data, nil
+		return data, statArtifact(cfg, fileRel, command != ""), nil
 	}
 	stdout, _, err := runAdapterCommand(cfg, dim, stderr, command)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return stdout, nil
+	return stdout, nil, nil
 }
 
 func setOf(items []string) map[string]bool {
@@ -113,7 +113,7 @@ type sarifLocation struct {
 func measureSarif(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	command, _ := dim.Options["command"].(string)
 	fileRel, _ := dim.Options["file"].(string)
-	data, err := readIngestReport(cfg, dim, stderr, command, fileRel)
+	data, artifact, err := readIngestReport(cfg, dim, stderr, command, fileRel)
 	if err != nil {
 		return MeasureResult{}, err
 	}
@@ -162,6 +162,7 @@ func measureSarif(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	// located ones (an unlocatable finding has nothing to attribute to a file).
 	res := findings.result("findings")
 	res.Value = count
+	res.Artifact = artifact
 	return res, nil
 }
 
@@ -208,7 +209,7 @@ func measureJUnit(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 		countKind = c
 	}
 
-	data, err := readIngestReport(cfg, dim, stderr, command, fileRel)
+	data, artifact, err := readIngestReport(cfg, dim, stderr, command, fileRel)
 	if err != nil {
 		return MeasureResult{}, err
 	}
@@ -260,7 +261,7 @@ func measureJUnit(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	default:
 		return MeasureResult{}, fmt.Errorf("unknown count %q", countKind)
 	}
-	return MeasureResult{Value: value, Unit: countKind}, nil
+	return MeasureResult{Value: value, Unit: countKind, Artifact: artifact}, nil
 }
 
 func collectTestCases(suites []junitTestSuite, direct []junitTestCase) []junitTestCase {
@@ -287,7 +288,7 @@ func measureCoverage(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResul
 		metric = m
 	}
 
-	data, err := readIngestReport(cfg, dim, stderr, command, fileRel)
+	data, artifact, err := readIngestReport(cfg, dim, stderr, command, fileRel)
 	if err != nil {
 		return MeasureResult{}, err
 	}
@@ -304,7 +305,7 @@ func measureCoverage(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResul
 	if err != nil {
 		return MeasureResult{}, err
 	}
-	return MeasureResult{Value: pct, Unit: "%"}, nil
+	return MeasureResult{Value: pct, Unit: "%", Artifact: artifact}, nil
 }
 
 // lcovPercent sums the found/hit counters for the metric across every record in

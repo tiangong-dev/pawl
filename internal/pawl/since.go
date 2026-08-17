@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -13,8 +14,8 @@ import (
 // Diff-scoped checking. `check --since <ref>` runs the normal gate, then
 // scopes the verdict to lines changed since <ref>: pre-existing debt on
 // unchanged lines is exempted, new regressions on added lines still fail. It is
-// the gate narrowed to new code, not a standalone scanner. See SPEC.md
-// § Diff-scoped checking.
+// the gate narrowed to new code, not a standalone scanner. See
+// spec/commands/since.md § Diff-scoped checking.
 
 // sinceScope is the resolved changed-line context for one --since run.
 type sinceScope struct {
@@ -28,29 +29,18 @@ type sinceScope struct {
 }
 
 // applySinceScope resolves the changed lines since ref and rewrites rep in
-// place. Returns exit 2 on any git failure — an unresolvable ref, missing
-// merge-base, or a config dir outside the repo must never read as "nothing
-// changed".
-func applySinceScope(cfg *Config, rep *Report, baseline *Snapshot, current map[string]Metric, ref string, stderr io.Writer) (*sinceScope, int) {
+// place. Any git failure — an unresolvable ref, missing merge-base, or a
+// config dir outside the repo — is returned so the caller can abort as
+// could-not-measure rather than a silent "nothing changed".
+func applySinceScope(cfg *Config, rep *Report, baseline *Snapshot, current map[string]Metric, ref string) (*sinceScope, error) {
 	added, mergeBase, err := addedLinesSince(cfg.Dir, ref)
 	if err != nil {
-		fmt.Fprintf(stderr, "check --since: %v\n", err)
-		return nil, 2
+		return nil, fmt.Errorf("check --since: %w", err)
 	}
-	toplevel, code, gitErr := gitOutput(cfg.Dir, "rev-parse", "--show-toplevel")
-	if code != 0 {
-		fmt.Fprintf(stderr, "check --since: %s is not inside a git repository: %s\n", cfg.Dir, gitErr)
-		return nil, 2
+	relDir, err := gitRelDir(cfg.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("check --since: %w", err)
 	}
-	// Canonicalize both sides before Rel: a config dir reached through a symlink
-	// (macOS /var vs /private/var) would otherwise produce a `../real` relDir and
-	// silently mis-map every breakdown key, suppressing real regressions.
-	relDir, err := filepath.Rel(canonicalPath(toplevel), canonicalPath(cfg.Dir))
-	if err != nil || relDir == ".." || strings.HasPrefix(relDir, ".."+string(filepath.Separator)) {
-		fmt.Fprintf(stderr, "check --since: config dir %s is outside the git repository %s\n", cfg.Dir, toplevel)
-		return nil, 2
-	}
-	relDir = filepath.ToSlash(relDir)
 
 	scope := &sinceScope{ref: ref, mergeBase: mergeBase, added: added, relDir: relDir}
 	rep.Mode = "since"
@@ -63,7 +53,7 @@ func applySinceScope(cfg *Config, rep *Report, baseline *Snapshot, current map[s
 		m := &rep.Metrics[i]
 		scope.scopeMetric(m, dimByID[m.ID], baseline.Metrics[m.ID], current[m.ID])
 	}
-	return scope, 0
+	return scope, nil
 }
 
 // scopeMetric rebuilds one metric's regressions for --since. A total-gate
@@ -165,9 +155,13 @@ func (s *sinceScope) repoPath(p string) string {
 }
 
 // addedLinesSince returns the added (new-file) lines between merge-base(ref,HEAD)
-// and HEAD, keyed by repo-relative path, plus the merge-base commit. Ref
-// resolution and merge-base are separate git calls so a typo'd ref fails loud
-// rather than silently disabling the scoping.
+// and the working tree, keyed by repo-relative path, plus the merge-base commit.
+// The working tree (tracked edits + untracked files) is the comparison, not
+// HEAD: an agent that check --since before committing would otherwise see an
+// empty added-line set and have new debt suppressed as "pre-existing". In CI
+// the working tree matches HEAD, so the committed-only form is unchanged.
+// Ref resolution and merge-base are separate git calls so a typo'd ref fails
+// loud rather than silently disabling the scoping.
 func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
 	if _, code, gitErr := gitOutput(dir, "rev-parse", "--verify", ref); code != 0 {
 		return nil, "", fmt.Errorf("could not resolve ref %q: %s", ref, gitErr)
@@ -176,11 +170,73 @@ func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
 	if code != 0 {
 		return nil, "", fmt.Errorf("no merge-base between %q and HEAD: %s", ref, gitErr)
 	}
-	diff, code, gitErr := gitOutput(dir, "diff", "--unified=0", "--no-ext-diff", mergeBase+"..HEAD")
+	// Working tree vs merge-base (staged + unstaged). Untracked files are not
+	// in this diff; they are unioned in below.
+	//
+	// The header prefixes are pinned: diff.mnemonicPrefix (which renames a//b/
+	// to c//w/), diff.noprefix, and diff.srcPrefix/dstPrefix are all developer
+	// preferences that would make every `+++ b/<path>` header parse to the wrong
+	// path — an empty added-line set, which reads as "nothing changed" and
+	// exempts every new offender as pre-existing debt.
+	diff, code, gitErr := gitOutput(dir, "diff", "--unified=0", "--no-ext-diff",
+		"--src-prefix=a/", "--dst-prefix=b/", mergeBase)
 	if code != 0 {
 		return nil, "", fmt.Errorf("git diff failed: %s", gitErr)
 	}
-	return parseAddedLines(diff), mergeBase, nil
+	added := parseAddedLines(diff)
+	if err := addUntrackedLines(dir, added); err != nil {
+		return nil, "", err
+	}
+	return added, mergeBase, nil
+}
+
+// addUntrackedLines unions every line of every untracked, non-ignored file
+// into the added-line set. A brand-new file the agent has not `git add`ed
+// yet is the common local-loop case; treating it as all-added keeps --since
+// from suppressing its findings as pre-existing debt.
+func addUntrackedLines(dir string, added map[string]map[int]bool) error {
+	listed, code, gitErr := gitOutputRaw(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
+	if code != 0 {
+		return fmt.Errorf("git ls-files failed: %s", gitErr)
+	}
+	if listed == "" {
+		return nil
+	}
+	toplevel, code, gitErr := gitOutput(dir, "rev-parse", "--show-toplevel")
+	if code != 0 {
+		return fmt.Errorf("git ls-files: %s is not inside a git repository: %s", dir, gitErr)
+	}
+	toplevel = canonicalPath(toplevel)
+	for _, rel := range strings.Split(listed, "\x00") {
+		if rel == "" {
+			continue
+		}
+		path := filepath.Join(toplevel, rel)
+		// Only a readable regular file can carry an offender: measurement skips
+		// everything else (walkIncluded), so a dangling symlink, a socket, or a
+		// file whose permissions deny reading cannot hide one from the scope.
+		// Failing on them instead would let an ordinary working tree turn the
+		// gate into "could not measure".
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		n := lineCount(data)
+		if n == 0 {
+			continue
+		}
+		if added[rel] == nil {
+			added[rel] = map[int]bool{}
+		}
+		for i := 1; i <= n; i++ {
+			added[rel][i] = true
+		}
+	}
+	return nil
 }
 
 // parseAddedLines parses a `git diff --unified=0` into added new-file line
@@ -214,6 +270,11 @@ func parseAddedLines(diff string) map[string]map[int]bool {
 			newLine++
 		case inHunk && strings.HasPrefix(line, "-"):
 			// deletion: old-side only, does not advance the new-line counter.
+		case inHunk && strings.HasPrefix(line, "\\"):
+			// `\ No newline at end of file` annotates the line before it and is
+			// not itself a line of the file. git emits it between the `-` and
+			// `+` halves of the hunk, so counting it would push every following
+			// added line one down and drop the real one out of the scope.
 		case inHunk:
 			newLine++ // a context line (rare at unified=0) advances the new side.
 		}

@@ -2,7 +2,7 @@
 
 **一个语言无关的防劣化质量门禁(anti-regression quality gate)。**
 
-English docs: [README.md](./README.md) · 完整行为契约见 [SPEC.md](./SPEC.md)。
+English docs: [README.md](./README.md) · 完整行为契约见 [SPEC.md](./SPEC.md)（[spec/](./spec/README.md)）。
 
 每个**维度(dimension)** 测量一个数字——超长文件数、重复代码行、超过复杂度阈值的函数、测试覆盖率……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就让 CI 失败**。数字只能持平或变好——门禁永不倒退。
 
@@ -98,12 +98,15 @@ pawl check
 | `pawl diff` | 测量 + 对比,打印表格,永远退出码 0 |
 | `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
 | `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
+| `pawl status` | 只读已提交快照,不重新测量 |
+| `pawl constraints` | 打印配置里的阈值、glob、pattern |
+| `pawl rank` | 按行数/字节给 include 文件排序(含近阈值文件) |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
 | `pawl help [<命令>]` | 打印全局或子命令帮助（也支持 `-h` / `--help`） |
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
-**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./SPEC.md))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查))。`record --only <id>[,<id>…]` 只重录这些维度、保留其余已提交基线原样——把某个指标的改进单独锁定,不牵动别的维度。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
+**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到工作区相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查)),包含未提交和未跟踪的文件。`--only <id>[,<id>…]` 在 `record` 上只重录这些维度、保留其余已提交基线;在 `check`/`diff` 上只测量和对比这些维度(agent 内环——CI 仍应跑全量 `check`)。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
 
 ### 退出码
 
@@ -164,7 +167,8 @@ golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告。完整配置
 
 | builtin | 层 | 测量什么 | 常用 gate |
 |---|---|---|---|
-| `file-length` | 原语 | 行数超过 `threshold` 的文件数 | `total` |
+| `file-length` | 原语 | 行数超过 `threshold` 的文件数 | `total`(再挂一个 `per-key-value` 可拦住已超限文件继续变长) |
+| `file-bytes` | 原语 | 字节数超过 `threshold` 的文件数 | `total`(配对方式同 `file-length`) |
 | `pattern-count` | 原语 | 正则匹配数(各种抑制/逃生舱:`as any`、`//nolint`、`try!`) | `per-file-count` |
 | `eslint` | adapter | ESLint 消息计数(可用 `rules` 过滤) | `per-file-count` |
 | `oxlint` | adapter | Oxlint 原生 JSON diagnostics（可按 rule/severity 过滤并跨维度共享） | `per-file-count` |
@@ -188,7 +192,7 @@ fatal 处理。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一�
     options: { file: "coverage/lcov.info", format: "lcov" }
 ```
 
-每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./SPEC.md) 与 [§ Report-format ingest](./SPEC.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
+每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./spec/adapters/builtins.md) 与 [§ Report-format ingest](./spec/adapters/ingest.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
 
 ## 自定义 adapter
 
@@ -224,7 +228,7 @@ fatal 处理。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一�
     regex: '^(?P<path>[^:]+):(?P<line>\d+):'   # value = 匹配数;path/line → breakdown
 ```
 
-另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:非 0 退出、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。若工具用非 0 表示“发现问题”,应接入共享 SARIF 等报告格式,不要用 `|| true` 把真正的崩溃也吞掉。细节见 [SPEC.md § Declarative extract layer](./SPEC.md)。
+另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:非 0 退出、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。若工具用非 0 表示“发现问题”,应接入共享 SARIF 等报告格式,不要用 `|| true` 把真正的崩溃也吞掉。细节见 [SPEC.md § Declarative extract layer](./spec/adapters/extract.md)。
 
 ## gate 模式
 
@@ -238,7 +242,7 @@ fatal 处理。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一�
 
 `tolerance` 是向变差方向的绝对容差;正好卡在边界上算通过。`higher-is-better` 与 `lower-is-better` 会把比较方向反过来。
 
-按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./SPEC.md#gate-modes) 写清了各自的边界。
+按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./spec/engine/comparison.md#gate-modes) 写清了各自的边界。
 
 ## 单独锁定一个胜利(`record --only`)
 
@@ -350,7 +354,7 @@ pawl 是单个二进制——任何 CI 里跑 `npx -y @pawl-tools/cli@0.6.0 chec
 
 ## diff 收窄检查
 
-`pawl check --since <ref>` 保留完整门禁,但**只对相对 `<ref>` 改动的行上引入的回归失败**——未触碰行上的存量债务被豁免,于是庞大的历史基线不会卡住每个 PR,而新代码依然不能回归。它仍然需要快照(是"收窄到新代码的门禁",不是独立的新代码扫描器)。
+`pawl check --since <ref>` 保留完整门禁,但**只对工作区相对 `<ref>` 改动的行上引入的回归失败**——未触碰行上的存量债务被豁免,于是庞大的历史基线不会卡住每个 PR,而新代码依然不能回归。未提交、未跟踪的改动也计入(本地 agent 循环尚未 commit 时仍能拦住新债)。它仍然需要快照(是"收窄到新代码的门禁",不是独立的新代码扫描器)。
 
 ```bash
 pawl check --since origin/main        # PR 上:只对改动行门禁
@@ -358,11 +362,24 @@ pawl check --since origin/main        # PR 上:只对改动行门禁
 
 `per-file-count` 维度(breakdown key 是 `"path:line"`、标量=offender 计数)会被收窄到新增行;`total` 与 `per-key-value` 维度无法忠实按行归属,**按全量强制**(会被显式标注,绝不静默跳过)——这样 `--since` 恰好是"full-mode 裁决收窄到改动行",不多不少。输出会报告 merge-base、哪些维度被全量强制、以及有多少条存量回归被豁免;加 `--format json` 得到机器可读形式(`mode: "since"`,每条被豁免的回归标 `suppressed`)。
 
-作用域按**行号**(与 reviewdog / Sonar clean-as-you-code 同):内容未变、只是位置移动的存量 offender 不会被 flag,但落在**内容真正改动的行**上的 offender 即使"是移过来的"也会计入——它从不漏报改动行。细节见 [SPEC.md](./SPEC.md#diff-scoped-checking)。
+作用域按**行号**(与 reviewdog / Sonar clean-as-you-code 同):内容未变、只是位置移动的存量 offender 不会被 flag,但落在**内容真正改动的行**上的 offender 即使"是移过来的"也会计入——它从不漏报改动行。细节见 [SPEC.md](./spec/commands/since.md#diff-scoped-checking)。
+
+## 给 AI agent 用 pawl
+
+pawl 是门禁,不是分析器。闭环是一条命令:
+
+1. `pawl check --format json`(可选 `--only <id>`,提交前加 `--since HEAD`)。
+2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
+3. 指标 `status: better` 时跑该 metric 的 `next_action`(`pawl record --only <id>`),不要全量 `record`。
+4. Exit 1 / `failure_class: regression` → 改代码。Exit 2 / `could-not-measure` → 修环境(`error`、`failed_metrics`),不要伪造数字。CI:全量 `pawl check`(不要 `--only`)。
+5. 裁决里带顶层 `only` 数组时,本次只测了这些维度——它的 exit 0 不等于全量门禁通过。
+6. 指标带 `artifact` 块时,这个数字是从那个文件读出来的。`generated: false` 且 `age_seconds` 很大,说明它描述的是一份旧报告而不是当前代码——先重新生成再信任或记录这个值。工件年龄不改变退出码。
+
+针对 AI 生成债务的现成配方见 [RECIPES.md](./RECIPES.md#ai-generated-debt)。
 
 ## 边界(设计决策)
 
-pawl 是**质量门禁 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./SPEC.md)。
+pawl 是**质量门禁 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./spec/engine/scope.md)。
 
 pawl 只拥有 verdict，不拥有工具链：分析器仍由项目安装、锁版本、配置和调用。自动安装工具/运行时、语言探测、格式化、自动修复、插件市场和跨次运行缓存都是明确的非目标。只有标准报告无法维持诚实测量时，才增加工具专用 adapter。
 

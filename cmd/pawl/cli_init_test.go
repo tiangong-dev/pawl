@@ -1,6 +1,6 @@
 package main
 
-// Integration tests for `pawl init`, per SPEC.md § init: it scaffolds a
+// Integration tests for `pawl init`, per spec/commands/init.md: it scaffolds a
 // starter pawl.yaml at the config path (honoring -c), reads no existing
 // config, never overwrites an existing file (exit 2, naming the path), and
 // the written config is valid and immediately usable by `pawl record` with

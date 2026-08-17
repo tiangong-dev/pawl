@@ -241,7 +241,7 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 
 func validateBuiltinOptions(builtin string, options map[string]any) error {
 	switch builtin {
-	case builtinFileLength:
+	case builtinFileLength, builtinFileBytes:
 		if len(stringList(options["include"])) == 0 {
 			return fmt.Errorf("builtin %q requires a non-empty include glob list", builtin)
 		}
@@ -377,8 +377,8 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
 		}
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinPatternCount, builtinEslint, builtinOxlint,
+		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,
 			builtinJscpd, builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
 	}
 	return nil

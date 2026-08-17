@@ -15,3 +15,12 @@ dimensions:
     options:
       threshold: 500
       include: ["**/*.go"]
+
+  - id: "file-length-growth"
+    title: "Already-long Go files must not grow"
+    direction: "lower-is-better"
+    gate: "per-key-value"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*.go"]

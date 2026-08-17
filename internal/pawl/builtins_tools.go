@@ -36,6 +36,7 @@ func measureJSONValue(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResu
 	}
 
 	var data []byte
+	var artifact *ArtifactInfo
 	if fileRel != "" {
 		filePath := filepath.Join(cfg.Dir, fileRel)
 		if command != "" {
@@ -54,6 +55,7 @@ func measureJSONValue(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResu
 		if data, err = os.ReadFile(filePath); err != nil {
 			return MeasureResult{}, fmt.Errorf("reading %s: %v", fileRel, err)
 		}
+		artifact = statArtifact(cfg, fileRel, command != "")
 	} else {
 		stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, command)
 		if err != nil {
@@ -73,7 +75,7 @@ func measureJSONValue(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResu
 		}
 		return MeasureResult{}, fmt.Errorf("%s: %v", source, err)
 	}
-	return MeasureResult{Value: value, Unit: unit}, nil
+	return MeasureResult{Value: value, Unit: unit, Artifact: artifact}, nil
 }
 
 type eslintFileResult struct {
@@ -177,7 +179,8 @@ func measureJscpd(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, 
 	if err != nil {
 		return MeasureResult{}, fmt.Errorf("jscpd report %s: %v", reportRel, err)
 	}
-	return MeasureResult{Value: lines, Unit: "duplicated lines"}, nil
+	return MeasureResult{Value: lines, Unit: "duplicated lines",
+		Artifact: statArtifact(cfg, reportRel, true)}, nil
 }
 
 type swiftComplexityReport struct {

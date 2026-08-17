@@ -24,13 +24,13 @@ func TestImprovementNotice(t *testing.T) {
 			"single improvement on CI",
 			[]string{"a"},
 			true,
-			"::notice::pawl improved: a — run `pawl record` to lock in the gains.",
+			"::notice::pawl improved: a — run `pawl record --only a` to lock in the gains.",
 		},
 		{
 			"multiple improvements on CI",
 			[]string{"a", "b"},
 			true,
-			"::notice::pawl improved: a, b — run `pawl record` to lock in the gains.",
+			"::notice::pawl improved: a, b — run `pawl record --only a,b` to lock in the gains.",
 		},
 	}
 	for _, tc := range cases {

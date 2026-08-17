@@ -116,9 +116,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "record", "check", "diff", "baseline-guard", "trend", "version", "help":
+	case "init", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | status | constraints | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -138,8 +138,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// version, so these guards run before the version short-circuit and e.g.
 	// `pawl version --limit 1` is the usage error the contract promises
 	// rather than a silent version print.
-	if onlyProvided && command != "record" {
-		fmt.Fprintf(stderr, "--only is only valid on `record`, not %q\n", command)
+	if onlyProvided && command != "record" && command != "check" && command != "diff" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, `check`, or `diff`, not %q\n", command)
 		return 2
 	}
 	if dryRun && command != "record" {
@@ -158,8 +158,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
 		return 2
 	}
-	if command == "trend" && format == "codeclimate" {
-		fmt.Fprintf(stderr, "--format codeclimate is not valid on `trend` (use text or json)\n")
+	if (command == "trend" || command == "status" || command == "constraints" || command == "rank") && format == "codeclimate" {
+		fmt.Fprintf(stderr, "--format codeclimate is not valid on `%s` (use text or json)\n", command)
 		return 2
 	}
 	if (command == "help" || helpRequested) && format != "text" {
@@ -224,63 +224,87 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return runBaselineGuard(cfg, ref, stdout, stderr)
 	}
 	if command == "record" && onlyProvided {
-		ids := parseOnly(only)
-		if len(ids) == 0 {
-			fmt.Fprintf(stderr, "--only requires at least one dimension id\n")
+		onlySet, onlyIDs, code := resolveOnlyIDs(cfg, only, "record", stderr)
+		if code != 0 {
+			return code
+		}
+		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, stdout, stderr)
+	}
+	if command == "status" {
+		return runStatus(cfg, format, stdout, stderr)
+	}
+	if command == "constraints" {
+		return runConstraints(cfg, format, stdout, stderr)
+	}
+	if command == "rank" {
+		return runRank(cfg, format, stdout, stderr)
+	}
+	measureCfg := cfg
+	var onlyIDs []string
+	if (command == "check" || command == "diff") && onlyProvided {
+		onlySet, ids, code := resolveOnlyIDs(cfg, only, command, stderr)
+		if code != 0 {
+			return code
+		}
+		if format == "codeclimate" {
+			fmt.Fprintf(stderr, "%s --only cannot emit codeclimate: a partial measurement is not a complete current findings report\n", command)
 			return 2
 		}
-		return runRecordOnly(cfg, ids, format, dryRun, acceptWorse, stdout, stderr)
+		onlyIDs = ids
+		measureCfg = configWithOnly(cfg, onlySet)
 	}
-	return runMeasureCommand(cfg, command, format, since, dryRun, acceptWorse, stdout, stderr)
+	return runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, stdout, stderr)
 }
 
-func runMeasureCommand(cfg *Config, command, format, since string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
-	baseline, parsedBaseline, err := ReadSnapshotFile(cfg.SnapshotPath)
+func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+	runScope := reportScope{command: command, since: since, only: onlyIDs}
+	baseline, parsedBaseline, err := ReadSnapshotFile(full.SnapshotPath)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 	}
 	if command != "record" {
 		if baseline == nil {
-			fmt.Fprintf(stderr, "no %s yet — run `pawl record` first.\n", cfg.SnapshotPath)
-			return 2
+			return abortCouldNotMeasure(runScope, format,
+				fmt.Sprintf("no %s yet — run `pawl record` first.", full.SnapshotPath),
+				nil, stdout, stderr)
 		}
 		if shapeErrors := SnapshotShapeErrors(parsedBaseline); len(shapeErrors) > 0 {
-			fmt.Fprintf(stderr, "%s has an invalid shape:\n", cfg.SnapshotPath)
+			msg := full.SnapshotPath + " has an invalid shape:\n"
 			for _, e := range shapeErrors {
-				fmt.Fprintf(stderr, "  • %s\n", e)
+				msg += "  • " + e + "\n"
 			}
-			return 2
+			return abortCouldNotMeasure(runScope, format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
 		}
-		ids := make([]string, 0, len(cfg.Dimensions))
-		for _, d := range cfg.Dimensions {
+		ids := make([]string, 0, len(full.Dimensions))
+		for _, d := range full.Dimensions {
 			ids = append(ids, d.ID)
 		}
 		if orphans := OrphanedMetrics(ids, baseline.Metrics); len(orphans) > 0 {
-			fmt.Fprintf(stderr, "orphaned metric(s) in %s — deleting a dimension must also drop it from the snapshot (re-run `pawl record`): %s\n",
-				cfg.SnapshotPath, strings.Join(orphans, ", "))
-			return 2
+			return abortCouldNotMeasure(runScope, format,
+				fmt.Sprintf("orphaned metric(s) in %s — deleting a dimension must also drop it from the snapshot (re-run `pawl record`): %s",
+					full.SnapshotPath, strings.Join(orphans, ", ")),
+				nil, stdout, stderr)
 		}
 	}
 
-	current, err := MeasureAll(cfg, stderr)
+	current, artifacts, err := MeasureAll(measure, stderr)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
 
 	if command == "record" {
-		return finishRecord(cfg, format, baseline, current, dryRun, acceptWorse, stdout, stderr)
+		return finishRecord(full, format, baseline, current, artifacts, dryRun, acceptWorse, stdout, stderr)
 	}
 
 	// check / diff. The report is the machine-readable and diff-scoped source of
 	// truth; the legacy text path stays the byte-for-byte human default.
-	rep := buildReport(command, cfg, baseline, current)
+	rep := buildReport(command, measure, baseline, current, artifacts)
+	rep.Only = onlyIDs
 	var scope *sinceScope
 	if since != "" {
-		s, code := applySinceScope(cfg, rep, baseline, current, since, stderr)
-		if code != 0 {
-			return code
+		s, err := applySinceScope(full, rep, baseline, current, since)
+		if err != nil {
+			return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 		}
 		scope = s
 	}
@@ -291,6 +315,7 @@ func runMeasureCommand(cfg *Config, command, format, since string, dryRun, accep
 	rep.ExitCode = exit
 
 	if format == "json" {
+		attachWatch(full, rep, scope)
 		if err := renderReportJSON(stdout, rep); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
@@ -300,7 +325,7 @@ func runMeasureCommand(cfg *Config, command, format, since string, dryRun, accep
 	if format == "codeclimate" {
 		// Findings mode: emit the current offenders regardless of the gate
 		// verdict, but keep the verdict's exit code so the gate still fails CI.
-		if err := renderCodeClimate(stdout, cfg, current); err != nil {
+		if err := renderCodeClimate(stdout, measure, current); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
@@ -310,7 +335,7 @@ func runMeasureCommand(cfg *Config, command, format, since string, dryRun, accep
 		renderSinceText(stdout, rep, scope)
 		return exit
 	}
-	return renderCheckTextLegacy(cfg, command, baseline, current, stdout)
+	return renderCheckTextLegacy(measure, command, baseline, current, stdout)
 }
 
 // renderCheckTextLegacy is the byte-for-byte human default output for
@@ -358,7 +383,7 @@ func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, curr
 	}
 	if len(improved) > 0 {
 		fmt.Fprintf(stdout, "🎉 improved: %s\n", strings.Join(improved, ", "))
-		fmt.Fprintln(stdout, "   run `pawl record` to lock in the gains.")
+		fmt.Fprintf(stdout, "   run `%s` to lock in the gains.\n", recordOnlyCommand(improved))
 	}
 	if command == "check" {
 		if onCI() {

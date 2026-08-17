@@ -10,16 +10,33 @@ import (
 // Report is pawl's stable machine-readable verdict — the `--format json` shape.
 // It is deliberately not rdjson: rdjson cannot express a scalar total, an
 // improvement, or a `--since` suppression, which are pawl's own semantics.
-// See SPEC.md § Machine-readable output.
+// See spec/engine/verdict.md § Machine-readable output.
 type Report struct {
 	SchemaVersion int                  `json:"schema_version"`
 	Command       string               `json:"command"`
 	Mode          string               `json:"mode"`
 	Since         *string              `json:"since"`
+	Only          []string             `json:"only,omitempty"`
 	DryRun        bool                 `json:"dry_run,omitempty"`
 	AcceptedWorse []AcceptedWorseEntry `json:"accepted_worse,omitempty"`
 	ExitCode      int                  `json:"exit_code"`
+	FailureClass  string               `json:"failure_class,omitempty"`
+	Error         string               `json:"error,omitempty"`
+	FailedMetrics []string             `json:"failed_metrics,omitempty"`
+	Watch         []WatchEntry         `json:"watch,omitempty"`
 	Metrics       []MetricReport       `json:"metrics"`
+}
+
+// WatchEntry is one near- or over-threshold file the current invocation
+// touched — advisory headroom, never part of the exit-code verdict.
+type WatchEntry struct {
+	ID        string  `json:"id"`
+	Path      string  `json:"path"`
+	Kind      string  `json:"kind"`
+	Value     float64 `json:"value"`
+	Threshold float64 `json:"threshold"`
+	Headroom  float64 `json:"headroom"`
+	Status    string  `json:"status"`
 }
 
 // AcceptedWorseEntry is one dimension record wrote (or, under --dry-run,
@@ -62,14 +79,19 @@ type MetricReport struct {
 	MeasurementState string       `json:"measurement_state"`
 	Status           string       `json:"status"`
 	Improved         bool         `json:"improved"`
+	NextAction       string       `json:"next_action,omitempty"`
 	Regressions      []Regression `json:"regressions"`
-	EnforcedInFull   bool         `json:"-"`
+	// Artifact names the file this dimension's measurement read, when it read
+	// one — a `file:` dimension with no `command:` is only as fresh as whatever
+	// happens to be on disk, and the number alone cannot say so.
+	Artifact       *ArtifactInfo `json:"artifact,omitempty"`
+	EnforcedInFull bool          `json:"-"`
 }
 
 // buildReport assembles the full-mode verdict for a command from the baseline
 // and a fresh measurement. Metrics are sorted by id (a stable machine contract).
 // The gate defaults to "total" in the output when a dimension left it unset.
-func buildReport(command string, cfg *Config, baseline *Snapshot, current map[string]Metric) *Report {
+func buildReport(command string, cfg *Config, baseline *Snapshot, current map[string]Metric, artifacts map[string]*ArtifactInfo) *Report {
 	rep := &Report{SchemaVersion: 2, Command: command, Mode: "full"}
 	if baseline == nil {
 		baseline = &Snapshot{} // first record: no baseline to compare against.
@@ -95,6 +117,7 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 			Current:          floatPtr(cur.Value),
 			MeasurementState: "measured",
 			Regressions:      []Regression{},
+			Artifact:         artifacts[dim.ID],
 		}
 		if b, ok := baseline.Metrics[dim.ID]; ok {
 			base := b.Value
@@ -126,8 +149,8 @@ func buildReport(command string, cfg *Config, baseline *Snapshot, current map[st
 // only true once the write actually happened; a preserved dimension's
 // SnapshotValue is the committed value either way, since a preserved metric
 // is by definition identical to what's already on disk.
-func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, wroteToDisk bool) *Report {
-	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full"}
+func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged map[string]Metric, artifacts map[string]*ArtifactInfo, only []string, wroteToDisk bool) *Report {
+	rep := &Report{SchemaVersion: 2, Command: "record", Mode: "full", Only: only}
 	dims := append([]Dimension(nil), cfg.Dimensions...)
 	sort.Slice(dims, func(i, j int) bool { return dims[i].ID < dims[j].ID })
 	for _, dim := range dims {
@@ -153,6 +176,9 @@ func buildPartialRecordReport(cfg *Config, baseline *Snapshot, measured, merged 
 		}
 		if cur, wasMeasured := measured[dim.ID]; wasMeasured {
 			m.Current = floatPtr(cur.Value)
+			// Only a dimension this invocation measured can have read a file;
+			// a preserved value's provenance is the earlier run's, not ours.
+			m.Artifact = artifacts[dim.ID]
 			if wroteToDisk {
 				m.SnapshotValue = floatPtr(cur.Value)
 			}
@@ -184,14 +210,80 @@ func hasLiveRegression(rep *Report) bool {
 	return false
 }
 
+// annotateReport fills mechanical agent-facing fields from the already-computed
+// verdict: failure_class mirrors the 1-vs-2 exit split, and next_action on an
+// improved check/diff metric is the surgical record command that locks it in.
+func annotateReport(rep *Report) {
+	switch rep.ExitCode {
+	case 1:
+		rep.FailureClass = "regression"
+	case 2:
+		rep.FailureClass = "could-not-measure"
+	}
+	if rep.Command != "check" && rep.Command != "diff" {
+		return
+	}
+	for i := range rep.Metrics {
+		if rep.Metrics[i].Improved {
+			rep.Metrics[i].NextAction = "pawl record --only " + rep.Metrics[i].ID
+		}
+	}
+}
+
 // renderReportJSON writes the verdict as one indented JSON object plus a
 // trailing newline — stdout stays pure machine output (no table, no emoji, no
 // GitHub annotations).
 func renderReportJSON(w io.Writer, rep *Report) error {
+	annotateReport(rep)
 	data, err := json.MarshalIndent(rep, "", "  ")
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(w, "%s\n", data)
 	return err
+}
+
+// reportScope is what an invocation knows about its own coverage before it has
+// a verdict: which command, whether --since narrowed it to changed lines, and
+// which dimensions --only limited it to. Both the verdict and the exit-2 abort
+// carry it, so a consumer never has to infer coverage from which metrics happen
+// to be present — an exit-0 subset must not read as a green full gate.
+type reportScope struct {
+	command string
+	since   string
+	only    []string
+}
+
+func (s reportScope) apply(rep *Report) {
+	rep.Command = s.command
+	rep.Only = s.only
+	if s.since != "" {
+		ref := s.since
+		rep.Mode = "since"
+		rep.Since = &ref
+	}
+}
+
+// abortCouldNotMeasure is the --format json path for an exit-2 gate: the
+// human diagnostic stays on stderr, and stdout gets the same verdict object
+// (failure_class: could-not-measure) so an agent does not have to parse
+// unstructured stderr. Usage errors never reach here.
+func abortCouldNotMeasure(scope reportScope, format, msg string, failedIDs []string, stdout, stderr io.Writer) int {
+	fmt.Fprintln(stderr, msg)
+	if format != "json" {
+		return 2
+	}
+	rep := &Report{
+		SchemaVersion: 2,
+		Mode:          "full",
+		ExitCode:      2,
+		Error:         msg,
+		FailedMetrics: failedIDs,
+		Metrics:       []MetricReport{},
+	}
+	scope.apply(rep)
+	if err := renderReportJSON(stdout, rep); err != nil {
+		fmt.Fprintln(stderr, err)
+	}
+	return 2
 }

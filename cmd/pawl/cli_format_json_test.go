@@ -16,10 +16,25 @@ type jsonReport struct {
 	Command       string              `json:"command"`
 	Mode          string              `json:"mode"`
 	Since         *string             `json:"since"`
+	Only          []string            `json:"only"`
 	DryRun        bool                `json:"dry_run"`
 	AcceptedWorse []jsonAcceptedWorse `json:"accepted_worse"`
 	ExitCode      int                 `json:"exit_code"`
+	FailureClass  string              `json:"failure_class"`
+	Error         string              `json:"error"`
+	FailedMetrics []string            `json:"failed_metrics"`
+	Watch         []jsonWatch         `json:"watch"`
 	Metrics       []jsonMetric        `json:"metrics"`
+}
+
+type jsonWatch struct {
+	ID        string  `json:"id"`
+	Path      string  `json:"path"`
+	Kind      string  `json:"kind"`
+	Value     float64 `json:"value"`
+	Threshold float64 `json:"threshold"`
+	Headroom  float64 `json:"headroom"`
+	Status    string  `json:"status"`
 }
 
 type jsonAcceptedWorse struct {
@@ -39,7 +54,18 @@ type jsonMetric struct {
 	MeasurementState string           `json:"measurement_state"`
 	Status           string           `json:"status"`
 	Improved         bool             `json:"improved"`
+	NextAction       string           `json:"next_action"`
 	Regressions      []jsonRegression `json:"regressions"`
+	Artifact         *jsonArtifact    `json:"artifact"`
+}
+
+// jsonArtifact is the file a measurement read off disk. Absent when the
+// measurement read no file at all.
+type jsonArtifact struct {
+	Path       string `json:"path"`
+	Modified   string `json:"modified"`
+	AgeSeconds int64  `json:"age_seconds"`
+	Generated  bool   `json:"generated"`
 }
 
 type jsonRegression struct {

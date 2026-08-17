@@ -1,7 +1,7 @@
 # pawl.yaml — a language-agnostic anti-regression quality gate.
 # Each dimension measures one number; `pawl record` snapshots them and
 # `pawl check` fails a PR when any dimension regresses. Numbers may only hold or
-# improve. Full contract: SPEC.md. Copy-paste more dimensions (ESLint, coverage,
+# improve. Full contract: spec/README.md (index: SPEC.md). Copy-paste more dimensions (ESLint, coverage,
 # complexity, SARIF, JUnit, duplication, …) from RECIPES.md.
 
 dimensions:
@@ -9,6 +9,17 @@ dimensions:
   - id: "file-length"
     title: "Files over 500 lines"
     direction: "lower-is-better"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*"]
+      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+
+  # Same scan, per-key-value: an already-long file must not keep growing.
+  - id: "file-length-growth"
+    title: "Already-long files must not grow"
+    direction: "lower-is-better"
+    gate: "per-key-value"
     builtin: "file-length"
     options:
       threshold: 500

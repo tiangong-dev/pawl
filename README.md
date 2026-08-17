@@ -2,7 +2,7 @@
 
 **A language-agnostic anti-regression quality gate.**
 
-中文文档见 [README.zh-CN.md](./README.zh-CN.md) · Full behavioral contract in [SPEC.md](./SPEC.md).
+中文文档见 [README.zh-CN.md](./README.zh-CN.md) · Full behavioral contract in [SPEC.md](./SPEC.md) ([spec/](./spec/README.md)).
 
 Each **dimension** measures one number — files over a length limit, duplicated
 lines, functions over a complexity threshold, test coverage, whatever you can
@@ -129,6 +129,9 @@ pawl check
 | `pawl diff` | measure + compare, print the table, always exit 0 |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
+| `pawl status` | print the committed snapshot without measuring |
+| `pawl constraints` | print configured thresholds, globs, and patterns |
+| `pawl rank` | rank included files by line or byte size (including near-threshold files) |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 | `pawl help [<command>]` | print global or command help (also `-h` / `--help`) |
 
@@ -136,16 +139,17 @@ pawl check
 command runs `check`.
 
 **Flags.** `--format json` makes `record`/`check`/`diff` print a stable
-machine-readable verdict instead of the table ([schema](./SPEC.md)) — pawl stays
+machine-readable verdict instead of the table ([schema](./spec/engine/verdict.md#machine-readable-output)) — pawl stays
 the gate, any reporter consumes the JSON. `--format codeclimate` emits a
 [Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
-`check --since <ref>` scopes the gate to lines changed since `<ref>`
-([clean-as-you-code](#diff-scoped-checking)). `record --only <id>[,<id>…]`
+`check --since <ref>` scopes the gate to lines changed in the working tree since `<ref>`
+([clean-as-you-code](#diff-scoped-checking)). `--only <id>[,<id>…]` on `record`
 re-records just those dimensions and preserves the rest of the committed
-baseline, so a win on one metric locks in without re-blessing the others.
-`record` refuses to write a dimension worse than the committed baseline
-unless you pass `--accept-worse`; `--dry-run` previews what a record would
-write without writing it ([accepted debt](#accepting-debt---accept-worse---dry-run)).
+baseline; on `check`/`diff` it measures and compares only those dimensions (the
+agent inner loop — CI should still run a full `check`). `record` refuses to write
+a dimension worse than the committed baseline unless you pass `--accept-worse`;
+`--dry-run` previews what a record would write without writing it
+([accepted debt](#accepting-debt---accept-worse---dry-run)).
 
 ### Exit codes
 
@@ -207,7 +211,8 @@ the tool setup.
 
 | builtin | tier | measures | typical gate |
 |---|---|---|---|
-| `file-length` | primitive | files whose line count exceeds `threshold` | `total` |
+| `file-length` | primitive | files whose line count exceeds `threshold` | `total` (pair with `per-key-value` to block growth of already-long files) |
+| `file-bytes` | primitive | files whose byte size exceeds `threshold` | `total` (same pairing as `file-length`) |
 | `pattern-count` | primitive | regexp matches (suppressions, escape hatches: `as any`, `//nolint`, `try!`) | `per-file-count` |
 | `eslint` | adapter | counted ESLint messages (optionally filtered by `rules`) | `per-file-count` |
 | `oxlint` | adapter | Oxlint native JSON diagnostics, filtered by rule/severity and shareable across dimensions | `per-file-count` |
@@ -231,7 +236,7 @@ one dimension away from any lcov report your CI already produces:
 ```
 
 Each builtin's exact options, exit-code handling, and breakdown shape are in
-[SPEC.md § Built-in adapters](./SPEC.md) and [§ Report-format ingest](./SPEC.md).
+[SPEC.md § Built-in adapters](./spec/adapters/builtins.md) and [§ Report-format ingest](./spec/adapters/ingest.md).
 Copy-paste configs for all of them — plus SARIF/JUnit/coverage/complexity/
 duplication — are in the [recipe cookbook](./RECIPES.md).
 
@@ -286,7 +291,7 @@ exit, or output that can't be extracted, is a measurement failure (exit 2). With
 silent zero. Tools whose "findings found" exit code is non-zero should use a
 report-format builtin (for example the shared SARIF recipe) rather than hiding
 every failure with `|| true`. Details in
-[SPEC.md § Declarative extract layer](./SPEC.md).
+[SPEC.md § Declarative extract layer](./spec/adapters/extract.md).
 
 ## Gate modes
 
@@ -311,7 +316,7 @@ Pick the gate for the shape: `per-file-count` is the strong net-zero defense for
 *issue-count* dimensions (offenders coming and going); `per-key-value` fits
 *stable-key numeric* dimensions (a fixed key set whose values move) and only
 guards keys already in the baseline. Neither is a universal net-zero proof — the
-[SPEC](./SPEC.md#gate-modes) spells out the edges.
+[SPEC](./spec/engine/comparison.md#gate-modes) spells out the edges.
 
 ## Locking in one win (`record --only`)
 
@@ -461,10 +466,12 @@ hand-edited to a worse value. Run it on PRs alongside `check`.
 ## Diff-scoped checking
 
 `pawl check --since <ref>` keeps the full gate but **only fails on regressions
-introduced by lines changed since `<ref>`** — pre-existing debt on untouched lines
-is exempted, so a large legacy baseline doesn't block every PR while new code
-still can't regress. It still needs the snapshot (it's the gate narrowed to new
-code, not a standalone scanner).
+introduced by lines changed in the working tree since `<ref>`** — pre-existing
+debt on untouched lines is exempted, so a large legacy baseline doesn't block
+every PR while new code still can't regress. Uncommitted and untracked edits
+count (so a local agent loop that has not committed yet still gates new debt).
+It still needs the snapshot (it's the gate narrowed to new code, not a
+standalone scanner).
 
 ```bash
 pawl check --since origin/main        # on a PR: gate only the changed lines
@@ -482,7 +489,20 @@ regression flagged `suppressed`).
 Scoping is line-based (like reviewdog / Sonar clean-as-you-code): a pre-existing
 offender that merely shifts position isn't flagged, but one on a line whose
 content actually changed counts even if it "moved" there — it never
-under-reports a changed line. Details in [SPEC.md](./SPEC.md#diff-scoped-checking).
+under-reports a changed line. Details in [SPEC.md](./spec/commands/since.md#diff-scoped-checking).
+
+## Using pawl from an AI agent
+
+pawl is a gate, not an analyzer. The loop is one command:
+
+1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
+2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
+3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
+4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
+5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
+6. A metric with an `artifact` block read that file off disk. `generated: false` plus a large `age_seconds` means the number describes an old report, not the current tree — regenerate it before trusting or recording the value. The age never changes the exit code.
+
+Copy-paste dimensions that catch AI-shaped debt are in [RECIPES.md](./RECIPES.md#ai-generated-debt).
 
 ## Scope boundary
 
@@ -491,7 +511,7 @@ language. Line counting and regexp matching are Go-native because they need no
 grammar; everything requiring real language semantics (complexity, type escapes)
 is delegated to that language's own best analyzer through an adapter, so the gate
 agrees with what developers already see in their IDE. Rationale in
-[SPEC.md § Scope boundary](./SPEC.md).
+[SPEC.md § Scope boundary](./spec/engine/scope.md).
 
 Pawl owns the verdict, not the toolchain: projects install, pin, configure, and
 invoke analyzers. Automatic tool/runtime installation, language detection,

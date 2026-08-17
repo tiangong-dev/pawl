@@ -5,7 +5,7 @@ package main
 // instead of the text/json report. It is FINDINGS MODE: it lists every
 // current per-file-count offender the gate can locate to a path:line,
 // independent of the snapshot delta. stderr and the exit code are unchanged
-// from text mode. See SPEC.md § Machine-readable Output.
+// from text mode. See spec/engine/verdict.md § Code Quality output.
 
 import (
 	"encoding/json"

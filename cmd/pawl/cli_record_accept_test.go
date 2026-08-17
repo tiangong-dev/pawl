@@ -3,7 +3,7 @@ package main
 // Integration tests for record's default write gate: a full (or --only)
 // record that would write a dimension worse than the committed baseline is
 // refused unless --accept-worse says otherwise, and --dry-run previews
-// without writing either way. See SPEC.md § Accepted debt.
+// without writing either way. See spec/commands/record.md § Accepted debt.
 
 import (
 	"strings"

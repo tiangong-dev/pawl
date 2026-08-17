@@ -16,6 +16,28 @@ dimensions:
       threshold: 500
       include: ["**/*.go"]
 
+  # Complements file-length: total ignores growth of already-long files, which
+  # is the usual way generated code inflates a grandfathered offender. Empty
+  # while no file is over 500; the first one that crosses is caught by total,
+  # and from then on this dimension freezes that file's line count.
+  - id: "file-length-growth"
+    title: "Already-long Go files must not grow"
+    direction: "lower-is-better"
+    gate: "per-key-value"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*.go"]
+
+  - id: "file-bytes"
+    title: "Go files over 32 KiB"
+    direction: "lower-is-better"
+    gate: "total"
+    builtin: "file-bytes"
+    options:
+      threshold: 32768
+      include: ["**/*.go"]
+
   # pawl reports failures as error returns, never panics; the one legitimate
   # invariant panic (json.Marshal of a string) holds the baseline at 1.
   - id: "panics"
