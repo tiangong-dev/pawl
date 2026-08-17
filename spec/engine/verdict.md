@@ -113,8 +113,9 @@ when nothing was accepted as worse.
   diagnostic on stderr, and also emits the verdict object on stdout:
   `failure_class` is `"could-not-measure"`, `error` is that diagnostic, and
   `failed_metrics` lists the dimension ids that failed to measure (omitted when
-  the run never reached a dimension — missing snapshot, orphan, `--since` git
-  failure). `metrics` is `[]`. The object still describes the invocation's
+  no dimension is what failed — missing snapshot, orphan, `--since` git failure,
+  or a snapshot that could not be written after a clean measurement).
+  `metrics` is `[]`. The object still describes the invocation's
   coverage: `mode`/`since` reflect `--since` (a `--since` run that could not
   resolve its ref is still `mode: "since"`), and `only` the narrowed dimension
   set. Usage errors (unknown command, mis-scoped flag)

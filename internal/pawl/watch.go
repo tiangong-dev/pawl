@@ -128,26 +128,26 @@ func touchedConfigPaths(cfg *Config, scope *sinceScope) (map[string]bool, error)
 }
 
 func dirtyRepoPaths(dir string) ([]string, error) {
-	listed, code, gitErr := gitOutput(dir, "diff", "--name-only", "--no-renames", "HEAD")
+	// Both listings are -z: a path is whatever bytes git prints between the
+	// NULs, blanks at either end included. Splitting on newlines and trimming
+	// would drop such a file out of the touched set and out of watch with it.
+	listed, code, gitErr := gitOutputRaw(dir, "diff", "--name-only", "--no-renames", "-z", "HEAD")
 	if code != 0 {
 		return nil, fmt.Errorf("git diff failed: %s", gitErr)
 	}
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) {
-		p = strings.TrimSpace(p)
 		if p == "" || seen[p] {
 			return
 		}
 		seen[p] = true
 		paths = append(paths, filepath.ToSlash(p))
 	}
-	if listed != "" {
-		for _, p := range strings.Split(listed, "\n") {
-			add(p)
-		}
+	for _, p := range strings.Split(listed, "\x00") {
+		add(p)
 	}
-	others, code, gitErr := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
+	others, code, gitErr := gitOutputRaw(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
 	if code != 0 {
 		return nil, fmt.Errorf("git ls-files failed: %s", gitErr)
 	}

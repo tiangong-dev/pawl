@@ -12,8 +12,13 @@ scanner: it still requires the snapshot (missing snapshot → exit 2, like
 **Changed-line set.** `git merge-base <ref> HEAD` (in `cfg.Dir`), then
 `git diff --unified=0 --no-ext-diff <merge-base>` (working tree vs merge-base,
 so staged and unstaged edits are included) unioned with every line of every
-untracked, non-ignored file from `git ls-files --others --exclude-standard --full-name`.
-The added (`+`) lines give `map[repo-relative path]set<new line number>`.
+untracked, non-ignored file from `git ls-files --others --exclude-standard --full-name -z`.
+The added (`+`) lines give `map[repo-relative path]set<new line number>`. A
+`\ No newline at end of file` marker inside a hunk annotates the line before it
+rather than being a line of the file, so it does not advance the new-side
+counter (counting it would shift every following added line down by one and drop
+the changed line out of the set). Path listings are read `-z` and each record is
+taken verbatim between the NULs, blanks at either end included.
 Untracked files are treated as all-added; an untracked entry that is not a
 readable **regular** file (a dangling symlink, a socket, a file whose
 permissions deny reading) is skipped, not an error — measurement skips

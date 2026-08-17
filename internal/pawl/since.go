@@ -195,7 +195,7 @@ func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
 // yet is the common local-loop case; treating it as all-added keeps --since
 // from suppressing its findings as pre-existing debt.
 func addUntrackedLines(dir string, added map[string]map[int]bool) error {
-	listed, code, gitErr := gitOutput(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
+	listed, code, gitErr := gitOutputRaw(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
 	if code != 0 {
 		return fmt.Errorf("git ls-files failed: %s", gitErr)
 	}
@@ -270,6 +270,11 @@ func parseAddedLines(diff string) map[string]map[int]bool {
 			newLine++
 		case inHunk && strings.HasPrefix(line, "-"):
 			// deletion: old-side only, does not advance the new-line counter.
+		case inHunk && strings.HasPrefix(line, "\\"):
+			// `\ No newline at end of file` annotates the line before it and is
+			// not itself a line of the file. git emits it between the `-` and
+			// `+` halves of the hunk, so counting it would push every following
+			// added line one down and drop the real one out of the scope.
 		case inHunk:
 			newLine++ // a context line (rare at unified=0) advances the new side.
 		}

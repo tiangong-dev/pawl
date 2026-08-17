@@ -34,8 +34,10 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 	}
 
 	if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		// A snapshot that could not be written is exit 2 like any other
+		// could-not-measure, and owes --format json the same verdict object:
+		// exit 2 with an empty stdout is indistinguishable from a broken parse.
+		return abortCouldNotMeasure(reportScope{command: "record"}, format, err.Error(), nil, stdout, stderr)
 	}
 	if format == "json" {
 		rep := buildReport("record", cfg, baseline, current, artifacts)

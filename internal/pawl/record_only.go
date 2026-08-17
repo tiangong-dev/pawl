@@ -141,8 +141,8 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 	}
 
 	if err := WriteSnapshotFile(cfg.SnapshotPath, merged); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		// Same as a full record: exit 2 still owes --format json its verdict.
+		return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 	}
 
 	if format == "json" {
