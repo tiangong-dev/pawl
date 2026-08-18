@@ -328,24 +328,3 @@ func TestRecordFormatJSONEmitsObjectAndWritesSnapshot(t *testing.T) {
 
 // diff --format json lists regressions but reports exit_code 0 — diff never
 // fails, and its JSON must say so.
-func TestDiffFormatJSONListsRegressionsButExitZero(t *testing.T) {
-	dir := t.TempDir()
-	mustRecord(t, dir, buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 5}'`}))
-	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 8}'`}))
-
-	res := runPawl(t, dir, baseEnv(), "diff", "--format", "json")
-	if res.exit != 0 {
-		t.Fatalf("diff exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
-	}
-	r := parseReport(t, res.stdout)
-	if r.Command != "diff" {
-		t.Errorf("command = %q, want diff", r.Command)
-	}
-	if r.ExitCode != 0 {
-		t.Errorf("exit_code = %d, want 0 (diff never fails)", r.ExitCode)
-	}
-	m, _ := metricByID(r, "m")
-	if len(m.Regressions) == 0 {
-		t.Errorf("regressions empty, want the scalar regression listed even though diff exits 0")
-	}
-}

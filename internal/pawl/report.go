@@ -49,7 +49,7 @@ type WatchEntry struct {
 // AcceptedWorseEntry is one dimension record wrote (or, under --dry-run,
 // would write) worse than the committed baseline — the machine-readable twin
 // of the `Pawl-Accept: <id> <value>` trailer hint text mode prints, so a
-// `--format json`/`--format codeclimate` caller can build the same commit
+// `--format json` caller can build the same commit
 // trailer without re-deriving it from Metrics/status.
 type AcceptedWorseEntry struct {
 	ID    string  `json:"id"`
@@ -227,7 +227,7 @@ func annotateReport(rep *Report) {
 	case 2:
 		rep.FailureClass = "could-not-measure"
 	}
-	if rep.Command != "check" && rep.Command != "diff" {
+	if rep.Command != "check" {
 		return
 	}
 	for i := range rep.Metrics {

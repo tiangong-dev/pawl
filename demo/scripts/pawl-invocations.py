@@ -44,9 +44,13 @@ BASH_EDIT = re.compile(
 # must start a command or follow a shell separator.
 PAWL_CALL = re.compile(r"(?:^|[;&|(]\s*|\s)pawl(\s+[^;&|)\n]*)?")
 
+# Includes commands pawl has since retired (diff, status, constraints), so
+# transcripts recorded before their removal still classify instead of falling
+# through to "check (default)".
 KNOWN_COMMANDS = {
-    "init", "agent-md", "record", "check", "diff", "baseline-guard",
-    "trend", "status", "constraints", "rank", "version", "help",
+    "init", "agent-md", "record", "check", "baseline-guard",
+    "trend", "rank", "version", "help",
+    "diff", "status", "constraints",
 }
 
 

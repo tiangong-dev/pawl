@@ -50,7 +50,6 @@ func TestAgentMDBlockCarriesTheLoadBearingRules(t *testing.T) {
 		"excluded",                 // a scoped verdict is not a green gate
 		"watch",                    // headroom is advisory, judging it is the agent's job
 		"pawl rank --format json",  // measure headroom before the edit, not after
-		"pawl diff",                // which of the two measuring commands to use
 		"artifact",                 // a stale report is not the current tree
 	} {
 		if !strings.Contains(out, want) {
@@ -126,7 +125,7 @@ func TestAgentMDNeedsNoConfig(t *testing.T) {
 
 func TestAgentMDRejectsFormatFlag(t *testing.T) {
 	dir := t.TempDir()
-	for _, format := range []string{"json", "codeclimate"} {
+	for _, format := range []string{"json", "text-ish"} {
 		res := runPawl(t, dir, baseEnv(), "agent-md", "--format", format)
 		if res.exit != 2 {
 			t.Errorf("agent-md --format %s exit = %d, want 2", format, res.exit)
@@ -138,7 +137,7 @@ func TestWriteFlagRejectedOnOtherCommands(t *testing.T) {
 	dir := t.TempDir()
 	mustRecord(t, dir, onlyDimConfig())
 
-	for _, command := range []string{"check", "record", "init", "status"} {
+	for _, command := range []string{"check", "record", "init", "rank"} {
 		res := runPawl(t, dir, baseEnv(), command, "--write")
 		if res.exit != 2 {
 			t.Errorf("%s --write exit = %d, want 2 (usage error)\nstdout=%s", command, res.exit, res.stdout)

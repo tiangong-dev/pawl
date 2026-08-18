@@ -72,7 +72,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			write = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
-				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
+				fmt.Fprintf(stderr, "--format requires a value (text|json)\n")
 				return 2
 			}
 			i++
@@ -95,8 +95,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			positional = append(positional, args[i])
 		}
 	}
-	if format != "text" && format != "json" && format != "codeclimate" {
-		fmt.Fprintf(stderr, "--format must be text, json or codeclimate, got %q\n", format)
+	if format != "text" && format != "json" {
+		fmt.Fprintf(stderr, "--format must be text or json, got %q\n", format)
 		return 2
 	}
 	if len(positional) > 0 {
@@ -119,9 +119,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "agent-md", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version", "help":
+	case "init", "agent-md", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | record | check | diff | baseline-guard <ref> | trend [<id>] | status | constraints | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -141,8 +141,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// version, so these guards run before the version short-circuit and e.g.
 	// `pawl version --limit 1` is the usage error the contract promises
 	// rather than a silent version print.
-	if onlyProvided && command != "record" && command != "check" && command != "diff" {
-		fmt.Fprintf(stderr, "--only is only valid on `record`, `check`, or `diff`, not %q\n", command)
+	if onlyProvided && command != "record" && command != "check" {
+		fmt.Fprintf(stderr, "--only is only valid on `record` or `check`, not %q\n", command)
 		return 2
 	}
 	if dryRun && command != "record" {
@@ -167,10 +167,6 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	}
 	if limitSet && command != "trend" {
 		fmt.Fprintf(stderr, "--limit is only valid on `trend`, not %q\n", command)
-		return 2
-	}
-	if (command == "trend" || command == "status" || command == "constraints" || command == "rank") && format == "codeclimate" {
-		fmt.Fprintf(stderr, "--format codeclimate is not valid on `%s` (use text or json)\n", command)
 		return 2
 	}
 	if (command == "help" || helpRequested) && format != "text" {
@@ -248,25 +244,15 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		}
 		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, stdout, stderr)
 	}
-	if command == "status" {
-		return runStatus(cfg, format, stdout, stderr)
-	}
-	if command == "constraints" {
-		return runConstraints(cfg, format, stdout, stderr)
-	}
 	if command == "rank" {
 		return runRank(cfg, format, stdout, stderr)
 	}
 	measureCfg := cfg
 	var onlyIDs []string
-	if (command == "check" || command == "diff") && onlyProvided {
+	if command == "check" && onlyProvided {
 		onlySet, ids, code := resolveOnlyIDs(cfg, only, command, stderr)
 		if code != 0 {
 			return code
-		}
-		if format == "codeclimate" {
-			fmt.Fprintf(stderr, "%s --only cannot emit codeclimate: a partial measurement is not a complete current findings report\n", command)
-			return 2
 		}
 		onlyIDs = ids
 		measureCfg = configWithOnly(cfg, onlySet)
@@ -315,7 +301,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 		return finishRecord(full, format, baseline, current, artifacts, dryRun, acceptWorse, stdout, stderr)
 	}
 
-	// check / diff. The report is the machine-readable and diff-scoped source of
+	// check. The report is the machine-readable and diff-scoped source of
 	// truth; the legacy text path stays the byte-for-byte human default.
 	rep := buildReport(command, measure, baseline, current, artifacts)
 	rep.Only = onlyIDs
@@ -329,7 +315,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 		scope = s
 	}
 	exit := 0
-	if command == "check" && hasLiveRegression(rep) {
+	if hasLiveRegression(rep) {
 		exit = 1
 	}
 	rep.ExitCode = exit
@@ -337,15 +323,6 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 	if format == "json" {
 		attachWatch(full, rep, scope)
 		if err := renderReportJSON(stdout, rep); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		return exit
-	}
-	if format == "codeclimate" {
-		// Findings mode: emit the current offenders regardless of the gate
-		// verdict, but keep the verdict's exit code so the gate still fails CI.
-		if err := renderCodeClimate(stdout, measure, current); err != nil {
 			fmt.Fprintln(stderr, err)
 			return 2
 		}

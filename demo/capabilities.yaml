@@ -73,7 +73,7 @@ capabilities:
   - id: "uses-json-format"
     title: "Runs `pawl check --format json`, not the text table, in its own loop"
     detect: >
-      Every `pawl check`/`pawl record`/`pawl diff` invocation the agent runs
+      Every `pawl check`/`pawl record` invocation the agent runs
       for its own decision-making carries `--format json`. The text table is
       fine when the agent is showing output to the human, not when parsing it.
 
@@ -88,7 +88,7 @@ capabilities:
   - id: "only-record-on-better"
     title: "Only runs `pawl record` after confirming `status: \"better\"`"
     detect: >
-      Every `pawl record` invocation is preceded by a `check`/`diff` in the
+      Every `pawl record` invocation is preceded by a `check` in the
       same session showing "better" for that metric — never a speculative
       record "just in case".
 

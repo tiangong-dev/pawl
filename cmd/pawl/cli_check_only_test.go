@@ -68,17 +68,6 @@ func TestCheckOnlySkipsBrokenUnlistedAdapter(t *testing.T) {
 	}
 }
 
-func TestDiffOnlyAccepted(t *testing.T) {
-	dir := t.TempDir()
-	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
-	writeFile(t, dir, "pawl.yaml", twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 9}'`))
-
-	res := runPawl(t, dir, baseEnv(), "diff", "--only", "a")
-	if res.exit != 0 {
-		t.Fatalf("diff --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
-	}
-}
-
 func TestCheckOnlyUnknownIDExitsTwo(t *testing.T) {
 	dir := t.TempDir()
 	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
@@ -116,7 +105,7 @@ func TestOnlyJSONNamesNarrowedScope(t *testing.T) {
 		t.Errorf("full check reported only = %v, want it omitted", r.Only)
 	}
 
-	for _, command := range []string{"check", "diff", "record"} {
+	for _, command := range []string{"check", "record"} {
 		t.Run(command, func(t *testing.T) {
 			res := runPawl(t, dir, baseEnv(), command, "--only", "b,a", "--format", "json")
 			r := parseReport(t, res.stdout)

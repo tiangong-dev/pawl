@@ -132,37 +132,31 @@ func TestBareVersionFlagStillWorksInEmptyDir(t *testing.T) {
 	}
 }
 
-// TestTrendFormatCodeclimateVersionFlagStillUsageError guards that
-// `--format codeclimate` on `trend` — a usage error on its own, since
-// codeclimate has no tabular meaning for trend — keeps winning over a
-// `--version` riding alongside it: the format usage error is reported (exit
-// 2), and no version text reaches stdout.
-func TestTrendFormatCodeclimateVersionFlagStillUsageError(t *testing.T) {
-	dir, homeDir := newTrendRepo(t)
-	commitSnapshotAt(t, dir, homeDir, map[string]trendMetricValue{
-		"file-length": {direction: "lower-is-better", unit: "files > 500 lines", value: 5},
-	}, "v1", "2026-01-01 12:00:00 +0000")
+// A --format that is a usage error on its own command keeps winning over a
+// --version riding alongside it: the usage error is reported (exit 2) and no
+// version text reaches stdout. agent-md emits Markdown, so any --format on it
+// is that usage error.
+func TestAgentMDFormatVersionFlagStillUsageError(t *testing.T) {
+	dir := t.TempDir()
 
-	res := runPawl(t, dir, gitEnv(homeDir), "trend", "--format", "codeclimate", "--version")
+	res := runPawl(t, dir, baseEnv(), "agent-md", "--format", "json", "--version")
 	if res.exit != 2 {
-		t.Fatalf("trend --format codeclimate --version exit = %d, want 2 (the format usage error outranks --version)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+		t.Fatalf("agent-md --format json --version exit = %d, want 2 (the format usage error outranks --version)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 	if containsVersionString(res.stdout) {
-		t.Errorf("stdout = %q, must not contain the version string when --format codeclimate is a usage error on trend", res.stdout)
+		t.Errorf("stdout = %q, must not contain the version string when --format is a usage error on agent-md", res.stdout)
 	}
 }
 
-// TestCheckFormatCodeclimateVersionFlagWins is the control: codeclimate IS a
-// valid format for check, so --version legitimately wins there and still
-// prints the version — proving the guard above rejects only the
-// trend+codeclimate combination, not --version's general priority over
-// --format.
-func TestCheckFormatCodeclimateVersionFlagWins(t *testing.T) {
+// The control: json IS a valid format for check, so --version legitimately
+// wins there and still prints the version — proving the guard above rejects
+// only the invalid pairing, not --version's general priority over --format.
+func TestCheckFormatVersionFlagWins(t *testing.T) {
 	dir := t.TempDir()
 	config := buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 1}'`})
 	mustRecord(t, dir, config)
 
-	res := runPawl(t, dir, baseEnv(), "check", "--format", "codeclimate", "--version")
+	res := runPawl(t, dir, baseEnv(), "check", "--format", "json", "--version")
 	if res.exit != 0 {
 		t.Fatalf("exit = %d, want 0 (stdout=%q stderr=%q)", res.exit, res.stdout, res.stderr)
 	}

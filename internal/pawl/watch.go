@@ -12,7 +12,7 @@ import (
 // It is advisory: a failure to resolve git state omits the field rather than
 // failing the gate. record never carries watch.
 func attachWatch(cfg *Config, rep *Report, scope *sinceScope) {
-	if rep.Command != "check" && rep.Command != "diff" {
+	if rep.Command != "check" {
 		return
 	}
 	touched, err := touchedConfigPaths(cfg, scope)

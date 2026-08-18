@@ -70,10 +70,6 @@ func configWithOnly(cfg *Config, onlySet map[string]bool) *Config {
 // spec/commands/record.md § Partial record and § Accepted debt.
 func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
 	runScope := reportScope{command: "record", only: only}
-	if format == "codeclimate" {
-		fmt.Fprintln(stderr, "record --only cannot emit codeclimate: a partial measurement is not a complete current findings report")
-		return 2
-	}
 
 	// An existing, well-formed snapshot is what --only preserves; "preserve the
 	// rest" is meaningless without a baseline.

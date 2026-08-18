@@ -119,7 +119,7 @@ func TestUnknownCommandListsValidCommands(t *testing.T) {
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
-	for _, want := range []string{"record", "check", "diff", "baseline-guard"} {
+	for _, want := range []string{"record", "check", "agent-md", "baseline-guard"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Errorf("stderr does not mention valid command %q: %s", want, res.stderr)
 		}

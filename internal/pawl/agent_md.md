@@ -8,9 +8,9 @@ an outcome you never measured.
 
 1. Inner loop: `pawl check --format json` (add `--only <id>` while iterating on
    one dimension, `--since HEAD` before a commit). Read `failure_class`,
-   `next_action`, and `watch`. `pawl diff` is the same measurement with the
-   exit code forced to 0 — reach for it only when you deliberately do not want
-   a failure; otherwise stay on `check` and read `exit_code` from the JSON.
+   `next_action`, and `watch`.
+   `exit_code` is in the JSON too, so a step that must not fail CI is
+   `pawl check || true`, never a second command.
 2. Exit 1 / `failure_class: "regression"` → fix the source. Exit 2 /
    `failure_class: "could-not-measure"` → fix the environment named in `error`
    and `failed_metrics` (a missing tool, a stale or absent report file). Never

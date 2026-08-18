@@ -13,7 +13,6 @@ can only hold or improve — the gate never slips backward.
 ```bash
 pawl record                     # measure everything, write the baseline
 pawl check                      # CI gate: exit 1 on any regression
-pawl diff                       # measure + compare, print the table, never fail
 pawl baseline-guard origin/main # anti-tamper: catch hand-edited baselines
 ```
 
@@ -40,8 +39,8 @@ adapter command — the baseline and the CI gate stay put.
   "measured zero", and a hand-edited baseline is caught by `baseline-guard`. The
   gate would rather stop loud than pass a lie.
 - **One static binary.** Drop it into any CI in seconds; it sits on top of the
-  tools you already run, and renders natively as GitHub PR comments/annotations or
-  a GitLab Code Quality report.
+  tools you already run, and renders natively as GitHub PR comments and
+  annotations.
 
 ---
 
@@ -134,11 +133,8 @@ pawl agent-md --write   # appends the operating loop to AGENTS.md
 | `pawl agent-md [--write]` | print the operating loop a coding agent needs to use this gate, or append it to `AGENTS.md` |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
-| `pawl diff` | measure + compare, print the table, always exit 0 |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
-| `pawl status` | print the committed snapshot without measuring |
-| `pawl constraints` | print configured thresholds, globs, and patterns |
 | `pawl rank` | rank included files by line or byte size (including near-threshold files) |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 | `pawl help [<command>]` | print global or command help (also `-h` / `--help`) |
@@ -146,14 +142,13 @@ pawl agent-md --write   # appends the operating loop to AGENTS.md
 `-c <path>` selects the config file (default `./pawl.yaml`). Omitting the
 command runs `check`.
 
-**Flags.** `--format json` makes `record`/`check`/`diff` print a stable
+**Flags.** `--format json` makes `record`/`check` print a stable
 machine-readable verdict instead of the table ([schema](./spec/engine/verdict.md#machine-readable-output)) — pawl stays
-the gate, any reporter consumes the JSON. `--format codeclimate` emits a
-[Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
+the gate, any reporter consumes the JSON.
 `check --since <ref>` scopes the gate to lines changed in the working tree since `<ref>`
 ([clean-as-you-code](#diff-scoped-checking)). `--only <id>[,<id>…]` on `record`
 re-records just those dimensions and preserves the rest of the committed
-baseline; on `check`/`diff` it measures and compares only those dimensions (the
+baseline; on `check` it measures and compares only those dimensions (the
 agent inner loop — CI should still run a full `check`). `record` refuses to write
 a dimension worse than the committed baseline unless you pass `--accept-worse`;
 `--dry-run` previews what a record would write without writing it
@@ -163,7 +158,7 @@ a dimension worse than the committed baseline unless you pass `--accept-worse`;
 
 | code | meaning |
 |------|---------|
-| **0** | pass (also `diff` with regressions, and legitimate `baseline-guard` skips) |
+| **0** | pass (including legitimate `baseline-guard` skips) |
 | **1** | `check`: a dimension regressed · `baseline-guard`: the snapshot regressed vs `<ref>` (and isn't covered by an accepted-debt trailer) · `record`: refused a worse value without `--accept-worse` |
 | **2** | cannot measure/compare honestly: bad config, missing/malformed snapshot, tool crash, timeout, unknown command, … |
 
@@ -435,29 +430,6 @@ is enforced after the comment, so a regression still fails the job while the
 comment posts. Under `GITHUB_ACTIONS`, `check` also emits inline `::error::`
 annotations on the PR diff for each regression, and a `::notice::` when a
 dimension improved but the baseline wasn't re-recorded.
-
-### GitLab Code Quality
-
-`--format codeclimate` emits a Code Climate issue array — every current
-per-file-count offender as a located finding — which GitLab renders as the Merge
-Request **Code Quality** widget and inline diff annotations. New-vs-fixed is
-GitLab's own comparison of the MR-branch report against the target branch, so the
-job just publishes the artifact:
-
-```yaml
-quality-gate:
-  image: node:22
-  script:
-    - npx -y @pawl-tools/cli@0.6.0 check --format codeclimate > gl-code-quality-report.json
-  artifacts:
-    when: always                 # publish the report even when the gate fails
-    reports:
-      codequality: gl-code-quality-report.json
-```
-
-`check`'s exit code still gates the pipeline (1 on a regression vs the snapshot);
-`total`/`per-key-value` dimensions have no per-line location and so add no inline
-findings, but their gate is still enforced through that exit code.
 
 ### Anything else
 

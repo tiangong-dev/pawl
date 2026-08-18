@@ -43,7 +43,7 @@ still work on the file that now owns that heading.
 - [commands/since.md](commands/since.md) — [Diff-scoped checking](commands/since.md#diff-scoped-checking)
 - [commands/guard.md](commands/guard.md) — `baseline-guard`
 - [commands/trend.md](commands/trend.md) — Trend
-- [commands/query.md](commands/query.md) — Query commands: `status`, `constraints`, `rank`
+- [commands/rank.md](commands/rank.md) — `rank`
 
 ### API
 

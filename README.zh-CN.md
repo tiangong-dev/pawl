@@ -9,7 +9,6 @@ English docs: [README.md](./README.md) · 完整行为契约见 [SPEC.md](./SPEC
 ```bash
 pawl record                     # 测量全部维度,写入基线
 pawl check                      # CI 门禁:任何维度回归即退出码 1
-pawl diff                       # 测量 + 对比,打印表格,永不失败
 pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 ```
 
@@ -22,7 +21,7 @@ pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 - **是棘轮,不是阈值。** 锁定你此刻所在,只放行变好。存量债按文件被 grandfather,你**永远不必一次性全修**——而数字永远回不去。
 - **按文件 / 按 key 的精度。** 局部劣化藏不进"净零总量",offender 在文件**内部**挪位也不会误报——基线记的是**每个文件各自的计数**,不只是总数。
 - **诚实是结构性保证。** "没测出来"(退出码 `2`)绝不与"测得零"混淆;手改基线会被 `baseline-guard` 抓出。门禁宁可大声中止,也不放过一个谎。
-- **一个静态二进制。** 几秒钟丢进任何 CI;它坐在你**已在用的工具之上**,并能原生渲染成 GitHub PR 评论/注解或 GitLab Code Quality 报告。
+- **一个静态二进制。** 几秒钟丢进任何 CI;它坐在你**已在用的工具之上**,并能原生渲染成 GitHub PR 评论与注解。
 
 ---
 
@@ -102,24 +101,21 @@ pawl agent-md --write   # 把操作说明追加进 AGENTS.md
 | `pawl agent-md [--write]` | 打印 AI 编码助手正确使用这道门禁所需的操作说明,或追加进 `AGENTS.md` |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
-| `pawl diff` | 测量 + 对比,打印表格,永远退出码 0 |
 | `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
 | `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
-| `pawl status` | 只读已提交快照,不重新测量 |
-| `pawl constraints` | 打印配置里的阈值、glob、pattern |
 | `pawl rank` | 按行数/字节给 include 文件排序(含近阈值文件) |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
 | `pawl help [<命令>]` | 打印全局或子命令帮助（也支持 `-h` / `--help`） |
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
-**旗标。** `--format json` 让 `record`/`check`/`diff` 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`--format codeclimate` 输出 [Code Climate 问题数组](#gitlab-code-quality),供 GitLab 的 Code Quality 面板渲染。`check --since <ref>` 把门禁收窄到工作区相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查)),包含未提交和未跟踪的文件。`--only <id>[,<id>…]` 在 `record` 上只重录这些维度、保留其余已提交基线;在 `check`/`diff` 上只测量和对比这些维度(agent 内环——CI 仍应跑全量 `check`)。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
+**旗标。** `--format json` 让 `record`/`check` 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`check --since <ref>` 把门禁收窄到工作区相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查)),包含未提交和未跟踪的文件。`--only <id>[,<id>…]` 在 `record` 上只重录这些维度、保留其余已提交基线;在 `check` 上只测量和对比这些维度(agent 内环——CI 仍应跑全量 `check`)。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
 
 ### 退出码
 
 | 码 | 含义 |
 |------|---------|
-| **0** | 通过(也包括带回归的 `diff`、以及 `baseline-guard` 的合理跳过) |
+| **0** | 通过(包括 `baseline-guard` 的合理跳过) |
 | **1** | `check`:某维度回归 · `baseline-guard`:快照相对 `<ref>` 变差(且未被 accepted-debt trailer 覆盖) · `record`:未传 `--accept-worse` 时拒绝写入更差的值 |
 | **2** | 无法诚实测量/对比:配置错误、快照缺失/损坏、工具崩溃、超时、未知命令…… |
 
@@ -333,23 +329,6 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 ```
 
 评论步骤需要 `permissions: pull-requests: write`。门禁退出码在评论之后强制执行,所以回归照样让 job 失败,同时评论仍会发出。在 `GITHUB_ACTIONS` 下,`check` 还会对每个回归在 PR diff 上发内联 `::error::` 注解,并在某维度变好但基线没重记时发 `::notice::`。
-
-### GitLab Code Quality
-
-`--format codeclimate` 输出 Code Climate 问题数组——把每个当前 per-file-count offender 作为带位置的 finding——GitLab 会渲染成 MR 的 **Code Quality** 面板与 diff 行内标注。新增/消除由 GitLab 自己比对 MR 分支与目标分支的报告得出,job 只负责产出工件:
-
-```yaml
-quality-gate:
-  image: node:22
-  script:
-    - npx -y @pawl-tools/cli@0.6.0 check --format codeclimate > gl-code-quality-report.json
-  artifacts:
-    when: always                 # 门禁失败也要产出报告
-    reports:
-      codequality: gl-code-quality-report.json
-```
-
-`check` 的退出码仍然把关流水线(相对 snapshot 有回归即 1);`total`/`per-key-value` 维度无行内位置、不产生行内 finding,但其门禁仍靠退出码强制。
 
 ### 其他
 

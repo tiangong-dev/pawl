@@ -49,14 +49,6 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 		}
 		return 0
 	}
-	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, cfg, current); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		printAcceptedWorseTrailers(stderr, worse)
-		return 0
-	}
 	printTable(stdout, cfg, baseline, current, nil)
 	fmt.Fprintf(stdout, "📸 snapshot written to %s\n", displayPath(cfg.SnapshotPath))
 	printAcceptedWorseTrailers(stdout, worse)
@@ -68,10 +60,7 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 // dryRun (a refusal IS what --dry-run would have predicted, so there is
 // nothing further to preview). dryRun only controls the JSON dry_run field,
 // so a `--dry-run` caller can tell this refusal apart from a real one that
-// hit the same exit code. codeclimate keeps the existing findings-mode
-// convention (emit current offenders, but the gate's exit code wins) rather
-// than inventing a different shape for record, plus a stderr line — findings
-// mode has no field to say "and nothing was written".
+// hit the same exit code.
 func refuseRecord(cfg *Config, format string, baseline *Snapshot, baselineMetrics, current map[string]Metric, artifacts map[string]*ArtifactInfo, worse []WorseDimension, dryRun bool, stdout, stderr io.Writer) int {
 	if format == "json" {
 		rep := buildReport("record", cfg, baseline, current, artifacts)
@@ -81,14 +70,6 @@ func refuseRecord(cfg *Config, format string, baseline *Snapshot, baselineMetric
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		return 1
-	}
-	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, cfg, current); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		fmt.Fprintln(stderr, "record refused: nothing was written — re-run with --accept-worse to record this as accepted debt, or fix the regression first")
 		return 1
 	}
 	printTable(stdout, cfg, baseline, current, nil)
@@ -112,14 +93,6 @@ func previewRecord(cfg *Config, format string, baseline *Snapshot, baselineMetri
 			fmt.Fprintln(stderr, err)
 			return 2
 		}
-		return 0
-	}
-	if format == "codeclimate" {
-		if err := renderCodeClimate(stdout, cfg, current); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 2
-		}
-		printAcceptedWorseTrailers(stderr, worse)
 		return 0
 	}
 	printTable(stdout, cfg, baseline, current, nil)
