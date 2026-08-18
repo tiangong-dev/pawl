@@ -17,17 +17,17 @@ agent already looks before it starts.
 - Reads **no config**. The block is identical in every repository, and the
   moment someone reaches for it is often the moment `pawl.yaml` is mid-edit or
   broken, so requiring a loadable config would withhold it exactly then.
-- Default is a **pure print** to stdout, exit 0 — nothing is written, so it
-  composes (`pawl agent-md >> CLAUDE.md`).
-- `--write` **appends** the block to `./AGENTS.md`, creating the file if absent,
-  exit 0. Pre-existing content is preserved: `AGENTS.md` is the adopter's file
-  and usually already carries unrelated instructions.
-- The block is delimited by `<!-- pawl:begin -->` / `<!-- pawl:end -->`. If
-  `AGENTS.md` already contains the opening marker, `--write` changes nothing,
-  prints a message naming the path, and exits 2 — two diverging copies of the
-  same loop would leave an agent worse off than one. Any other filesystem error
-  is likewise exit 2.
-- `--write` is valid on no other command, and `--format` is not valid here: the
-  output is Markdown by definition. Both are usage errors, exit 2.
+- Writes **nothing**. It prints the block to stdout and exits 0, so installing
+  it is a redirect — `pawl agent-md >> AGENTS.md` — and pawl neither decides
+  which file the block belongs in nor edits a file the adopter owns.
+- The block is delimited by `<!-- pawl:begin -->` / `<!-- pawl:end -->`. When
+  `./AGENTS.md` already contains the opening marker, a `note:` line goes to
+  **stderr** saying so, because the usual next move is a redirect that would
+  append a second, diverging copy. stdout is unchanged and the exit code stays
+  0: it is advice, not a verdict. Any error reading `AGENTS.md` is silent —
+  printing a fixed string must not become a failure because of an unrelated
+  file.
+- `--format` is not valid here: the output is Markdown by definition. It is a
+  usage error, exit 2.
 - `pawl init`'s next-steps output names `agent-md`, since a command an adopter
   never hears about is a command nobody runs.

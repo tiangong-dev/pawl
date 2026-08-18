@@ -80,7 +80,7 @@ Which turns "should the fixture have an AGENTS.md?" into an experiment rather
 than a judgement call. Run the same task twice:
 
 - **Control** — a plain copy of `fixture/`, exactly as it ships.
-- **Treatment** — the same copy with `pawl agent-md --write` run in it once,
+- **Treatment** — the same copy with `pawl agent-md >> AGENTS.md` run in it once,
   before the agent starts.
 
 Score both against `capabilities.yaml`. Tasks 5 and 6 in `fixture/TASKS.md`

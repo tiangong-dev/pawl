@@ -53,6 +53,6 @@ func runInit(configPath string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "   More ready-to-paste dimensions: RECIPES.md")
 	// The scaffold is only half of adoption: a repo whose agent doesn't know
 	// this gate exists is a repo where the gate runs in CI and nowhere else.
-	fmt.Fprintln(stdout, "   Working with a coding agent? `pawl agent-md --write` teaches it this gate.")
+	fmt.Fprintln(stdout, "   Working with a coding agent? `pawl agent-md >> AGENTS.md` teaches it this gate.")
 	return 0
 }

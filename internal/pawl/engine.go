@@ -30,7 +30,6 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	onlyProvided := false
 	dryRun := false
 	acceptWorse := false
-	write := false
 	currentPath := ""
 	versionRequested := false
 	helpRequested := false
@@ -69,8 +68,6 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			dryRun = true
 		case args[i] == "--accept-worse":
 			acceptWorse = true
-		case args[i] == "--write":
-			write = true
 		case args[i] == "--current":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--current requires a path to a measurement document, or - for stdin\n")
@@ -165,10 +162,6 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--current is only valid on `record` or `check`, not %q\n", command)
 		return 2
 	}
-	if write && command != "agent-md" {
-		fmt.Fprintf(stderr, "--write is only valid on `agent-md`, not %q\n", command)
-		return 2
-	}
 	if command == "agent-md" && format != "text" {
 		fmt.Fprintln(stderr, "--format is not valid on `agent-md` — it emits Markdown")
 		return 2
@@ -237,7 +230,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// no config, so it still works in a repo whose config is mid-edit or broken,
 	// which is exactly when someone reaches for the instructions.
 	if command == "agent-md" {
-		return runAgentMD(write, stdout, stderr)
+		return runAgentMD(stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)

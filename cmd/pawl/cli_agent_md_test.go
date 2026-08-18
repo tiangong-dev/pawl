@@ -16,8 +16,8 @@ func readAgentsMD(t *testing.T, dir string) string {
 	return string(b)
 }
 
-// Without --write, agent-md is a pure print: an adopter piping it somewhere
-// else (CLAUDE.md, a docs page) must not silently get a file written too.
+// agent-md is a pure print: an adopter redirecting it somewhere (AGENTS.md,
+// CLAUDE.md, a docs page) must not silently get a file written too.
 func TestAgentMDPrintsWithoutWriting(t *testing.T) {
 	dir := t.TempDir()
 
@@ -29,7 +29,7 @@ func TestAgentMDPrintsWithoutWriting(t *testing.T) {
 		t.Errorf("agent-md stdout does not look like the operating loop: %s", res.stdout)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); !os.IsNotExist(err) {
-		t.Errorf("agent-md wrote AGENTS.md without --write (stat err = %v)", err)
+		t.Errorf("agent-md wrote AGENTS.md (stat err = %v)", err)
 	}
 }
 
@@ -61,53 +61,69 @@ func TestAgentMDBlockCarriesTheLoadBearingRules(t *testing.T) {
 	}
 }
 
-func TestAgentMDWriteCreatesAgentsFile(t *testing.T) {
+// The one thing a flag could do that a redirect cannot: recognize a copy
+// already installed. It survives as advice — stderr note, stdout untouched, exit 0 —
+// because two diverging copies of the loop leave an agent worse off than one.
+func TestAgentMDWarnsWhenAgentsFileAlreadyCarriesTheBlock(t *testing.T) {
 	dir := t.TempDir()
+	first := runPawl(t, dir, baseEnv(), "agent-md")
+	writeFile(t, dir, "AGENTS.md", "# House rules\n\n"+first.stdout)
 
-	res := runPawl(t, dir, baseEnv(), "agent-md", "--write")
+	res := runPawl(t, dir, baseEnv(), "agent-md")
 	if res.exit != 0 {
-		t.Fatalf("agent-md --write exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
+		t.Fatalf("agent-md exit = %d, want 0 — the note is advice, not a verdict\nstderr=%s", res.exit, res.stderr)
 	}
-	if !strings.Contains(readAgentsMD(t, dir), "pawl check --format json") {
-		t.Errorf("AGENTS.md missing the loop after --write")
+	if res.stdout != first.stdout {
+		t.Errorf("stdout changed because of AGENTS.md; the block must be the same bytes every time")
+	}
+	if !strings.Contains(res.stderr, "already contains a pawl block") {
+		t.Errorf("stderr should warn about the existing block, got:\n%s", res.stderr)
 	}
 }
 
-// AGENTS.md is the adopter's file and usually already carries instructions
-// that have nothing to do with pawl — appending must never cost them.
-func TestAgentMDWriteAppendsAndKeepsExistingContent(t *testing.T) {
+// An unrelated AGENTS.md must not produce the note, or it becomes noise nobody
+// reads.
+func TestAgentMDIsQuietWhenAgentsFileHasNoBlock(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "AGENTS.md", "# House rules\n\nRun the linter.\n")
 
-	res := runPawl(t, dir, baseEnv(), "agent-md", "--write")
+	res := runPawl(t, dir, baseEnv(), "agent-md")
 	if res.exit != 0 {
-		t.Fatalf("agent-md --write exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
+		t.Fatalf("agent-md exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
 	}
-	got := readAgentsMD(t, dir)
-	if !strings.Contains(got, "Run the linter.") {
-		t.Errorf("--write destroyed pre-existing AGENTS.md content:\n%s", got)
-	}
-	if !strings.Contains(got, "pawl check --format json") {
-		t.Errorf("--write did not append the loop:\n%s", got)
-	}
-	if strings.Contains(got, "Run the linter.<!--") {
-		t.Errorf("--write appended with no separating newline:\n%s", got)
+	if strings.Contains(res.stderr, "already contains") {
+		t.Errorf("warned about an AGENTS.md that carries no pawl block:\n%s", res.stderr)
 	}
 }
 
-// Re-running must not stack a second, diverging copy of the same instructions
-// — an agent reading two versions of the loop is worse off than before.
-func TestAgentMDWriteRefusesSecondCopy(t *testing.T) {
+// Installing the block is a redirect, so pawl must never touch AGENTS.md
+// itself — not even the file it warns about.
+func TestAgentMDNeverWritesAgentsFile(t *testing.T) {
 	dir := t.TempDir()
-	runPawl(t, dir, baseEnv(), "agent-md", "--write")
-	before := readAgentsMD(t, dir)
+	writeFile(t, dir, "AGENTS.md", "# House rules\n")
 
-	res := runPawl(t, dir, baseEnv(), "agent-md", "--write")
-	if res.exit != 2 {
-		t.Fatalf("second agent-md --write exit = %d, want 2\nstdout=%s", res.exit, res.stdout)
+	if res := runPawl(t, dir, baseEnv(), "agent-md"); res.exit != 0 {
+		t.Fatalf("agent-md exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
 	}
-	if readAgentsMD(t, dir) != before {
-		t.Errorf("refused --write still modified AGENTS.md")
+	if got := readAgentsMD(t, dir); got != "# House rules\n" {
+		t.Errorf("AGENTS.md changed: %q", got)
+	}
+}
+
+// The removed --write flag is unknown everywhere now, including on agent-md,
+// so a script still passing it fails loudly instead of being ignored.
+func TestWriteFlagIsGone(t *testing.T) {
+	dir := t.TempDir()
+	mustRecord(t, dir, onlyDimConfig())
+
+	for _, command := range []string{"agent-md", "check", "record", "init", "rank"} {
+		res := runPawl(t, dir, baseEnv(), command, "--write")
+		if res.exit != 2 {
+			t.Errorf("%s --write exit = %d, want 2 (unknown flag)\nstdout=%s", command, res.exit, res.stdout)
+		}
+		if !strings.Contains(res.stderr, "--write") {
+			t.Errorf("%s --write error does not name the flag: %s", command, res.stderr)
+		}
 	}
 }
 
@@ -129,21 +145,6 @@ func TestAgentMDRejectsFormatFlag(t *testing.T) {
 		res := runPawl(t, dir, baseEnv(), "agent-md", "--format", format)
 		if res.exit != 2 {
 			t.Errorf("agent-md --format %s exit = %d, want 2", format, res.exit)
-		}
-	}
-}
-
-func TestWriteFlagRejectedOnOtherCommands(t *testing.T) {
-	dir := t.TempDir()
-	mustRecord(t, dir, onlyDimConfig())
-
-	for _, command := range []string{"check", "record", "init", "rank"} {
-		res := runPawl(t, dir, baseEnv(), command, "--write")
-		if res.exit != 2 {
-			t.Errorf("%s --write exit = %d, want 2 (usage error)\nstdout=%s", command, res.exit, res.stdout)
-		}
-		if !strings.Contains(res.stderr, "--write") {
-			t.Errorf("%s --write error does not name the flag: %s", command, res.stderr)
 		}
 	}
 }

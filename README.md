@@ -122,7 +122,7 @@ pawl check
 red CI run, or not at all:
 
 ```bash
-pawl agent-md --write   # appends the operating loop to AGENTS.md
+pawl agent-md >> AGENTS.md   # append the operating loop where an agent looks
 ```
 
 ## Commands
@@ -130,7 +130,7 @@ pawl agent-md --write   # appends the operating loop to AGENTS.md
 | command | what it does |
 |---|---|
 | `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
-| `pawl agent-md [--write]` | print the operating loop a coding agent needs to use this gate, or append it to `AGENTS.md` |
+| `pawl agent-md` | print the operating loop a coding agent needs to use this gate (install it with `>> AGENTS.md`) |
 | `pawl measure` | measure every dimension and print the numbers — no baseline, no verdict; the document is the snapshot format |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |

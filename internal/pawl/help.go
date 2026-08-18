@@ -46,7 +46,6 @@ Command flags:
   measure --only <ids>    measure only those dimensions
   check --current <path>  judge a measure document instead of measuring (- = stdin)
   record --current <path> record a measure document instead of measuring (- = stdin)
-  agent-md --write        append that loop to AGENTS.md instead of printing it
   record --dry-run        preview what record would write, without writing
   record --accept-worse   record a dimension even if it comes back worse
   check --since <ref>     scope located findings to the working tree since <ref>
@@ -55,7 +54,7 @@ Command flags:
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
-		"agent-md":       "pawl agent-md [--write]",
+		"agent-md":       "pawl agent-md",
 		"measure":        "pawl measure [--only <id>[,<id>…]]",
 		"record":         "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [--format text|json]",
 		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [--format text|json]",

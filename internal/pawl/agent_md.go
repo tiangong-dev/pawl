@@ -25,67 +25,40 @@ import (
 //go:embed agent_md.md
 var agentBlock string
 
-// agentMDFile is fixed rather than a flag: the point is one command that lands
-// the block where a coding agent already looks, and AGENTS.md is that place.
-// Anything else is a redirect away (`pawl agent-md >> CLAUDE.md`).
+// agentMDFile is where a coding agent already looks, so it is the file the
+// warning below checks. pawl does not write it: `pawl agent-md >> AGENTS.md`
+// is the shell's job, and a --write flag was only ever a worse spelling of it
+// — one that also decided, on the user's behalf, which file to append to.
 const agentMDFile = "AGENTS.md"
 
-// agentBlockMarker opens the block. --write uses it to recognize a copy it
-// already installed, so re-running is a loud no-op instead of a second,
-// diverging copy of the same instructions.
+// agentBlockMarker opens the block, which makes an already-installed copy
+// recognizable. That check is the one thing --write did that a redirect cannot,
+// so it survives as a warning: two diverging copies of the same instructions
+// are worse than one.
 const agentBlockMarker = "<!-- pawl:begin -->"
 
-// runAgentMD prints the agent operating block, or installs it into AGENTS.md
-// with --write. See spec/commands/agent-md.md.
-func runAgentMD(write bool, stdout, stderr io.Writer) int {
-	if !write {
-		fmt.Fprint(stdout, agentBlock)
-		return 0
-	}
+// runAgentMD prints the agent operating block on stdout. See
+// spec/commands/agent-md.md.
+func runAgentMD(stdout, stderr io.Writer) int {
+	fmt.Fprint(stdout, agentBlock)
+	warnIfBlockAlreadyInstalled(stderr)
+	return 0
+}
+
+// warnIfBlockAlreadyInstalled says so when ./AGENTS.md already carries a pawl
+// block, because the common next move is a redirect that would append a second
+// one. It is advisory on stderr: stdout stays exactly the block, so the
+// redirect still works if that is what the user meant. Any problem reading the
+// file is silence — this is a courtesy, not a measurement, and it must never
+// turn printing a fixed string into a failure.
+func warnIfBlockAlreadyInstalled(stderr io.Writer) {
 	abs, err := filepath.Abs(agentMDFile)
 	if err != nil {
-		fmt.Fprintf(stderr, "agent-md: resolving %s: %v\n", agentMDFile, err)
-		return 2
+		return
 	}
 	existing, err := os.ReadFile(abs)
-	if err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(stderr, "agent-md: reading %s: %v\n", displayPath(abs), err)
-		return 2
+	if err != nil || !strings.Contains(string(existing), agentBlockMarker) {
+		return
 	}
-	if strings.Contains(string(existing), agentBlockMarker) {
-		fmt.Fprintf(stderr, "agent-md: %s already contains a pawl block — edit it, or remove the block first.\n", displayPath(abs))
-		return 2
-	}
-	// Append, never overwrite: AGENTS.md is the adopter's file and usually
-	// already carries instructions that have nothing to do with pawl. A
-	// scaffolder that clobbered them would be worse than useless — the same
-	// reasoning that makes `pawl init` refuse an existing config.
-	out := agentBlock
-	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n\n") {
-		if strings.HasSuffix(string(existing), "\n") {
-			out = "\n" + out
-		} else {
-			out = "\n\n" + out
-		}
-	}
-	f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
-	if err != nil {
-		fmt.Fprintf(stderr, "agent-md: writing %s: %v\n", displayPath(abs), err)
-		return 2
-	}
-	if _, err := f.WriteString(out); err != nil {
-		f.Close()
-		fmt.Fprintf(stderr, "agent-md: writing %s: %v\n", displayPath(abs), err)
-		return 2
-	}
-	if err := f.Close(); err != nil {
-		fmt.Fprintf(stderr, "agent-md: writing %s: %v\n", displayPath(abs), err)
-		return 2
-	}
-	verb := "appended pawl's agent loop to"
-	if len(existing) == 0 {
-		verb = "wrote"
-	}
-	fmt.Fprintf(stdout, "✅ %s %s\n", verb, displayPath(abs))
-	return 0
+	fmt.Fprintf(stderr, "note: %s already contains a pawl block — appending this output would make a second, diverging copy.\n", displayPath(abs))
 }

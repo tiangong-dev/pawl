@@ -3,11 +3,11 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [--write] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   agent-md             print the operating loop a coding agent needs to use
-                       this gate; --write appends it to ./AGENTS.md
+                       this gate; install it with a redirect
   measure              measure every dimension and print the measurement
                        document; no baseline read, no verdict rendered
   record               measure every dimension and (over)write the snapshot
@@ -51,9 +51,6 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   running the dimensions, specified in
   [§ Measure](../commands/measure.md#measure). On any other command it is a
   usage error (exit 2).
-- `--write` makes `agent-md` append its block to `./AGENTS.md` instead of
-  printing it, specified in [agent-md](../commands/agent-md.md). On any other
-  command it is a usage error (exit 2).
 - `--format <text|json>` selects the output format of `record`/`check`;
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).

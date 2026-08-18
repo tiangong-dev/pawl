@@ -90,7 +90,7 @@ pawl check
 **5. 告诉你的 AI 编码助手这道门禁的存在**——否则它只能从一次红色 CI 里知道,或者根本不知道:
 
 ```bash
-pawl agent-md --write   # 把操作说明追加进 AGENTS.md
+pawl agent-md >> AGENTS.md   # 把操作说明追加到 AI 助手会看的地方
 ```
 
 ## 命令
@@ -98,7 +98,7 @@ pawl agent-md --write   # 把操作说明追加进 AGENTS.md
 | 命令 | 作用 |
 |---|---|
 | `pawl init` | 生成一份起步 `pawl.yaml`(不覆盖已有文件) |
-| `pawl agent-md [--write]` | 打印 AI 编码助手正确使用这道门禁所需的操作说明,或追加进 `AGENTS.md` |
+| `pawl agent-md` | 打印 AI 编码助手正确使用这道门禁所需的操作说明(用 `>> AGENTS.md` 安装) |
 | `pawl measure` | 只测量并打印数字——不读基线、不下判决；输出就是快照格式 |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
