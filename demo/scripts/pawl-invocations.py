@@ -41,14 +41,24 @@ BASH_EDIT = re.compile(
 )
 
 # A bare `pawl`, not the `-code-pawl/` inside a scratchpad path: the invocation
-# must start a command or follow a shell separator.
-PAWL_CALL = re.compile(r"(?:^|[;&|(]\s*|\s)pawl(\s+[^;&|)\n]*)?")
+# must sit at a command position — the start of the string, or right after a
+# shell separator. An earlier `|\s` alternative also matched `pawl` as an
+# *argument*: `which pawl` was read as an invocation, and describe() classified
+# it as a default check, so a probe that never ran the gate forged a
+# verification pass. Optional env assignments and wrappers still count.
+PAWL_CALL = re.compile(
+    r"(?:^|[;&|(])\s*"
+    r"(?:(?:\w+=\S+|env|time|sudo|nohup|exec)\s+)*"
+    r"pawl(\s+[^;&|)\n]*)?"
+)
 
 # Includes commands pawl has since retired (diff, status, constraints), so
 # transcripts recorded before their removal still classify instead of falling
-# through to "check (default)".
+# through to "check (default)". `measure` matters most: it prints numbers with
+# no baseline and no verdict, so classifying it as a check would credit an
+# agent that measured but never asked whether anything got worse.
 KNOWN_COMMANDS = {
-    "init", "agent-md", "record", "check", "baseline-guard",
+    "init", "agent-md", "record", "check", "measure", "baseline-guard",
     "trend", "rank", "version", "help",
     "diff", "status", "constraints",
 }

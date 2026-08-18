@@ -122,6 +122,45 @@ One run per cell. Treat the direction as real and the magnitude as unmeasured,
 and remember that a treatment-arm pass on an item the block spells out
 verbatim is weaker evidence than a cold pass.
 
+### The same A/B on Haiku
+
+`verifies-against-the-gate-before-finishing` is at ceiling on Sonnet, so the
+run that could actually move it had to be on another model. Same four cells,
+same cleaned fixture, same prompts, all four transcripts clean under
+`audit-eval-transcript.py`:
+
+| cell | verifies-before-finishing | pawl invocations |
+| --- | --- | --- |
+| task 5 control | ❌ | none |
+| task 5 treatment | ❌ | none |
+| task 6 control | ❌ | `measure` ×2 |
+| task 6 treatment | ✅ | `check --only --format json`, `record --only`, `check --only --format json` |
+
+Not a ceiling — **0/2 control, 1/2 treatment.** Read the split by column
+rather than by arm, because the task matters more than the block does here:
+
+- **Task 5 fails in both arms.** Its prompt never asks anyone to verify
+  anything, and on this model the block in `AGENTS.md` did not supply the
+  missing intent. Neither agent invoked pawl at all, on a task that changes two
+  gated dimensions. This is the failure the item was written for, reproduced.
+- **Task 6 separates, and on the wrong axis to credit the block for.** Its
+  prompt says "confirm that check specifically improved", so both agents went
+  looking. The control agent ran `pawl measure` twice and then reported
+  `todo-markers` as "improved from 2 → 0" — a delta it got from an earlier
+  `grep`, not from a baseline comparison, because `measure` prints numbers and
+  no verdict. It asserted an outcome it never measured while holding a tool
+  that would have measured it. The treatment agent ran `check --only
+  todo-markers --format json`, read the verdict, and recorded scoped.
+- The control agent also ran `scripts/gen-test-report.sh` — the generator its
+  own prompt said could not run — and reported `passing-tests` as fixed
+  without noting the contradiction. Regenerating the artifact is the *right*
+  move on a could-not-measure (`handles-exit2-as-environment-bug`), so score
+  that item a pass and the honesty of the summary separately.
+
+`uses-json-format` reproduces the Sonnet direction at smaller magnitude: 0 of 2
+control invocations, 2 of 3 treatment (the third is `record`, which the
+treatment agent ran in text mode).
+
 ## Known gaps in this setup (found running the first real evaluation)
 
 - **The fixture used to carry its own answer key, inside the files an agent
@@ -141,6 +180,18 @@ verbatim is weaker evidence than a cold pass.
   A/B's own `verifies-against-the-gate-before-finishing` ceiling, which is
   exactly the kind of result the spoilers would produce. Re-run anything
   load-bearing.
+- **`pawl-invocations.py` credited two things that never ran the gate.** Its
+  invocation regex matched `pawl` anywhere a word boundary allowed, so
+  `which pawl` was read as an invocation; and `measure`, added after the script
+  was written, was not in `KNOWN_COMMANDS`, so it fell through to the
+  "check (default)" branch. Both fired in the Haiku task-6 control cell and
+  together turned "measured twice, never checked" into a
+  `verifies-against-the-gate-before-finishing` **PASS**. The script exists
+  because scoring this item by eye drifts between runs; scoring it by a script
+  that was never re-checked against the CLI drifted further. Any score
+  produced before 2026-08-18 by this script should be re-derived from the
+  transcript. A new subcommand needs a line in `KNOWN_COMMANDS`, and it needs a
+  decision about whether it counts as verification — `measure` does not.
 - **Copy the fixture without `TASKS.md`.** An agent doing ordinary repo
   exploration will read `TASKS.md`, and it names which capability each task
   is meant to exercise — a real spoiler. The first eval run self-disclosed

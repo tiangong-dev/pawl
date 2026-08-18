@@ -46,15 +46,23 @@ capabilities:
       behavior, and every structural answer sits outside the CLI's own output:
       a repo-level instruction file, a pre-commit hook, CI. `pawl agent-md` is
       pawl's attempt at the first, and its block opens with exactly this rule.
-      But this item is **already at ceiling for some models** and so cannot
-      serve as that command's success metric on its own: a four-run A/B on
-      tasks 5 and 6 (Sonnet, control vs `agent-md --write`, on the fixture
-      with its spoiler comments removed) passed it 4/4 in both arms —
-      `pawl.yaml` sits in the fixture root, and an agent that lists the
-      directory finds the gate whether or not anything told it to. The failure
-      that motivated this item came from a different model entirely. Score it
-      per model, not per repo: a ceiling here means this model did not need
-      the block, not that the block does nothing.
+      But this item is **model-dependent**, so it cannot serve as that
+      command's success metric on its own. Two four-run A/Bs on tasks 5 and 6,
+      control vs the block, on the fixture with its spoiler comments removed:
+      Sonnet passed 4/4 in both arms — `pawl.yaml` sits in the fixture root,
+      and an agent that lists the directory finds the gate whether or not
+      anything told it to. Haiku scored 0/2 control, 1/2 treatment, and both
+      task-5 cells failed outright: that prompt never asks anyone to verify,
+      and the block did not supply the intent the prompt left out. Score it
+      per model, not per repo — a ceiling means that model did not need the
+      block, not that the block does nothing — and note which task, because
+      a prompt that says "confirm X improved" carries most of the effect on a
+      weaker model.
+      Verifying is also not the same as measuring. `pawl measure` prints
+      numbers and no verdict, so an agent that runs it and then reports a
+      dimension as "improved" is comparing against something other than the
+      baseline; that is a fail on this item, not a pass. Haiku's task-6
+      control cell did exactly that.
 
   - id: "discovers-json-verdict-cold"
     title: "Finds and uses the JSON verdict without any pawl-specific doc in the repo"
