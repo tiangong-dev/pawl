@@ -24,6 +24,7 @@ how this was discovered (2026-08-17 evaluation batch, 3 of 8 runs leaked
 into the real repo this way).
 """
 import json
+import os
 import re
 import sys
 
@@ -60,13 +61,32 @@ def bash_commands(jsonl_path):
                         yield cmd
 
 
+def spellings(path):
+    """Every way a shell command might name one directory.
+
+    /tmp is a symlink to /private/tmp on macOS. The scratchpad path a harness
+    is handed is the /private form; the path a task prompt tells an agent to
+    cd into is usually the /tmp form. Comparing the two spellings as strings
+    read a command scoped *into* the eval directory as one that had escaped
+    it, and the protocol discards a contaminated run — so a clean run got
+    thrown away and re-run on the strength of a naming difference.
+    """
+    forms = {path, os.path.realpath(path)}
+    for form in list(forms):
+        if form.startswith("/private/"):
+            forms.add(form[len("/private"):])
+        else:
+            forms.add("/private" + form)
+    return {form.rstrip("/") for form in forms if form}
+
+
 def is_violation(cmd, eval_dir, repo_root):
-    if repo_root in cmd:
+    if any(form in cmd for form in spellings(repo_root)):
         return True
     # cd into eval_dir anywhere in the command means later relative reads in
     # that same command are scoped there, not to repo_root — only check
     # commands that never scope themselves to eval_dir at all.
-    if eval_dir in cmd:
+    if any(form in cmd for form in spellings(eval_dir)):
         return False
     for pat in SPOILER_PATTERNS:
         if re.search(pat, cmd):
