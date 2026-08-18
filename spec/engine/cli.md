@@ -3,11 +3,13 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--dry-run] [--accept-worse] [--write] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [--write] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   agent-md             print the operating loop a coding agent needs to use
                        this gate; --write appends it to ./AGENTS.md
+  measure              measure every dimension and print the measurement
+                       document; no baseline read, no verdict rendered
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
   baseline-guard <ref> compare the working tree's snapshot against the version
@@ -37,12 +39,18 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   orphan check still uses the full config. `--format json` reports the narrowed
   set as the top-level `only` array on every command, so a partial verdict never
   reads as a full one — see [§ Machine-readable output](verdict.md#machine-readable-output).
-  On any other command `--only` is a usage error (exit 2).
+  On `measure` it scopes the emitted document to those dimensions. On any other
+  command `--only` is a usage error (exit 2).
 - `--dry-run` previews what `record` (with or without `--only`) would write —
   same table, nothing written — and `--accept-worse` explicitly authorizes
   writing a dimension worse than the committed baseline. Both are valid only on
   `record`; specified in [§ Accepted debt](../commands/record.md#accepted-debt---dry-run---accept-worse). On any other
   command either is a usage error (exit 2).
+- `--current <path|->` supplies `check` or `record` with a measurement document
+  — the output of `pawl measure`, from a file or (with `-`) stdin — instead of
+  running the dimensions, specified in
+  [§ Measure](../commands/measure.md#measure). On any other command it is a
+  usage error (exit 2).
 - `--write` makes `agent-md` append its block to `./AGENTS.md` instead of
   printing it, specified in [agent-md](../commands/agent-md.md). On any other
   command it is a usage error (exit 2).
@@ -50,8 +58,9 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
   `baseline-guard` ignores `--format` (its output is not tabular). `trend` and
-  `rank` honor `text` (default) and `json`. `agent-md` emits Markdown by
-  definition, so any `--format` on it is a usage error (exit 2).
+  `rank` honor `text` (default) and `json`. `agent-md` emits Markdown and
+  `measure` emits the measurement document by definition, so any `--format` on
+  either is a usage error (exit 2).
 - `--since <ref>` scopes `check` (only) to lines changed in the **working
   tree** since `<ref>`, specified in [§ Diff-scoped checking](../commands/since.md#diff-scoped-checking).
   `--since` on any command other than `check` is a usage error (exit 2).

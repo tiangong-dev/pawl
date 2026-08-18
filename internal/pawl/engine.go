@@ -19,7 +19,7 @@ var Version = "dev"
 // RunCLI executes one pawl invocation and returns the process exit code:
 // 0 = pass, 1 = regression/violation, 2 = anything that prevents an honest
 // verdict (and must never read as a pass).
-func RunCLI(args []string, stdout, stderr io.Writer) int {
+func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	command := ""
 	configPath := "pawl.yaml"
 	format := "text"
@@ -31,6 +31,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	dryRun := false
 	acceptWorse := false
 	write := false
+	currentPath := ""
 	versionRequested := false
 	helpRequested := false
 	var positional []string
@@ -70,6 +71,13 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			acceptWorse = true
 		case args[i] == "--write":
 			write = true
+		case args[i] == "--current":
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--current requires a path to a measurement document, or - for stdin\n")
+				return 2
+			}
+			i++
+			currentPath = args[i]
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json)\n")
@@ -119,9 +127,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "agent-md", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
+	case "init", "agent-md", "measure", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | measure | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -141,8 +149,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// version, so these guards run before the version short-circuit and e.g.
 	// `pawl version --limit 1` is the usage error the contract promises
 	// rather than a silent version print.
-	if onlyProvided && command != "record" && command != "check" {
-		fmt.Fprintf(stderr, "--only is only valid on `record` or `check`, not %q\n", command)
+	if onlyProvided && command != "record" && command != "check" && command != "measure" {
+		fmt.Fprintf(stderr, "--only is only valid on `record`, `check` or `measure`, not %q\n", command)
 		return 2
 	}
 	if dryRun && command != "record" {
@@ -153,12 +161,20 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--accept-worse is only valid on `record`, not %q\n", command)
 		return 2
 	}
+	if currentPath != "" && command != "record" && command != "check" {
+		fmt.Fprintf(stderr, "--current is only valid on `record` or `check`, not %q\n", command)
+		return 2
+	}
 	if write && command != "agent-md" {
 		fmt.Fprintf(stderr, "--write is only valid on `agent-md`, not %q\n", command)
 		return 2
 	}
 	if command == "agent-md" && format != "text" {
 		fmt.Fprintln(stderr, "--format is not valid on `agent-md` — it emits Markdown")
+		return 2
+	}
+	if command == "measure" && format != "text" {
+		fmt.Fprintln(stderr, "--format is not valid on `measure` — it emits the measurement document")
 		return 2
 	}
 	if since != "" && command != "check" {
@@ -237,12 +253,34 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		}
 		return runBaselineGuard(cfg, ref, stdout, stderr)
 	}
+	// A supplied measurement is read once, before anything runs, so a malformed
+	// document fails before a snapshot is read or a dimension is executed.
+	var supplied map[string]Metric
+	if currentPath != "" {
+		m, err := readMeasurement(currentPath, stdin)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		supplied = m
+	}
+	if command == "measure" {
+		measureCfg := cfg
+		if onlyProvided {
+			onlySet, _, code := resolveOnlyIDs(cfg, only, command, stderr)
+			if code != 0 {
+				return code
+			}
+			measureCfg = configWithOnly(cfg, onlySet)
+		}
+		return runMeasure(measureCfg, stdout, stderr)
+	}
 	if command == "record" && onlyProvided {
 		onlySet, onlyIDs, code := resolveOnlyIDs(cfg, only, "record", stderr)
 		if code != 0 {
 			return code
 		}
-		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, stdout, stderr)
+		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, supplied, stdout, stderr)
 	}
 	if command == "rank" {
 		return runRank(cfg, format, stdout, stderr)
@@ -257,10 +295,10 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		onlyIDs = ids
 		measureCfg = configWithOnly(cfg, onlySet)
 	}
-	return runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, stdout, stderr)
+	return runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, supplied, stdout, stderr)
 }
 
-func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, supplied map[string]Metric, stdout, stderr io.Writer) int {
 	excluded := excludedDimensionIDs(full, onlyIDs)
 	runScope := reportScope{command: command, since: since, only: onlyIDs, excluded: excluded}
 	baseline, parsedBaseline, err := ReadSnapshotFile(full.SnapshotPath)
@@ -292,7 +330,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 		}
 	}
 
-	current, artifacts, err := MeasureAll(measure, stderr)
+	current, artifacts, err := acquireMeasurement(measure, supplied, stderr)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}

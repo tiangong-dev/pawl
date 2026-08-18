@@ -131,6 +131,7 @@ pawl agent-md --write   # appends the operating loop to AGENTS.md
 |---|---|
 | `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
 | `pawl agent-md [--write]` | print the operating loop a coding agent needs to use this gate, or append it to `AGENTS.md` |
+| `pawl measure` | measure every dimension and print the numbers — no baseline, no verdict; the document is the snapshot format |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
@@ -153,6 +154,9 @@ agent inner loop — CI should still run a full `check`). `record` refuses to wr
 a dimension worse than the committed baseline unless you pass `--accept-worse`;
 `--dry-run` previews what a record would write without writing it
 ([accepted debt](#accepting-debt---accept-worse---dry-run)).
+`check`/`record --current <path|->` judge or record a `pawl measure` document
+instead of running the dimensions, so one measurement drives every decision that
+follows it ([measure](./spec/commands/measure.md)).
 
 ### Exit codes
 
