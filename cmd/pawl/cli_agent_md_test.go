@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,22 @@ func readAgentsMD(t *testing.T, dir string) string {
 
 // agent-md is a pure print: an adopter redirecting it somewhere (AGENTS.md,
 // CLAUDE.md, a docs page) must not silently get a file written too.
+const agentBlockOpenMarker = "<!-- pawl:begin -->"
+
+// runPawlShell runs a shell command line with the built pawl binary on PATH,
+// so a test can exercise the redirect an adopter actually types.
+func runPawlShell(t *testing.T, dir, line string) cliResult {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", line)
+	cmd.Dir = dir
+	cmd.Env = append(baseEnv(), "PATH="+filepath.Dir(pawlBin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	return cliResult{stdout: stdout.String(), stderr: stderr.String(), exit: cmd.ProcessState.ExitCode()}
+}
+
 func TestAgentMDPrintsWithoutWriting(t *testing.T) {
 	dir := t.TempDir()
 
@@ -160,5 +177,30 @@ func TestInitPointsAtAgentMD(t *testing.T) {
 	}
 	if !strings.Contains(res.stdout, "agent-md") {
 		t.Errorf("init output never mentions agent-md: %s", res.stdout)
+	}
+}
+
+// The documented install is `pawl agent-md >> AGENTS.md`, which makes stdout
+// and AGENTS.md the same file. Checking for an existing block after printing
+// therefore finds the block this very run just wrote, and a first install
+// warns about itself — so the check has to happen before the write.
+func TestAgentMDDoesNotWarnOnAFirstRedirectInstall(t *testing.T) {
+	dir := t.TempDir()
+
+	res := runPawlShell(t, dir, "pawl agent-md >> AGENTS.md")
+	if res.exit != 0 {
+		t.Fatalf("exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
+	}
+	if strings.Contains(res.stderr, "already contains") {
+		t.Fatalf("a first install warned about itself:\n%s", res.stderr)
+	}
+	if !strings.Contains(readAgentsMD(t, dir), agentBlockOpenMarker) {
+		t.Fatal("AGENTS.md did not receive the block")
+	}
+
+	// The second one is the case the note exists for.
+	again := runPawlShell(t, dir, "pawl agent-md >> AGENTS.md")
+	if !strings.Contains(again.stderr, "already contains") {
+		t.Fatalf("a second install did not warn:\n%s", again.stderr)
 	}
 }

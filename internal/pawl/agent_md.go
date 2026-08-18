@@ -40,25 +40,30 @@ const agentBlockMarker = "<!-- pawl:begin -->"
 // runAgentMD prints the agent operating block on stdout. See
 // spec/commands/agent-md.md.
 func runAgentMD(stdout, stderr io.Writer) int {
+	// Read before writing. The documented way to install this is
+	// `pawl agent-md >> AGENTS.md`, which means stdout *is* AGENTS.md — check
+	// it afterwards and the block this very run just printed is what gets
+	// found, so a first install warns about itself.
+	installed, path := blockAlreadyInstalled()
 	fmt.Fprint(stdout, agentBlock)
-	warnIfBlockAlreadyInstalled(stderr)
+	if installed {
+		fmt.Fprintf(stderr, "note: %s already contains a pawl block — appending this output would make a second, diverging copy.\n", path)
+	}
 	return 0
 }
 
-// warnIfBlockAlreadyInstalled says so when ./AGENTS.md already carries a pawl
-// block, because the common next move is a redirect that would append a second
-// one. It is advisory on stderr: stdout stays exactly the block, so the
-// redirect still works if that is what the user meant. Any problem reading the
-// file is silence — this is a courtesy, not a measurement, and it must never
-// turn printing a fixed string into a failure.
-func warnIfBlockAlreadyInstalled(stderr io.Writer) {
+// blockAlreadyInstalled reports whether ./AGENTS.md carries a pawl block
+// already, and the path to name if it does. Any problem reading the file is a
+// "no" — this is a courtesy, not a measurement, and it must never turn printing
+// a fixed string into a failure.
+func blockAlreadyInstalled() (bool, string) {
 	abs, err := filepath.Abs(agentMDFile)
 	if err != nil {
-		return
+		return false, ""
 	}
 	existing, err := os.ReadFile(abs)
 	if err != nil || !strings.Contains(string(existing), agentBlockMarker) {
-		return
+		return false, ""
 	}
-	fmt.Fprintf(stderr, "note: %s already contains a pawl block — appending this output would make a second, diverging copy.\n", displayPath(abs))
+	return true, displayPath(abs)
 }
