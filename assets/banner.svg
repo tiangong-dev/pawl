@@ -1,141 +1,200 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" width="1200" height="260" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="t d">
   <title id="t">pawl — a language-agnostic anti-regression quality gate</title>
-  <desc id="d">A ratchet rack steps to the left one tooth at a time while a pawl drops into each notch behind it. The measured number falls 342, 337, 331, 328 and never rises.</desc>
+  <desc id="d">A terminal runs `pawl check`. Four dimensions report against the recorded baseline: file-length 342 to 338 better, todo-markers unchanged, line-coverage 71.2 to 73.4 better, complexity 15 to 18 worse. The gate names the one regression and the file it came from, and exits 1.</desc>
 
   <style>
     :root {
       --bg: #ffffff;
       --fg: #1f2328;
       --muted: #59636e;
-      --rule: #d1d9e0;
-      --tooth: #cdd9e5;
-      --tooth-edge: #8c9aa8;
-      --pawl: #bc8b2c;
-      --good: #1a7f37;
+      --hair: #d1d9e0;
+      --term-bg: #0d1117;
+      --term-bar: #161b22;
+      --term-edge: #30363d;
+      --term-fg: #e6edf3;
+      --dim: #8b949e;
+      --good: #3fb950;
+      --bad: #f85149;
+      --warn: #d29922;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #0d1117;
         --fg: #e6edf3;
         --muted: #9198a1;
-        --rule: #2a313c;
-        --tooth: #2d3440;
-        --tooth-edge: #6a7684;
-        --pawl: #e3b341;
-        --good: #3fb950;
+        --hair: #2a313c;
+        --term-bg: #010409;
+        --term-bar: #0d1117;
+        --term-edge: #21262d;
       }
     }
 
     .bg { fill: var(--bg); }
-    .wordmark { fill: var(--fg); font: 700 92px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -3px; }
-    .tagline { fill: var(--muted); font: 400 23px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
-    .label { fill: var(--muted); font: 500 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 1.5px; }
-    .value { fill: var(--good); font: 600 34px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .rule { stroke: var(--rule); stroke-width: 2; }
-    .tooth { fill: var(--tooth); stroke: var(--tooth-edge); stroke-width: 2; stroke-linejoin: round; }
-    /* Every fourth tooth is tinted. The teeth repeat every 84px and the rack
-       travels 84px per step, so without a marker the motion is invisible: each
-       step lands on a frame identical to the one before it. The marker's period
-       is 336px, which is exactly the full travel, so the loop still seams. */
-    .marked { fill: var(--good); fill-opacity: .22; stroke: var(--good); }
-    .arm { fill: var(--pawl); }
+    .wordmark { fill: var(--fg); font: 700 76px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
+    .tagline  { fill: var(--muted); font: 400 19px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .badge    { fill: var(--muted); font: 400 15px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .tick     { stroke: var(--good); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    /* Exit 1 and exit 2 are different colours because they are different
+       claims: one measured a worse number, the other measured nothing. */
+    .exits    { fill: var(--muted); font: 400 13px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .warn     { fill: var(--warn); }
 
-    /* The rack only ever travels left: four 84px steps, then the loop restarts
-       from a position that is visually identical because the teeth repeat. */
-    .rack { animation: rack 12s cubic-bezier(.6,0,.35,1) infinite; }
-    @keyframes rack {
-      0%,   14% { transform: translateX(0); }
-      25%,  39% { transform: translateX(-84px); }
-      50%,  64% { transform: translateX(-168px); }
-      75%,  89% { transform: translateX(-252px); }
-      100%      { transform: translateX(-336px); }
+    .term-bg  { fill: var(--term-bg); stroke: var(--term-edge); stroke-width: 1.5; }
+    .term-bar { fill: var(--term-bar); }
+
+    .mono   { font: 400 15px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .prompt { fill: var(--good); }
+    .cmd    { fill: var(--term-fg); }
+    .dimtxt { fill: var(--dim); }
+    .head   { fill: var(--dim); font-weight: 600; }
+    .name   { fill: var(--term-fg); }
+    .num    { fill: var(--term-fg); }
+    .good   { fill: var(--good); }
+    .bad    { fill: var(--bad); }
+    .rule   { stroke: var(--term-edge); stroke-width: 1; }
+
+    /* One 14s take. Each line is held from the moment it lands until the whole
+       frame fades, so the finished screen — the part that says what pawl does —
+       is what a reader sees for most of the loop.
+
+       The loop point sits inside the blank stretch, not at the end of the
+       take: every element is opacity 0 at both 0% and 100%, so the restart has
+       nothing to jump. Ending on the finished screen instead would snap a full
+       terminal back to an empty one in one frame. */
+    .cmdline { animation: cmdline 14s linear infinite; }
+    .l1 { animation: l1 14s linear infinite; }
+    .l2 { animation: l2 14s linear infinite; }
+    .l3 { animation: l3 14s linear infinite; }
+    .l4 { animation: l4 14s linear infinite; }
+    .l5 { animation: l5 14s linear infinite; }
+    .l6 { animation: l6 14s linear infinite; }
+    .l7 { animation: l7 14s linear infinite; }
+    @keyframes cmdline { 0%,  1.9% { opacity: 0 }  2%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l1 { 0%, 11.9% { opacity: 0 } 12%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l2 { 0%, 17.9% { opacity: 0 } 18%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l3 { 0%, 22.9% { opacity: 0 } 23%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l4 { 0%, 26.9% { opacity: 0 } 27%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l5 { 0%, 30.9% { opacity: 0 } 31%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l6 { 0%, 34.9% { opacity: 0 } 35%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l7 { 0%, 49.9% { opacity: 0 } 50%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+
+    /* The command types itself: a clip rect widens one character at a time,
+       and the caret rides along on the same 12 steps. */
+    .typed { animation: typed 14s steps(12, end) infinite; }
+    @keyframes typed { 0%, 2% { width: 0 } 10%, 100% { width: 116px } }
+
+    .caret { fill: var(--term-fg); animation: caret-move 14s steps(12, end) infinite, caret-blink 14s steps(1, end) infinite; }
+    @keyframes caret-move  { 0%, 2% { transform: translateX(-108px) } 10%, 100% { transform: translateX(0) } }
+    @keyframes caret-blink { 0%, 1.9% { opacity: 0 } 2%, 5% { opacity: 1 } 6%, 8% { opacity: 0 } 9%, 11% { opacity: 1 } 12%, 100% { opacity: 0 } }
+
+    /* The regression row and the exit code share one pulse, because they are
+       one event: the gate refusing to let a number slip back. */
+    .alarm { animation: alarm 14s ease-in-out infinite; }
+    @keyframes alarm {
+      0%, 43.9% { opacity: 0 }
+      44%       { opacity: 1 }
+      47%       { opacity: .4 }
+      50%       { opacity: 1 }
+      53%       { opacity: .4 }
+      56%, 88%  { opacity: 1 }
+      95%, 100% { opacity: 0 }
     }
 
-    /* The pawl rides up the ramp of the tooth arriving from the right, then
-       drops behind its vertical face. The drop is what makes the step
-       irreversible, so it is the fast part of the cycle. */
-    .arm { animation: arm 12s cubic-bezier(.6,0,.35,1) infinite; transform-origin: 1000px 116px; }
-    @keyframes arm {
-      0%,  14% { transform: rotate(0deg); }
-      23%      { transform: rotate(13deg); }
-      25%, 39% { transform: rotate(0deg); }
-      48%      { transform: rotate(13deg); }
-      50%, 64% { transform: rotate(0deg); }
-      73%      { transform: rotate(13deg); }
-      75%, 89% { transform: rotate(0deg); }
-      98%      { transform: rotate(13deg); }
-      100%     { transform: rotate(0deg); }
-    }
-
-    .v0 { animation: v0 12s steps(1, end) infinite; }
-    .v1 { animation: v1 12s steps(1, end) infinite; }
-    .v2 { animation: v2 12s steps(1, end) infinite; }
-    .v3 { animation: v3 12s steps(1, end) infinite; }
-    @keyframes v0 { 0%, 24% { opacity: 1 } 25%, 100% { opacity: 0 } }
-    @keyframes v1 { 0%, 24% { opacity: 0 } 25%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
-    @keyframes v2 { 0%, 49% { opacity: 0 } 50%, 74% { opacity: 1 } 75%, 100% { opacity: 0 } }
-    @keyframes v3 { 0%, 74% { opacity: 0 } 75%, 100% { opacity: 1 } }
-
-    /* Anyone who asked the OS to stop moving things gets the end state, which
-       is the state that carries the point anyway. */
     @media (prefers-reduced-motion: reduce) {
-      .rack, .arm, .v0, .v1, .v2, .v3 { animation: none; }
-      .v0, .v1, .v2 { opacity: 0; }
-      .v3 { opacity: 1; }
-      .rack { transform: translateX(-252px); }
+      .cmdline,.l1,.l2,.l3,.l4,.l5,.l6,.l7,.typed,.caret,.alarm { animation: none; }
+      .typed { width: 116px; }
+      .caret { opacity: 0; }
     }
   </style>
 
-  <rect class="bg" width="1200" height="260"/>
+  <rect class="bg" width="1200" height="420"/>
 
-  <text class="wordmark" x="72" y="140">pawl</text>
-  <text class="tagline" x="76" y="184">numbers can only hold or improve</text>
+  <!-- Identity -->
+  <text class="wordmark" x="60" y="150">pawl</text>
+  <text class="tagline"  x="63" y="188">numbers can only hold or improve</text>
 
-  <line class="rule" x1="640" y1="52" x2="640" y2="208"/>
+  <g class="tick"><path d="M64 232 l7 7 l13 -14"/></g>
+  <text class="badge" x="94" y="238">any language, any metric</text>
+  <g class="tick"><path d="M64 268 l7 7 l13 -14"/></g>
+  <text class="badge" x="94" y="274">baseline lives in your repo</text>
+  <g class="tick"><path d="M64 304 l7 7 l13 -14"/></g>
+  <text class="badge" x="94" y="310">one static binary, no server</text>
 
-  <text class="label" x="700" y="66">FILES OVER 500 LINES</text>
-  <text class="value" x="700" y="112">
-    <tspan class="v0">342</tspan>
-  </text>
-  <text class="value" x="700" y="112">
-    <tspan class="v1">337</tspan>
-  </text>
-  <text class="value" x="700" y="112">
-    <tspan class="v2">331</tspan>
-  </text>
-  <text class="value" x="700" y="112">
-    <tspan class="v3">328</tspan>
-  </text>
+  <line x1="63" y1="338" x2="336" y2="338" stroke="var(--hair)" stroke-width="1.5"/>
+  <text class="exits" x="63" y="362"><tspan class="bad">exit 1</tspan>  something got worse</text>
+  <text class="exits" x="63" y="382"><tspan class="warn">exit 2</tspan>  something could not be measured</text>
 
-  <!-- The rack is clipped so teeth enter and leave cleanly at the panel edge. -->
-  <clipPath id="rackWindow">
-    <rect x="700" y="128" width="440" height="86"/>
+  <!-- Terminal -->
+  <rect class="term-bg"  x="400" y="34" width="756" height="352" rx="10"/>
+  <path class="term-bar" d="M400 44 a10 10 0 0 1 10 -10 h736 a10 10 0 0 1 10 10 v24 h-756 z"/>
+  <line x1="400" y1="68" x2="1156" y2="68" stroke="var(--term-edge)" stroke-width="1.5"/>
+  <circle cx="422" cy="51" r="5.5" fill="#ff5f57"/>
+  <circle cx="442" cy="51" r="5.5" fill="#febc2e"/>
+  <circle cx="462" cy="51" r="5.5" fill="#28c840"/>
+
+  <!-- Command line, typed -->
+  <clipPath id="typewriter">
+    <rect class="typed" x="424" y="86" width="116" height="22"/>
   </clipPath>
-  <g clip-path="url(#rackWindow)">
-    <g class="rack">
-      <!-- One tooth every 84px: a long ramp the pawl can climb, and a vertical
-           face it cannot climb back over. Drawn wide enough to cover the full
-           travel plus the window. -->
-      <path class="tooth marked" d="M700 196 L742 154 L742 196 Z"/>
-      <path class="tooth" d="M784 196 L826 154 L826 196 Z"/>
-      <path class="tooth" d="M868 196 L910 154 L910 196 Z"/>
-      <path class="tooth" d="M952 196 L994 154 L994 196 Z"/>
-      <path class="tooth marked" d="M1036 196 L1078 154 L1078 196 Z"/>
-      <path class="tooth" d="M1120 196 L1162 154 L1162 196 Z"/>
-      <path class="tooth" d="M1204 196 L1246 154 L1246 196 Z"/>
-      <path class="tooth" d="M1288 196 L1330 154 L1330 196 Z"/>
-      <path class="tooth marked" d="M1372 196 L1414 154 L1414 196 Z"/>
-      <path class="tooth" d="M1456 196 L1498 154 L1498 196 Z"/>
-      <line class="rule" x1="700" y1="196" x2="1520" y2="196"/>
-    </g>
+  <g class="cmdline" clip-path="url(#typewriter)">
+    <text class="mono prompt" x="424" y="104">$ <tspan class="cmd">pawl check</tspan></text>
+  </g>
+  <rect class="caret" x="532" y="90" width="8" height="16"/>
+
+  <text class="mono dimtxt l1" x="424" y="136">measuring 4 dimensions against pawl.snapshot.json…</text>
+
+  <!-- Verdict table -->
+  <g class="l2">
+    <text class="mono head" x="424" y="172">metric</text>
+    <text class="mono head" x="742" y="172" text-anchor="end">baseline</text>
+    <text class="mono head" x="838" y="172" text-anchor="end">current</text>
+    <text class="mono head" x="906" y="172" text-anchor="end">Δ</text>
+    <text class="mono head" x="946" y="172">status</text>
+    <line class="rule" x1="424" y1="184" x2="1130" y2="184"/>
   </g>
 
-  <!-- The pawl: pinned above and to the right, tapering to a hooked tip that
-       sits on the rack's baseline with its hook against the vertical face at
-       x=910. The hook is the whole mechanism — the ramp side it can climb, this
-       side it cannot. -->
-  <g class="arm">
-    <path d="M991 107 L1009 126 L924 197 L906 197 L914 183 Z"/>
-    <circle cx="1000" cy="116" r="13"/>
+  <g class="l3">
+    <text class="mono name" x="424" y="212">file-length</text>
+    <text class="mono num"  x="742" y="212" text-anchor="end">342</text>
+    <text class="mono num"  x="838" y="212" text-anchor="end">338</text>
+    <text class="mono good" x="906" y="212" text-anchor="end">-4</text>
+    <circle cx="932" cy="207" r="4" fill="var(--good)"/>
+    <text class="mono good" x="946" y="212">better</text>
   </g>
+
+  <g class="l4">
+    <text class="mono name"   x="424" y="240">todo-markers</text>
+    <text class="mono num"    x="742" y="240" text-anchor="end">12</text>
+    <text class="mono num"    x="838" y="240" text-anchor="end">12</text>
+    <text class="mono dimtxt" x="906" y="240" text-anchor="end">±0</text>
+    <circle cx="932" cy="235" r="4" fill="var(--dim)"/>
+    <text class="mono dimtxt" x="946" y="240">same</text>
+  </g>
+
+  <g class="l5">
+    <text class="mono name" x="424" y="268">line-coverage</text>
+    <text class="mono num"  x="742" y="268" text-anchor="end">71.2</text>
+    <text class="mono num"  x="838" y="268" text-anchor="end">73.4</text>
+    <text class="mono good" x="906" y="268" text-anchor="end">+2.2</text>
+    <circle cx="932" cy="263" r="4" fill="var(--good)"/>
+    <text class="mono good" x="946" y="268">better</text>
+  </g>
+
+  <g class="l6">
+    <text class="mono name" x="424" y="296">complexity</text>
+    <text class="mono num"  x="742" y="296" text-anchor="end">15</text>
+    <text class="mono num"  x="838" y="296" text-anchor="end">18</text>
+    <text class="mono bad"  x="906" y="296" text-anchor="end">+3</text>
+    <circle cx="932" cy="291" r="4" fill="var(--bad)"/>
+    <text class="mono bad"  x="946" y="296">worse</text>
+  </g>
+
+  <!-- The catch -->
+  <g class="alarm">
+    <rect x="410" y="318" width="4" height="50" rx="2" fill="var(--bad)"/>
+    <text class="mono bad" x="426" y="340">regression: complexity 15 → 18</text>
+    <rect x="1042" y="326" width="88" height="24" rx="12" fill="var(--bad)" fill-opacity=".15" stroke="var(--bad)" stroke-width="1"/>
+    <text class="mono bad" x="1086" y="343" text-anchor="middle" font-weight="600">exit 1</text>
+  </g>
+  <text class="mono dimtxt l7" x="444" y="362">src/parser.ts  9 → 12</text>
 </svg>
