@@ -93,7 +93,7 @@ here; the first is kept only as the reason the spoilers were found. Sonnet,
 tasks 5 and 6, one run per cell, all four transcripts clean under
 `audit-eval-transcript.py`:
 
-- `uses-json-format`: **0 of 22 control invocations, 8 of 16 treatment
+- `uses-json-format`: **0 of 20 control invocations, 8 of 16 treatment
   invocations.** Both control agents stayed in text mode from first command to
   last; both treatment agents switched at their first substantive check and
   stayed there. The separation holds on task 5, whose prompt never mentions
@@ -113,6 +113,14 @@ tasks 5 and 6, one run per cell, all four transcripts clean under
   on the list because a different model failed it outright, but on this
   fixture and this model it is at ceiling, and an item at ceiling measures
   nothing.
+- **Both numbers above were re-derived after the scorer bug below.** The two
+  control transcripts survive and re-score under the fixed script: both ran a
+  real `pawl check` after their last edit, so the control half of the 4/4 is
+  sound, and the json count is 0 of **20** invocations, not 22 — the two that
+  vanished were the miscounted kind. The treatment transcripts are gone, so
+  `8 of 16` and the treatment half of the 4/4 could not be re-derived and rest
+  on the original scoring. Nothing about the direction changes; the treatment
+  magnitude is now one bug-fix behind its evidence.
 - Uninstructed exploration is *higher* in the control arm, not lower: the
   task-5 control agent reached `pawl rank` and `pawl constraints` cold, which
   no treatment agent did. The block appears to change which surface an agent
@@ -188,10 +196,12 @@ treatment agent ran in text mode).
   together turned "measured twice, never checked" into a
   `verifies-against-the-gate-before-finishing` **PASS**. The script exists
   because scoring this item by eye drifts between runs; scoring it by a script
-  that was never re-checked against the CLI drifted further. Any score
-  produced before 2026-08-18 by this script should be re-derived from the
-  transcript. A new subcommand needs a line in `KNOWN_COMMANDS`, and it needs a
-  decision about whether it counts as verification — `measure` does not.
+  that was never re-checked against the CLI drifted further. A new subcommand
+  needs a line in `KNOWN_COMMANDS`, and it needs a decision about whether it
+  counts as verification — `measure` does not. Every earlier score was
+  re-derived from the transcripts where those still exist (see the note under
+  the Sonnet A/B); where they do not, the number is flagged as unre-derived
+  rather than restated.
 - **Copy the fixture without `TASKS.md`.** An agent doing ordinary repo
   exploration will read `TASKS.md`, and it names which capability each task
   is meant to exercise — a real spoiler. The first eval run self-disclosed
