@@ -15,6 +15,8 @@ no existing config.
   dimension using only zero-dependency primitive builtins (`file-length`,
   `pattern-count`), so `pawl record` succeeds immediately with no external tool
   installed. Comments in the file point at the recipe cookbook for more.
-- On success it writes the file and prints a next-steps line (naming the file
-  and pointing at `pawl record`), exit 0.
+- On success it writes the file and prints next-steps lines (naming the file,
+  pointing at `pawl record`, and naming
+  [`agent-md`](agent-md.md) for repositories worked on by a coding agent),
+  exit 0.
 

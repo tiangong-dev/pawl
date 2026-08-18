@@ -119,11 +119,19 @@ pawl check
 **4. Lock in wins.** When a PR improves a number, `check` tells you to re-record;
 `pawl record` writes the new, lower baseline so it can never slip back up.
 
+**5. Tell your coding agent the gate exists** — otherwise it finds out from a
+red CI run, or not at all:
+
+```bash
+pawl agent-md --write   # appends the operating loop to AGENTS.md
+```
+
 ## Commands
 
 | command | what it does |
 |---|---|
 | `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
+| `pawl agent-md [--write]` | print the operating loop a coding agent needs to use this gate, or append it to `AGENTS.md` |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
 | `pawl diff` | measure + compare, print the table, always exit 0 |

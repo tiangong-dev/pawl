@@ -7,7 +7,7 @@ import (
 
 func validHelpTopic(topic string) bool {
 	switch topic {
-	case "", "init", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version":
+	case "", "init", "agent-md", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version":
 		return true
 	default:
 		return false
@@ -25,6 +25,7 @@ Usage:
 
 Commands:
   init                    write a starter pawl.yaml
+  agent-md                print the agent operating loop for this gate
   record                  measure and write the snapshot
   check                   fail when a metric regresses (default)
   diff                    report changes without failing on regressions
@@ -45,6 +46,7 @@ Command flags:
   record --only <ids>     re-record only comma-separated dimensions
   check --only <ids>      measure and gate only those dimensions
   diff --only <ids>       measure and compare only those dimensions
+  agent-md --write        append that loop to AGENTS.md instead of printing it
   record --dry-run        preview what record would write, without writing
   record --accept-worse   record a dimension even if it comes back worse
   check --since <ref>     scope located findings to the working tree since <ref>
@@ -53,6 +55,7 @@ Command flags:
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
+		"agent-md":       "pawl agent-md [--write]",
 		"record":         "pawl record [--only <id>[,<id>…]] [--dry-run] [--accept-worse] [--format text|json|codeclimate]",
 		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--format text|json|codeclimate]",
 		"diff":           "pawl diff [--only <id>[,<id>…]] [--format text|json|codeclimate]",
