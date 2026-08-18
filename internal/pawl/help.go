@@ -37,6 +37,7 @@ Commands:
 Global flags:
   -c, --config <path>     config file (default pawl.yaml)
       --format <format>   text or json
+  -q, --quiet             silence progress and advisory output
   -h, --help              show help
       --version           print the version
 
@@ -55,9 +56,9 @@ Command flags:
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
 		"agent-md":       "pawl agent-md",
-		"measure":        "pawl measure [--only <id>[,<id>…]]",
-		"record":         "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [--format text|json]",
-		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [--format text|json]",
+		"measure":        "pawl measure [--only <id>[,<id>…]] [-q]",
+		"record":         "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
+		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
 		"baseline-guard": "pawl baseline-guard [<ref>]",
 		"trend":          "pawl trend [<id>] [--limit <n>] [--format text|json]",
 		"rank":           "pawl rank [--format text|json]",

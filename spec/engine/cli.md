@@ -3,7 +3,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   agent-md             print the operating loop a coding agent needs to use
@@ -46,6 +46,15 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   writing a dimension worse than the committed baseline. Both are valid only on
   `record`; specified in [§ Accepted debt](../commands/record.md#accepted-debt---dry-run---accept-worse). On any other
   command either is a usage error (exit 2).
+- `-q` / `--quiet` silences pawl's own progress lines, artifact notes, and the
+  `--format json` hint, and buffers a `text` run's stdout so it is released only
+  when the exit code is non-zero. Exit 0 says every dimension held; exit 1 and
+  exit 2 carry a "which one, and by how much" the code alone cannot. An
+  adapter's own stderr is never suppressed — a quiet run must lose the noise,
+  not the diagnosis of the tool that is failing — and `--format json` always
+  emits its verdict, since a caller parsing one must always receive one. Valid
+  on `measure`, `record` and `check`; on any other command a usage error
+  (exit 2).
 - `--current <path|->` supplies `check` or `record` with a measurement document
   — the output of `pawl measure`, from a file or (with `-`) stdin — instead of
   running the dimensions, specified in

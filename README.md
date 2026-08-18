@@ -154,6 +154,8 @@ agent inner loop — CI should still run a full `check`). `record` refuses to wr
 a dimension worse than the committed baseline unless you pass `--accept-worse`;
 `--dry-run` previews what a record would write without writing it
 ([accepted debt](#accepting-debt---accept-worse---dry-run)).
+`-q` silences progress and advisory output, and prints a text verdict only when
+the exit code is non-zero — so a passing gate says nothing at all.
 `check`/`record --current <path|->` judge or record a `pawl measure` document
 instead of running the dimensions, so one measurement drives every decision that
 follows it ([measure](./spec/commands/measure.md)).

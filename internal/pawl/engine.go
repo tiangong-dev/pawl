@@ -1,6 +1,7 @@
 package pawl
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	dryRun := false
 	acceptWorse := false
 	currentPath := ""
+	quiet := false
 	versionRequested := false
 	helpRequested := false
 	var positional []string
@@ -68,6 +70,8 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			dryRun = true
 		case args[i] == "--accept-worse":
 			acceptWorse = true
+		case args[i] == "-q" || args[i] == "--quiet":
+			quiet = true
 		case args[i] == "--current":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--current requires a path to a measurement document, or - for stdin\n")
@@ -156,6 +160,10 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	if acceptWorse && command != "record" {
 		fmt.Fprintf(stderr, "--accept-worse is only valid on `record`, not %q\n", command)
+		return 2
+	}
+	if quiet && command != "measure" && command != "record" && command != "check" {
+		fmt.Fprintf(stderr, "--quiet is only valid on `measure`, `record` or `check`, not %q\n", command)
 		return 2
 	}
 	if currentPath != "" && command != "record" && command != "check" {
@@ -257,6 +265,13 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		supplied = m
 	}
+	// --quiet silences pawl's own progress and advisory output. An adapter's
+	// stderr is untouched: the whole point of a quiet run is that the noise goes
+	// away, not the diagnosis of the tool that is about to fail.
+	progress := stderr
+	if quiet {
+		progress = io.Discard
+	}
 	if command == "measure" {
 		measureCfg := cfg
 		if onlyProvided {
@@ -266,14 +281,15 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			measureCfg = configWithOnly(cfg, onlySet)
 		}
-		return runMeasure(measureCfg, stdout, stderr)
+		return runMeasure(measureCfg, progress, stdout, stderr)
 	}
 	if command == "record" && onlyProvided {
 		onlySet, onlyIDs, code := resolveOnlyIDs(cfg, only, "record", stderr)
 		if code != 0 {
 			return code
 		}
-		return runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, supplied, stdout, stderr)
+		out, flush := quietStdout(quiet, format, stdout)
+		return flush(runRecordOnly(cfg, onlySet, onlyIDs, format, dryRun, acceptWorse, supplied, progress, out, stderr))
 	}
 	if command == "rank" {
 		return runRank(cfg, format, stdout, stderr)
@@ -288,10 +304,30 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		onlyIDs = ids
 		measureCfg = configWithOnly(cfg, onlySet)
 	}
-	return runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, supplied, stdout, stderr)
+	out, flush := quietStdout(quiet, format, stdout)
+	code := runMeasureCommand(cfg, measureCfg, command, format, since, onlyIDs, dryRun, acceptWorse, supplied, progress, out, stderr, quiet)
+	return flush(code)
 }
 
-func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, supplied map[string]Metric, stdout, stderr io.Writer) int {
+// quietStdout buffers a quiet run's text output and releases it only when the
+// exit code cannot say what happened on its own. Exit 0 means every dimension
+// held, which the code already reports; exit 1 and exit 2 carry a "which one,
+// and by how much" the caller still needs. A --format json run is never
+// buffered: a caller parsing the verdict must always receive one.
+func quietStdout(quiet bool, format string, stdout io.Writer) (io.Writer, func(int) int) {
+	if !quiet || format != "text" {
+		return stdout, func(code int) int { return code }
+	}
+	buf := &bytes.Buffer{}
+	return buf, func(code int) int {
+		if code != 0 {
+			stdout.Write(buf.Bytes())
+		}
+		return code
+	}
+}
+
+func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, supplied map[string]Metric, progress, stdout, stderr io.Writer, quiet bool) int {
 	excluded := excludedDimensionIDs(full, onlyIDs)
 	runScope := reportScope{command: command, since: since, only: onlyIDs, excluded: excluded}
 	baseline, parsedBaseline, err := ReadSnapshotFile(full.SnapshotPath)
@@ -323,7 +359,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 		}
 	}
 
-	current, artifacts, err := acquireMeasurement(measure, supplied, stderr)
+	current, artifacts, err := acquireMeasurement(measure, supplied, progress, stderr)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}
@@ -361,11 +397,11 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 	}
 	if since != "" {
 		renderSinceText(stdout, rep, scope)
-		hintJSONIfPiped(command, stdout, stderr)
+		hintJSONIfPiped(command, quiet, stdout, stderr)
 		return exit
 	}
 	textExit := renderCheckTextLegacy(measure, command, baseline, current, excluded, stdout)
-	hintJSONIfPiped(command, stdout, stderr)
+	hintJSONIfPiped(command, quiet, stdout, stderr)
 	return textExit
 }
 
@@ -379,8 +415,8 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 // gate loops, which is still unverified. Scoped to `check`, the command an
 // automated loop actually gates on, and printed to stderr so it never risks
 // perturbing a script parsing stdout.
-func hintJSONIfPiped(command string, stdout, stderr io.Writer) {
-	if command != "check" || isTerminalWriter(stdout) {
+func hintJSONIfPiped(command string, quiet bool, stdout, stderr io.Writer) {
+	if command != "check" || quiet || isTerminalWriter(stdout) {
 		return
 	}
 	fmt.Fprintln(stderr, "hint: for machine-readable output, use `pawl check --format json`")

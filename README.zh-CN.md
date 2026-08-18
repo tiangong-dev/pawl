@@ -110,7 +110,7 @@ pawl agent-md >> AGENTS.md   # 把操作说明追加到 AI 助手会看的地方
 
 `-c <path>` 指定配置文件(默认 `./pawl.yaml`)。不带命令时默认执行 `check`。
 
-**旗标。** `--format json` 让 `record`/`check` 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`check --since <ref>` 把门禁收窄到工作区相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查)),包含未提交和未跟踪的文件。`--only <id>[,<id>…]` 在 `record` 上只重录这些维度、保留其余已提交基线;在 `check` 上只测量和对比这些维度(agent 内环——CI 仍应跑全量 `check`)。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。
+**旗标。** `--format json` 让 `record`/`check` 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON。`check --since <ref>` 把门禁收窄到工作区相对 `<ref>` 改动的行([clean-as-you-code](#diff-收窄检查)),包含未提交和未跟踪的文件。`--only <id>[,<id>…]` 在 `record` 上只重录这些维度、保留其余已提交基线;在 `check` 上只测量和对比这些维度(agent 内环——CI 仍应跑全量 `check`)。`record` 默认拒绝把某个维度写成比已提交基线更差的值,除非传 `--accept-worse`;`--dry-run` 只预览 record 会写入什么、不实际落盘([接受技术债](#接受技术债--accept-worse--dry-run))。`-q` 静音进度和提示,并且只在退出码非 0 时才打印文本裁决——门禁通过时一个字都不说。`check`/`record --current <path|->` 用一份 `pawl measure` 产出的测量文档来判定或落盘,而不是重新测量,让一次测量驱动它之后的每个决定([measure](./spec/commands/measure.md))。
 
 ### 退出码
 

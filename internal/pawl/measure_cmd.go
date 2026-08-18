@@ -25,8 +25,8 @@ import (
 // It renders no verdict and reads no baseline, so it is also the answer to
 // "what are the numbers right now" — a question that otherwise requires asking
 // for a judgement you did not want.
-func runMeasure(cfg *Config, stdout, stderr io.Writer) int {
-	current, _, err := MeasureAll(cfg, stderr)
+func runMeasure(cfg *Config, progress, stdout, stderr io.Writer) int {
+	current, _, err := MeasureAll(cfg, progress, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -74,9 +74,9 @@ func readMeasurement(path string, stdin io.Reader) (map[string]Metric, error) {
 // failure naming it, never a quietly narrower run. Trusting the caller about
 // the numbers is the deliberate part of --current; letting the file decide
 // which dimensions exist would let a gate shrink without anyone saying so.
-func acquireMeasurement(cfg *Config, supplied map[string]Metric, stderr io.Writer) (map[string]Metric, map[string]*ArtifactInfo, error) {
+func acquireMeasurement(cfg *Config, supplied map[string]Metric, progress, stderr io.Writer) (map[string]Metric, map[string]*ArtifactInfo, error) {
 	if supplied == nil {
-		return MeasureAll(cfg, stderr)
+		return MeasureAll(cfg, progress, stderr)
 	}
 	current := make(map[string]Metric, len(cfg.Dimensions))
 	var missing []measureFailure
