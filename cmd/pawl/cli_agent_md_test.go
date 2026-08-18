@@ -68,6 +68,7 @@ func TestAgentMDBlockCarriesTheLoadBearingRules(t *testing.T) {
 		"watch",                    // headroom is advisory, judging it is the agent's job
 		"pawl rank --format json",  // measure headroom before the edit, not after
 		"artifact",                 // a stale report is not the current tree
+		"not `pawl measure`",       // the closest miss: numbers without a baseline
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("agent block never mentions %q:\n%s", want, out)

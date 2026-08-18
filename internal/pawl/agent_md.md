@@ -2,9 +2,11 @@
 ## Quality gate (pawl)
 
 `pawl check` is this repo's regression gate. Run it yourself before you call a
-task done — not the underlying tool, not `wc -l`, not a prediction from reading
-the diff. Those can agree with the gate by luck and still leave you asserting
-an outcome you never measured.
+task done — not the underlying tool, not `pawl measure`, not `wc -l`, not a
+prediction from reading the diff. Those can agree with the gate by luck and
+still leave you asserting an outcome you never measured. `measure` is the
+closest miss: it prints current numbers and no baseline, so it can tell you
+what a dimension *is* and never whether it got better.
 
 1. Inner loop: `pawl check --format json` (add `--only <id>` while iterating on
    one dimension, `--since HEAD` before a commit). Read `failure_class`,

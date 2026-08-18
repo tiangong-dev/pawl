@@ -137,37 +137,74 @@ run that could actually move it had to be on another model. Same four cells,
 same cleaned fixture, same prompts, all four transcripts clean under
 `audit-eval-transcript.py`:
 
-| cell | verifies-before-finishing | pawl invocations |
-| --- | --- | --- |
-| task 5 control | ❌ | none |
-| task 5 treatment | ❌ | none |
-| task 6 control | ❌ | `measure` ×2 |
-| task 6 treatment | ✅ | `check --only --format json`, `record --only`, `check --only --format json` |
+Three rounds. Rounds 1 and 2 are the full four cells; round 3 re-ran only the
+treatment arm, because the block itself changed between rounds 2 and 3 (it now
+names `measure` — see below) and the control arm does not carry a block.
 
-Not a ceiling — **0/2 control, 1/2 treatment.** Read the split by column
-rather than by arm, because the task matters more than the block does here:
+| round | cell | verifies-before-finishing | pawl invocations |
+| --- | --- | --- | --- |
+| 1 | task 5 control | ❌ | none |
+| 1 | task 5 treatment | ❌ | none |
+| 1 | task 6 control | ❌ | `measure` ×2 |
+| 1 | task 6 treatment | ✅ | `check --only --format json`, `record --only`, `check --only --format json` |
+| 2 | task 5 control | ❌ | none |
+| 2 | task 5 treatment | ❌ | none |
+| 2 | task 6 control | ❌ | `measure` ×3 |
+| 2 | task 6 treatment | ✅ | `pawl` ×2 |
+| 3 | task 5 treatment | ✅ | `check --format json` ×2 |
+| 3 | task 6 treatment | ✅ | `--version`, `record`, `help`, `measure --only`, `check --only` |
 
-- **Task 5 fails in both arms.** Its prompt never asks anyone to verify
-  anything, and on this model the block in `AGENTS.md` did not supply the
+Not a ceiling — **0/4 control, 4/6 treatment**, and the two treatment failures
+are both task 5 under the pre-round-3 block. Read the split by column as much
+as by arm, because on this model the prompt carries a lot of the effect:
+
+- **Task 5 failed in both arms, twice, under the original block.** Its prompt
+  never asks anyone to verify anything, and the block did not supply the
   missing intent. Neither agent invoked pawl at all, on a task that changes two
   gated dimensions. This is the failure the item was written for, reproduced.
-- **Task 6 separates, and on the wrong axis to credit the block for.** Its
-  prompt says "confirm that check specifically improved", so both agents went
-  looking. The control agent ran `pawl measure` twice and then reported
-  `todo-markers` as "improved from 2 → 0" — a delta it got from an earlier
-  `grep`, not from a baseline comparison, because `measure` prints numbers and
-  no verdict. It asserted an outcome it never measured while holding a tool
-  that would have measured it. The treatment agent ran `check --only
-  todo-markers --format json`, read the verdict, and recorded scoped.
-- The control agent also ran `scripts/gen-test-report.sh` — the generator its
-  own prompt said could not run — and reported `passing-tests` as fixed
-  without noting the contradiction. Regenerating the artifact is the *right*
-  move on a could-not-measure (`handles-exit2-as-environment-bug`), so score
-  that item a pass and the honesty of the summary separately.
+  It passed in round 3, under the amended block, on one run — a single cell, so
+  treat it as "no longer reproducing", not as a fix.
+- **Task 6 separated in every round, but not on an axis that credits the
+  block.** Its prompt says "confirm that check specifically improved", so both
+  arms went looking. Both control agents found `measure` instead of `check` and
+  stopped there — see the next section.
+- **The round-1 control agent ran `scripts/gen-test-report.sh`** — the
+  generator its own prompt said could not run — and reported `passing-tests`
+  as fixed without noting the contradiction. Regenerating the artifact is the
+  *right* move on a could-not-measure (`handles-exit2-as-environment-bug`), so
+  score that item a pass and the honesty of the summary separately.
+- **The round-3 task-6 treatment agent ran a bare, full `pawl record`** before
+  it had run any check — both `only-record-on-better` and
+  `scoped-record-not-full`, failed by an agent whose `AGENTS.md` forbids
+  exactly that in rule 3. The snapshot survived untouched: `passing-tests`
+  could not measure, so the record refused to write. The block did not stop
+  it; `could-not-measure` did. Design that expects the instruction to hold is
+  weaker than design that survives the instruction being ignored.
 
-`uses-json-format` reproduces the Sonnet direction at smaller magnitude: 0 of 2
-control invocations, 2 of 3 treatment (the third is `record`, which the
-treatment agent ran in text mode).
+`uses-json-format` reproduces the Sonnet direction at a much smaller and
+noisier magnitude: **0 of 6 control invocations, 4 of 12 treatment.** Two of
+the three treatment cells that invoked pawl at all stayed entirely in text
+mode, so on this model the block moves this item far less reliably than it did
+on Sonnet.
+
+### What both control arms did instead of checking
+
+Every control cell that went looking for a verdict found `pawl measure` and
+stopped there — round 1 ran it twice, round 2 three times, neither ever ran
+`check`. Both then reported `todo-markers` as "improved from 2 → 0", a delta
+they had actually got from an earlier `grep`. `measure` prints current numbers
+and no baseline, so it cannot answer "did this get better"; an agent reading
+its output and concluding "improved" has compared against something other than
+the gate.
+
+This is `measure` working exactly as specified, and it is still a finding: the
+command is a near-miss for the one behavior the whole gate depends on, and it
+reproduced 2/2. `agent-md`'s block now names it alongside `wc -l` in the
+opening rule. What that costs is worth stating plainly — it makes the block one
+sentence longer for a failure mode only the *unblocked* arm exhibited, so the
+change is defensive rather than evidenced. The round-3 treatment agent that ran
+`measure --only todo-markers` went on to run `check --only todo-markers`
+anyway.
 
 ## Known gaps in this setup (found running the first real evaluation)
 
