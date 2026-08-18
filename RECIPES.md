@@ -356,7 +356,7 @@ signal findings/failures).
   gate: "per-file-count"
   builtin: "sarif"
   options:
-    command: "semgrep --config auto --sarif src || true"
+    command: "semgrep --config auto --sarif src"
     # file: "results.sarif"            # …or read a report a prior step wrote
     # levels: ["error", "warning"]     # optional: count only these levels
     # rules: ["python.lang.security.audit.xss"]   # optional: only these ruleIds
@@ -370,7 +370,7 @@ signal findings/failures).
   direction: "higher-is-better"
   builtin: "junit"
   options:
-    command: "pytest --junitxml=.pawl/junit.xml || true"
+    command: "pytest --junitxml=.pawl/junit.xml"
     file: ".pawl/junit.xml"
     count: "passing"   # or "failures" (lower-is-better), "tests", "skipped"
 ```
@@ -387,7 +387,7 @@ signal findings/failures).
     file: "coverage/lcov.info"
     format: "lcov"        # or "cobertura"
     metric: "lines"       # or "branches"; "functions" (lcov only)
-    # command: "npm test -- --coverage || true"   # optional: produce the file first
+    # command: "npm test -- --coverage"   # optional: produce the file first
 ```
 
 A `coverage-summary.json` (Istanbul/nyc) is a one-number read — use `json-value`:
@@ -462,7 +462,7 @@ environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see
 ```bash
 pawl record        # snapshot the baseline — commit pawl.snapshot.json
 pawl check         # the CI gate: exit 1 on any regression
-pawl diff          # see the table without gating (always exit 0)
+pawl measure       # just the numbers — no baseline read, no verdict
 pawl trend         # each metric's value over the committed snapshot's git history
 ```
 
