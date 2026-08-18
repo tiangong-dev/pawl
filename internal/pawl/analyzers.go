@@ -148,7 +148,7 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 func readNamedSarifReport(cfg *Config, dim Dimension, options map[string]any, stderr io.Writer) ([]byte, *ArtifactInfo, error) {
 	command, _ := options["command"].(string)
 	fileRel, _ := options["file"].(string)
-	validExitCodes, _ := strictExitCodeList(options["valid_exit_codes"])
+	validExitCodes, _ := exitCodeSet(options["valid_exit_codes"])
 
 	run := func() ([]byte, error) {
 		stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, command)

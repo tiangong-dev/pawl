@@ -170,15 +170,15 @@ func measureOne(cfg *Config, dim Dimension, stderr io.Writer, analyzerRuns analy
 
 // measureExec runs one exec adapter under the SPEC contract: sh -c in the
 // config dir with PAWL_ROOT set, stdout parsed as exactly one JSON object,
-// stderr passed through for humans, and non-zero exit / timeout / bad JSON
+// stderr passed through for humans, and an unaccepted exit / timeout / bad JSON
 // all surfacing as measurement failures rather than numbers.
 func measureExec(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, dim.Command)
 	if err != nil {
 		return MeasureResult{}, err
 	}
-	if exitCode != 0 {
-		return MeasureResult{}, fmt.Errorf("command exited with an error: exit status %d", exitCode)
+	if !exitAccepted(dim.OkExit, exitCode) {
+		return MeasureResult{}, exitCodeError(dim.OkExit, exitCode)
 	}
 	return parseAdapterOutput(stdout)
 }

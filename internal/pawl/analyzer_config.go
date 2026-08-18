@@ -72,7 +72,7 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 		}
 	}
 	if raw.Builtin == builtinSarif {
-		if _, err := strictExitCodeList(raw.Options["valid_exit_codes"]); err != nil {
+		if _, err := exitCodeSet(raw.Options["valid_exit_codes"]); err != nil {
 			return Analyzer{}, fmt.Errorf("analyzer %s: valid_exit_codes: %v", id, err)
 		}
 		if _, exists := raw.Options["valid_exit_codes"]; exists {
@@ -136,10 +136,9 @@ func analyzerLevelsDescription(builtin string) string {
 	return "error, warning, note or none"
 }
 
-// strictExitCodeList validates a named SARIF producer's explicit successful
-// exit-code contract. The nil map means no contract was configured and keeps
-// the legacy "parseable report is success" behavior.
-func strictExitCodeList(v any) (map[int]bool, error) {
+// exitCodeSet validates a declared successful-exit contract into a set. The nil
+// map means nothing was declared, which every caller reads as "exit 0 or bust".
+func exitCodeSet(v any) (map[int]bool, error) {
 	if v == nil {
 		return nil, nil
 	}

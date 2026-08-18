@@ -13,11 +13,17 @@ output**, and pawl derives the measurement from it declaratively.
   unchanged.
 - The command runs under the same execution environment as an exec adapter
   (`sh -c`, config-dir cwd, `PAWL_ROOT`, stderr passthrough, timeout).
-- **The command must exit 0.** A non-zero exit, a timeout, or output that
-  cannot be extracted per the declared form is a *measurement failure* (exit 2,
-  naming the dimension) — never a silent zero. (Note: tools like `grep` exit 1
-  when they find nothing; wrap such a command so it exits 0, e.g.
-  `grep -c foo || true`, or the empty result reads as a failure.)
+- **The command must exit 0**, unless the dimension declares
+  `valid_exit_codes` (see
+  [spec/commands/config.md](../commands/config.md#valid_exit_codes)). An
+  unaccepted exit, a timeout, or output that cannot be extracted per the
+  declared form is a *measurement failure* (exit 2, naming the dimension) —
+  never a silent zero.
+
+  Tools like `grep` exit 1 when they find nothing, which here is usually the
+  good outcome: declare `valid_exit_codes: [0, 1]` rather than appending
+  `|| true`. The two are not equivalent — `|| true` also accepts grep's exit 2,
+  so an unreadable directory would measure a clean zero.
 - The extracted `unit` defaults to `"count"`. The object forms
   (`regex`/`json_path`) accept an optional `unit` string.
 

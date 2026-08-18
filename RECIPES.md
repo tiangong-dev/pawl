@@ -279,13 +279,15 @@ files were scanned.
   direction: "lower-is-better"
   gate: "per-file-count"
   command: "my-linter --format concise"
+  valid_exit_codes: [0, 1]   # this linter exits 1 when it finds something
   extract:
     regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
 ```
 
-Use this only when the command exits 0 after a successful scan. If “findings
-found” is non-zero, prefer its SARIF output and declare `valid_exit_codes`;
-`|| true` also hides crashes and configuration failures.
+`valid_exit_codes` is the complete set of exit codes that count as a successful
+run; leave it out and the contract is the default `[0]`. Reach for it instead of
+appending `|| true`, which accepts *every* exit code — a crashed linter, a typo
+in a flag, or a missing binary would then measure a clean zero.
 
 ---
 

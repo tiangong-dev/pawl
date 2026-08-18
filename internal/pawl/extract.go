@@ -76,16 +76,17 @@ func parseExtract(v any) (*ExtractSpec, error) {
 }
 
 // measureExtract runs the command and derives the measurement per the declared
-// form. The command must exit 0; a non-zero exit, timeout, or output that cannot
-// be extracted is a measurement failure (never a silent zero), matching the raw
-// exec contract's honesty rule.
+// form. The command must exit 0 unless valid_exit_codes widens the contract; an
+// unaccepted exit, a timeout, or output that cannot be extracted is a
+// measurement failure (never a silent zero), matching the raw exec contract's
+// honesty rule.
 func measureExtract(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, dim.Command)
 	if err != nil {
 		return MeasureResult{}, err
 	}
-	if exitCode != 0 {
-		return MeasureResult{}, fmt.Errorf("command exited with an error: exit status %d", exitCode)
+	if !exitAccepted(dim.OkExit, exitCode) {
+		return MeasureResult{}, exitCodeError(dim.OkExit, exitCode)
 	}
 	spec := dim.Extract
 	switch spec.Form {
