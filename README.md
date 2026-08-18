@@ -170,7 +170,9 @@ The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
 `pawl.yaml` lists dimensions; each is a **built-in**, a **custom command**, or a
 projection from a named analyzer (exactly one of `builtin` / `command` / `source`).
 Named analyzers run once per invocation and let several dimensions filter one
-complete ESLint, Oxlint, or SARIF report.
+complete report — ESLint, Oxlint, or SARIF, or a `lines` analyzer that turns any
+tool's `path:line: message` output into the same findings via one regex, so a
+tool pawl has never heard of gets the same shared-scan treatment.
 
 ```yaml
 snapshot: "pawl.snapshot.json"   # optional, relative to this file
@@ -222,6 +224,7 @@ the tool setup.
 | `jscpd` | adapter | duplicated lines from a jscpd JSON report | `total` |
 | `swift-complexity` | adapter | Swift **cognitive** complexity offenders (what SwiftLint can't) | `per-file-count` |
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
+| `lines` | adapter | any tool's `path:line: message` output, via one regex — one scan, several rule/level-filtered dimensions (named analyzers only) | `per-file-count` |
 | `sarif` | ingest | findings in a SARIF log (CodeQL, Semgrep, …), filtered by rule/level | `per-file-count` |
 | `junit` | ingest | failing / passing / total tests from a JUnit XML report | `total` |
 | `coverage` | ingest | line/branch/function coverage % from lcov or cobertura | `total` |

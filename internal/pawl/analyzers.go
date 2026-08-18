@@ -115,6 +115,9 @@ func executeAnalyzer(cfg *Config, analyzer Analyzer, requiredRules []string, std
 		}
 		return validateAnalyzerReport(analyzer, report)
 	}
+	if analyzer.Builtin == builtinLines {
+		return runLinesAnalyzer(cfg, dim, analyzer, stderr)
+	}
 
 	data, artifact, err := readNamedSarifReport(cfg, dim, analyzer.Options, stderr)
 	if err != nil {

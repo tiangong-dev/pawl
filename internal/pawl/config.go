@@ -410,6 +410,11 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if metric == "functions" && format == "cobertura" {
 			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
 		}
+	case builtinLines:
+		// Only reachable from a dimension: validateAnalyzer handles the lines
+		// kind before it gets here. A dimension has nowhere to put the one run
+		// several dimensions are meant to share, which is the whole point of it.
+		return fmt.Errorf("builtin %q is a named-analyzer kind, not a dimension builtin — declare it under analyzers: and point dimensions at it with source: (a single line-oriented dimension wants command: + extract: regex instead)", builtin)
 	default:
 		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
 			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,

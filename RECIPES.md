@@ -289,6 +289,55 @@ run; leave it out and the contract is the default `[0]`. Reach for it instead of
 appending `|| true`, which accepts *every* exit code — a crashed linter, a typo
 in a flag, or a missing binary would then measure a clean zero.
 
+### Any linter, several rules, one run (`lines`)
+
+The recipe above runs the tool once per dimension. When you want three
+rule-scoped dimensions out of one scan — the thing the ESLint and Oxlint
+analyzers do — use a `lines` analyzer. It works with any tool that prints one
+finding per line, and pawl needs to know nothing about that tool beyond the
+pattern you give it. Ruff, as an example:
+
+```yaml
+analyzers:
+  - id: "ruff"
+    builtin: "lines"
+    options:
+      command: "ruff check src --output-format concise"
+      valid_exit_codes: [0, 1]   # ruff exits 1 when it finds something
+      # Named groups are all optional. path/line build the per-file breakdown;
+      # rule/level are what the dimensions below select on.
+      regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+: (?P<rule>\S+) .*$'
+
+dimensions:
+  - id: "unused-imports"
+    title: "Unused imports"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "ruff"
+    options:
+      rules: ["F401"]
+
+  - id: "long-lines"
+    title: "Lines over the limit"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "ruff"
+    options:
+      rules: ["E501"]
+```
+
+Every non-empty line must match the pattern. A tool that prints a trailing
+`Found 3 errors.` summary will fail the measurement until you either filter it
+out in the command or widen the pattern — deliberately, because the alternative
+is that a tool changing its output format silently drops every dimension
+sourcing it to zero. That strictness is also the closest a line-oriented tool
+gets to rule verification: there is no rule catalog in line output, so `lines`
+does not accept `verify`. It also does not accept `min_files`, since the paths
+it sees are the files that had findings, not the files that were scanned.
+
+Omit the selectors entirely and the dimension counts every finding — the "one
+number for the whole tool" case.
+
 ---
 
 ## Report-format ingest (sit on top of the ecosystem)

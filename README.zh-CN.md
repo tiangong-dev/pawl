@@ -161,7 +161,9 @@ dimensions:
 `verify` 会证明过滤的 ESLint/Oxlint rule 在至少一个代表文件上已启用，
 拼错/禁用 rule 会 exit 2，而真正的干净零仍合法。Oxlint 有一等的命名
 `oxlint` analyzer，直接解析原生 JSON 并让多个维度共享一次扫描；
-golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告。完整配置见
+golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告；没有内建支持、
+也不产 SARIF 的工具用 `lines` analyzer，一条正则就能得到同样的共享扫描。
+完整配置见
 [配方手册](./RECIPES.md)。
 
 ## 内置 adapter
@@ -178,6 +180,7 @@ golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告。完整配置
 | `jscpd` | adapter | 从 jscpd JSON 报告读重复行数 | `total` |
 | `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
 | `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
+| `lines` | adapter | 用一条正则把任何工具的 `path:line: message` 输出变成 findings，一次扫描供多个维度按 rule/level 过滤（仅命名 analyzer 可用） | `per-file-count` |
 | `sarif` | ingest | SARIF 日志里的 findings(CodeQL、Semgrep……),可按 rule/level 过滤 | `per-file-count` |
 | `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
 | `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
