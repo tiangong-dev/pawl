@@ -32,6 +32,16 @@ file-length          3          4      +1  ❌ worse
   `📸 snapshot written to <path>`, or — per [§ Accepted debt](../commands/record.md#accepted-debt---dry-run---accept-worse) —
   refuses with a `❌ record refused` block (nothing written), or, under
   `--dry-run`, previews with a `🔍 dry run` line (nothing written either way).
+- `check`/`diff --only` print, right after the table, an
+  `ℹ️  <n> dimension(s) not measured this run (--only scope): <ids>` line naming
+  the dimensions `--only` left out — the text-mode counterpart of the JSON
+  `excluded` field below. Omitted when `--only` was not given.
+- `check` (not `diff`/`record`) prints, on stderr, a
+  `hint: for machine-readable output, use \`pawl check --format json\`` line
+  whenever stdout is not a terminal (a pipe, a file, a subprocess capture) and
+  `--format json` was not already requested — the case a script or an agent
+  loop actually runs in. A real terminal, or `--format json`/`codeclimate`,
+  suppresses it.
 
 ## Machine-readable output
 
@@ -92,6 +102,8 @@ when nothing was accepted as worse.
   (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
   when `mode` is `since`, else `null`), `only` (array, present only under
   `--only`: the measured dimension ids, deduplicated and sorted — see below),
+  `excluded` (array, present whenever `only` is: the configured dimension ids
+  `--only` left *unmeasured*, sorted — see below),
   `dry_run` (bool, present only when
   `true` — `record --dry-run`), `accepted_worse` (array, present only when
   non-empty — `record --accept-worse`; see [§ Accepted
@@ -109,6 +121,16 @@ when nothing was accepted as worse.
   otherwise, and it survives onto the exit-2 object below. `mode` is unaffected:
   `--only` narrows *which dimensions* are measured, `--since` narrows *which
   lines* count, and the two compose.
+- `excluded` is `only`'s complement against the full config: every dimension id
+  configured but not passed to `--only`, sorted. It exists so a `--only` run
+  stays legible on its own — an agent that narrows scope to fix one broken
+  dimension has no other way to notice the rest of the gate still exists once
+  this object is the only thing it reads. Present on `check`/`diff` whenever
+  `only` is, omitted on a full run, and it survives onto the exit-2 object the
+  same way `only` does — a could-not-measure verdict still reports what was
+  left out, not just what failed. `record --only` does not set it: its
+  existing per-metric `measurement_state: "preserved"` already names every
+  dimension outside the scope, so a second field would repeat the same fact.
 - Exit 2 with `--format json` on `record`/`check`/`diff` still prints the human
   diagnostic on stderr, and also emits the verdict object on stdout:
   `failure_class` is `"could-not-measure"`, `error` is that diagnostic, and

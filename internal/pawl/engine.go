@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -30,6 +30,7 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	onlyProvided := false
 	dryRun := false
 	acceptWorse := false
+	write := false
 	versionRequested := false
 	helpRequested := false
 	var positional []string
@@ -67,6 +68,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 			dryRun = true
 		case args[i] == "--accept-worse":
 			acceptWorse = true
+		case args[i] == "--write":
+			write = true
 		case args[i] == "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--format requires a value (text|json|codeclimate)\n")
@@ -116,9 +119,9 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version", "help":
+	case "init", "agent-md", "record", "check", "diff", "baseline-guard", "trend", "status", "constraints", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | record | check | diff | baseline-guard <ref> | trend [<id>] | status | constraints | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | record | check | diff | baseline-guard <ref> | trend [<id>] | status | constraints | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -148,6 +151,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	}
 	if acceptWorse && command != "record" {
 		fmt.Fprintf(stderr, "--accept-worse is only valid on `record`, not %q\n", command)
+		return 2
+	}
+	if write && command != "agent-md" {
+		fmt.Fprintf(stderr, "--write is only valid on `agent-md`, not %q\n", command)
+		return 2
+	}
+	if command == "agent-md" && format != "text" {
+		fmt.Fprintln(stderr, "--format is not valid on `agent-md` — it emits Markdown")
 		return 2
 	}
 	if since != "" && command != "check" {
@@ -210,6 +221,13 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 		return runInit(configPath, stdout, stderr)
 	}
 
+	// agent-md emits a fixed operating loop, identical in every repo — it reads
+	// no config, so it still works in a repo whose config is mid-edit or broken,
+	// which is exactly when someone reaches for the instructions.
+	if command == "agent-md" {
+		return runAgentMD(write, stdout, stderr)
+	}
+
 	cfg, err := LoadConfig(configPath)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -257,7 +275,8 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 }
 
 func runMeasureCommand(full, measure *Config, command, format, since string, onlyIDs []string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
-	runScope := reportScope{command: command, since: since, only: onlyIDs}
+	excluded := excludedDimensionIDs(full, onlyIDs)
+	runScope := reportScope{command: command, since: since, only: onlyIDs, excluded: excluded}
 	baseline, parsedBaseline, err := ReadSnapshotFile(full.SnapshotPath)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
@@ -300,6 +319,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 	// truth; the legacy text path stays the byte-for-byte human default.
 	rep := buildReport(command, measure, baseline, current, artifacts)
 	rep.Only = onlyIDs
+	rep.Excluded = excluded
 	var scope *sinceScope
 	if since != "" {
 		s, err := applySinceScope(full, rep, baseline, current, since)
@@ -333,166 +353,61 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 	}
 	if since != "" {
 		renderSinceText(stdout, rep, scope)
+		hintJSONIfPiped(command, stdout, stderr)
 		return exit
 	}
-	return renderCheckTextLegacy(measure, command, baseline, current, stdout)
+	textExit := renderCheckTextLegacy(measure, command, baseline, current, excluded, stdout)
+	hintJSONIfPiped(command, stdout, stderr)
+	return textExit
 }
 
-// renderCheckTextLegacy is the byte-for-byte human default output for
-// non-diff-scoped check/diff: the table, the regression block, the improvement
-// hint, and (for check under CI) the GitHub annotations and notice.
-func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, current map[string]Metric, stdout io.Writer) int {
-	type regression struct {
-		dim    Dimension
-		detail []string
+// hintJSONIfPiped nudges toward the machine-readable verdict when `check`'s
+// text output is not going to a human terminal — a script or agent driving
+// pawl almost certainly wants --format json, and `pawl --help` alone has not
+// been enough to get several different models to reach for it across real
+// evaluation runs (see demo/README.md). Even this hint firing has not
+// reliably changed the outcome in single-shot tasks, where the text table
+// alone is legible enough — its payoff is likelier in longer, iterative
+// gate loops, which is still unverified. Scoped to `check`, the command an
+// automated loop actually gates on, and printed to stderr so it never risks
+// perturbing a script parsing stdout.
+func hintJSONIfPiped(command string, stdout, stderr io.Writer) {
+	if command != "check" || isTerminalWriter(stdout) {
+		return
 	}
-	var regressions []regression
-	regressedIDs := map[string]bool{}
-	var improved []string
-	for _, dim := range cfg.Dimensions {
-		base, ok := baseline.Metrics[dim.ID]
-		if !ok {
-			continue // a brand-new dimension has no baseline to regress against
-		}
-		cur, ok := current[dim.ID]
-		if !ok {
-			continue
-		}
-		detail := RegressionsOf(dim.GateSpecOf(),
-			MetricSample{Value: base.Value, Breakdown: base.Breakdown},
-			MetricSample{Value: cur.Value, Breakdown: cur.Breakdown})
-		if len(detail) > 0 {
-			regressions = append(regressions, regression{dim: dim, detail: detail})
-			regressedIDs[dim.ID] = true
-		}
-		if Better(dim.Direction, base.Value, cur.Value) {
-			improved = append(improved, dim.ID)
-		}
-	}
-
-	printTable(stdout, cfg, baseline, current, regressedIDs)
-
-	if len(regressions) > 0 {
-		fmt.Fprintln(stdout, "❌ regressions:")
-		for _, r := range regressions {
-			fmt.Fprintf(stdout, "  • %s (%s)\n", r.dim.ID, r.dim.Title)
-			for _, line := range r.detail {
-				fmt.Fprintf(stdout, "      %s\n", line)
-			}
-		}
-	}
-	if len(improved) > 0 {
-		fmt.Fprintf(stdout, "🎉 improved: %s\n", strings.Join(improved, ", "))
-		fmt.Fprintf(stdout, "   run `%s` to lock in the gains.\n", recordOnlyCommand(improved))
-	}
-	if command == "check" {
-		if onCI() {
-			for _, r := range regressions {
-				base := baseline.Metrics[r.dim.ID]
-				cur := current[r.dim.ID]
-				for _, line := range GitHubAnnotations(r.dim.ID, r.dim.Title, r.dim.GateSpecOf(),
-					MetricSample{Value: base.Value, Breakdown: base.Breakdown},
-					MetricSample{Value: cur.Value, Breakdown: cur.Breakdown}) {
-					fmt.Fprintln(stdout, line)
-				}
-			}
-		}
-		if notice := ImprovementNotice(improved, onCI()); notice != "" {
-			fmt.Fprintln(stdout, notice)
-		}
-		if len(regressions) > 0 {
-			return 1
-		}
-	}
-	return 0
+	fmt.Fprintln(stderr, "hint: for machine-readable output, use `pawl check --format json`")
 }
 
-func printTable(w io.Writer, cfg *Config, baseline *Snapshot, current map[string]Metric, regressedIDs map[string]bool) {
-	idWidth := 6
-	for _, d := range cfg.Dimensions {
-		if len(d.ID) > idWidth {
-			idWidth = len(d.ID)
-		}
+func isTerminalWriter(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
 	}
-	fmt.Fprintln(w, "")
-	fmt.Fprintf(w, "%s  %9s  %9s  %6s  status\n", pad("metric", idWidth), "baseline", "current", "Δ")
-	fmt.Fprintln(w, strings.Repeat("-", idWidth+9+9+6+12))
-	for _, dim := range cfg.Dimensions {
-		var base *float64
-		if baseline != nil {
-			if m, ok := baseline.Metrics[dim.ID]; ok {
-				v := m.Value
-				base = &v
-			}
-		}
-		cur := current[dim.ID].Value
-		tolerance := 0.0
-		if dim.Tolerance != nil {
-			tolerance = *dim.Tolerance
-		}
-		status := statusOf(dim.Direction, base, cur, tolerance)
-		// A per-file/per-key regression can leave the scalar unchanged — the
-		// gate's verdict overrides the scalar-only status.
-		if regressedIDs[dim.ID] {
-			status = "❌ worse"
-		}
-		fmt.Fprintf(w, "%s  %9s  %9s  %6s  %s\n",
-			pad(dim.ID, idWidth), baseCell(base), FormatNumber(cur), fmtDelta(base, cur), status)
+	fi, err := f.Stat()
+	if err != nil {
+		return false
 	}
-	fmt.Fprintln(w, "")
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func statusOf(direction Direction, base *float64, cur, tolerance float64) string {
-	if base == nil {
-		return "🆕 new"
+// excludedDimensionIDs lists configured dimension ids `--only` left
+// unmeasured this run — nil when `--only` was not used. Populated even on a
+// could-not-measure (exit 2) verdict via reportScope, so scoping down to fix
+// one broken dimension does not make the others quietly disappear from view.
+func excludedDimensionIDs(full *Config, onlyIDs []string) []string {
+	if len(onlyIDs) == 0 {
+		return nil
 	}
-	if Worse(direction, *base, cur, tolerance) {
-		return "❌ worse"
+	onlySet := make(map[string]bool, len(onlyIDs))
+	for _, id := range onlyIDs {
+		onlySet[id] = true
 	}
-	// Strictly worse but inside the declared slack — the gate passes, and the
-	// table must not print a "worse" the exit code contradicts.
-	if Worse(direction, *base, cur, 0) {
-		return "✅ within tolerance"
-	}
-	if Better(direction, *base, cur) {
-		return "🎉 better"
-	}
-	return "✅ same"
-}
-
-func fmtDelta(base *float64, cur float64) string {
-	if base == nil {
-		return "new"
-	}
-	d := round2(cur - *base)
-	if d == 0 {
-		return "±0"
-	}
-	if d > 0 {
-		return "+" + FormatNumber(d)
-	}
-	return FormatNumber(d)
-}
-
-func baseCell(base *float64) string {
-	if base == nil {
-		return "—"
-	}
-	return FormatNumber(*base)
-}
-
-func pad(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func displayPath(path string) string {
-	if cwd, err := os.Getwd(); err == nil {
-		if rel, err := filepath.Rel(cwd, path); err == nil && !strings.HasPrefix(rel, "..") {
-			return rel
+	var excluded []string
+	for _, d := range full.Dimensions {
+		if !onlySet[d.ID] {
+			excluded = append(excluded, d.ID)
 		}
 	}
-	return path
+	sort.Strings(excluded)
+	return excluded
 }
