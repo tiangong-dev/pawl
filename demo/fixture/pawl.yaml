@@ -1,0 +1,43 @@
+snapshot: "pawl.snapshot.json"
+
+dimensions:
+  - id: "file-length"
+    title: "Files over 40 lines"
+    direction: "lower-is-better"
+    gate: "total"
+    builtin: "file-length"
+    options:
+      threshold: 40
+      include: ["src/**/*.js"]
+
+  # Pairs with file-length: total alone would let legacy-long.js grow forever
+  # once it's already over threshold. This freezes its recorded line count.
+  - id: "file-length-growth"
+    title: "Already-long files must not grow"
+    direction: "lower-is-better"
+    gate: "per-key-value"
+    builtin: "file-length"
+    options:
+      threshold: 40
+      include: ["src/**/*.js"]
+
+  - id: "todo-markers"
+    title: "TODO / FIXME markers"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "pattern-count"
+    options:
+      pattern: "(TODO|FIXME):"
+      include: ["src/**/*.js"]
+
+  # Reads the JUnit report produced by scripts/gen-test-report.sh. The file is
+  # gitignored, so a fresh checkout has to run that script before this
+  # dimension can be measured at all.
+  - id: "passing-tests"
+    title: "passing tests (ingest demo)"
+    direction: "higher-is-better"
+    gate: "total"
+    builtin: "junit"
+    options:
+      file: "demo-junit.xml"
+      count: "passing"
