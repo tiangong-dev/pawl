@@ -27,6 +27,10 @@ agent already looks before it starts.
   0: it is advice, not a verdict. Any error reading `AGENTS.md` is silent —
   printing a fixed string must not become a failure because of an unrelated
   file.
+- **`AGENTS.md` is read before the block is printed, never after.** Under the
+  documented install, stdout *is* `AGENTS.md`: checking afterwards finds the
+  block this very run just wrote, so a first install warns about itself. The
+  ordering is the contract, not an implementation detail.
 - `--format` is not valid here: the output is Markdown by definition. It is a
   usage error, exit 2.
 - `pawl init`'s next-steps output names `agent-md`, since a command an adopter
