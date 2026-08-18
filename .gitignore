@@ -1,3 +1,6 @@
 npm/dist/
 # CI-generated report the junit dogfood dimensions ingest (regenerated each run).
 pawl-junit.xml
+# demo/scripts/test_eval_scripts.py imports the two scorers by path, which
+# leaves bytecode next to them.
+__pycache__/
