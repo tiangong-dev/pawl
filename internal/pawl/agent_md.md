@@ -8,7 +8,9 @@ an outcome you never measured.
 
 1. Inner loop: `pawl check --format json` (add `--only <id>` while iterating on
    one dimension, `--since HEAD` before a commit). Read `failure_class`,
-   `next_action`, and `watch`.
+   `next_action`, and `watch`. `pawl diff` is the same measurement with the
+   exit code forced to 0 — reach for it only when you deliberately do not want
+   a failure; otherwise stay on `check` and read `exit_code` from the JSON.
 2. Exit 1 / `failure_class: "regression"` → fix the source. Exit 2 /
    `failure_class: "could-not-measure"` → fix the environment named in `error`
    and `failed_metrics` (a missing tool, a stale or absent report file). Never
@@ -21,8 +23,9 @@ an outcome you never measured.
    say what was actually measured. CI runs a full `pawl check` with no `--only`.
 5. `watch` entries are files this run touched that sit near or over a
    threshold, with the `headroom` left. They never change the exit code, so
-   judging them is your job: do not spend the last of a file's headroom without
-   saying so.
+   judging them is your job. Before growing one of those files — or any file
+   you have not measured — run `pawl rank --format json` for its remaining
+   headroom. Learning it from a failed `check` afterwards costs you the edit.
 6. A metric carrying an `artifact` block read that file off disk.
    `generated: false` with a large `age_seconds` means the number describes an
    old report, not the current tree — regenerate it before you trust or record

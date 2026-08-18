@@ -49,6 +49,8 @@ func TestAgentMDBlockCarriesTheLoadBearingRules(t *testing.T) {
 		"pawl record --only",       // never re-bless untouched dimensions
 		"excluded",                 // a scoped verdict is not a green gate
 		"watch",                    // headroom is advisory, judging it is the agent's job
+		"pawl rank --format json",  // measure headroom before the edit, not after
+		"pawl diff",                // which of the two measuring commands to use
 		"artifact",                 // a stale report is not the current tree
 	} {
 		if !strings.Contains(out, want) {

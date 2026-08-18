@@ -26,6 +26,20 @@ import sys
 
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 
+# An agent that writes files through the shell leaves no Edit/Write tool call.
+# Missing those made the last-edit position -1, which made "a check ran after
+# the last edit" trivially true — the script manufactured passes for exactly
+# the runs it was built to judge. Redirection into a path, in-place sed, tee,
+# and heredocs all count as edits.
+BASH_EDIT = re.compile(
+    r">\s*[\w./-]+\.\w+"       # > src/foo.js  (not > /dev/null, no extension)
+    r"|>>\s*[\w./-]+\.\w+"
+    r"|\bsed\s+-i\b"
+    r"|\btee\s+[\w./-]+"
+    r"|\bcat\s*>\s*"
+    r"|\bpatch\b"
+)
+
 # A bare `pawl`, not the `-code-pawl/` inside a scratchpad path: the invocation
 # must start a command or follow a shell separator.
 PAWL_CALL = re.compile(r"(?:^|[;&|(]\s*|\s)pawl(\s+[^;&|)\n]*)?")
@@ -64,6 +78,8 @@ def events(jsonl_path):
                     cmd = c.get("input", {}).get("command", "")
                     for m in PAWL_CALL.finditer(cmd):
                         yield "pawl", ("pawl" + (m.group(1) or "")).strip()
+                    if BASH_EDIT.search(cmd) and not PAWL_CALL.search(cmd):
+                        yield "edit", f"shell write: {cmd.splitlines()[0][:70]}"
 
 
 def describe(call):
@@ -110,6 +126,17 @@ def main():
         sys.exit(2)
 
     last_edit = max((i for i, (k, _) in enumerate(timeline) if k == "edit"), default=-1)
+    if last_edit < 0:
+        # No edit found at all. Either the agent changed nothing, or it edited
+        # in a way this script cannot see — and "the last check came after the
+        # last edit" is vacuously true either way. Say so instead of passing.
+        print("VERDICT verifies-against-the-gate-before-finishing: INDETERMINATE — "
+              "no edit detected in the transcript; check by hand whether the agent "
+              "changed anything")
+        json_calls = [i + 1 for i, c in enumerate(calls) if "--format" in c and "json" in c]
+        print(f"VERDICT uses-json-format: {len(json_calls)}/{len(calls)} invocations, "
+              f"at position(s) {json_calls or 'none'}")
+        sys.exit(1)
     last_check = max(
         (i for i, (k, d) in enumerate(timeline)
          if k == "pawl" and describe(d)[0] in ("check (default)", "check")),
