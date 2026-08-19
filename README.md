@@ -471,7 +471,7 @@ on every commit ([pawl.yaml](./pawl.yaml)).
 The action installs the binary; on its own that is all it does:
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.6.0   # puts the pawl binary on PATH — no Go/Node
+- uses: tiangong-dev/pawl@v0       # puts the pawl binary on PATH — no Go/Node
   with:
     version: v0.6.0                # optional; defaults to the latest release
 - run: pawl check
@@ -484,7 +484,7 @@ no bespoke `github-script` step:
 
 ```yaml
 # ... your pre-steps here, e.g. build exec adapters ...
-- uses: tiangong-dev/pawl@v0.6.0
+- uses: tiangong-dev/pawl@v0
   with:
     command: check
     args: --since origin/${{ github.base_ref }}   # optional extra args
