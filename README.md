@@ -6,6 +6,10 @@
   中文文档见 <a href="./README.zh-CN.md">README.zh-CN.md</a> · Full behavioral contract in <a href="./SPEC.md">SPEC.md</a> (<a href="./spec/README.md">spec/</a>)
 </p>
 
+<p align="center">
+  <a href="https://github.com/marketplace/actions/setup-pawl"><img src="https://img.shields.io/badge/GitHub%20Marketplace-setup--pawl-2ea44f?logo=github" alt="GitHub Marketplace: setup-pawl"></a>
+</p>
+
 **Asserting that nothing got worse is cheap. Measuring it is not.** A coding agent
 reports a task complete; a PR description says "no regressions". pawl is the step
 in between — it re-measures every number you gate on and fails when one of them
