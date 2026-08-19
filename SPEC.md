@@ -27,10 +27,8 @@ change; do not read every file.
 | baseline-guard | [spec/commands/guard.md](spec/commands/guard.md) |
 | Output | [spec/engine/verdict.md](spec/engine/verdict.md#output) |
 | Machine-readable output | [spec/engine/verdict.md](spec/engine/verdict.md#machine-readable-output) |
-| Code Quality output | [spec/engine/verdict.md](spec/engine/verdict.md#code-quality-output) |
 | Diff-scoped checking | [spec/commands/since.md](spec/commands/since.md#diff-scoped-checking) |
 | Trend | [spec/commands/trend.md](spec/commands/trend.md) |
-| Query commands | [spec/commands/query.md](spec/commands/query.md) |
 | Public Go API (package `pawl`) | [spec/api.md](spec/api.md) |
 
 ## README link map

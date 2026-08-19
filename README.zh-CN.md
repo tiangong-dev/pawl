@@ -1,27 +1,30 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="pawl — 语言无关的防劣化质量门禁" width="820">
+  <img src="assets/banner.svg" alt="pawl — coding agent 自己会跑的防劣化门禁" width="820">
 </p>
 
 <p align="center">
   English docs: <a href="./README.md">README.md</a> · 完整行为契约见 <a href="./SPEC.md">SPEC.md</a>(<a href="./spec/README.md">spec/</a>)
 </p>
 
-每个**维度(dimension)** 测量一个数字——超长文件数、重复代码行、超过复杂度阈值的函数、测试覆盖率……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就让 CI 失败**。数字只能持平或变好——门禁永不倒退。
+**声称"什么都没变差"很便宜,量出来不便宜。** coding agent 会报告任务完成,PR 描述会写"无回归"。pawl 是中间那一步:把你在意的每个数字重新测一遍,只要有一个朝错误方向动了就失败。
+
+每个**维度(dimension)** 就是一个数字:超长文件数、超过复杂度阈值的函数、覆盖率、`as any` 个数……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就退出码 1**。数字只能持平或变好,门禁永不倒退。
 
 ```bash
 pawl record                     # 测量全部维度,写入基线
-pawl check                      # CI 门禁:任何维度回归即退出码 1
+pawl check                      # 门禁:任何维度回归即退出码 1
+pawl agent-md >> AGENTS.md      # 告诉你的 coding agent 这道门禁存在
 pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 ```
 
-用什么工具测量是每个维度自己的实现细节。把 ESLint 换成别的 linter、或把整个项目迁移到 pawl,只需改写**一条 adapter 命令**——基线和 CI 门禁原封不动。
+用什么工具测量是每个维度自己的实现细节。把 ESLint 换成别的 linter、或把整个项目迁移到 pawl,只需改写**一条 adapter 命令**——基线和门禁原封不动。
 
 ## 目录
 
 [为什么选 pawl](#为什么选-pawl) · [安装](#安装) · [快速上手](#快速上手) ·
+[给 coding agent 用 pawl](#给-coding-agent-用-pawl) ·
 [命令](#命令) · [配置维度](#配置维度) · [日常使用](#日常使用) ·
-[CI 集成](#ci-集成) · [给 AI agent 用 pawl](#给-ai-agent-用-pawl) ·
-[pawl 不做什么](#pawl-不做什么)
+[CI 集成](#ci-集成) · [pawl 不做什么](#pawl-不做什么)
 
 ## 为什么选 pawl
 
@@ -87,11 +90,24 @@ pawl check
 
 **4. 锁定改进。** 当某个 PR 把数字改好了,`check` 会提示你重新记录;`pawl record --only <id>` 写入更低的新基线,从此它再也回不去。
 
-**5. 告诉你的 AI 编码助手这道门禁的存在**——否则它只能从一次红色 CI 里知道,或者根本不知道:
+**5. 告诉你的 coding agent 这道门禁的存在。** 否则它只能从一次红色 CI 里知道,或者根本不知道——见[给 coding agent 用 pawl](#给-coding-agent-用-pawl)。
 
-```bash
-pawl agent-md >> AGENTS.md   # 把操作说明追加到 AI 助手会看的地方
-```
+## 给 coding agent 用 pawl
+
+agent 会报告任务完成;它到底有没有测过是另一回事。在本仓库自己的 A/B 评测里([demo/](./demo/README.md)),没被告知门禁存在的那一组,在收尾前跑过门禁的是 **4 格里的 0 格**,装了说明块的那一组是 **6 格里的 4 格**。而对照组里那些确实去找裁决的 agent,找到 `pawl measure` 就停下了,然后把某个维度报成"改进"——那个差值其实是它更早一次 `grep` 得来的。
+
+`pawl agent-md >> AGENTS.md` 把下面这套闭环装到 agent 本来就会看的地方。要点:
+
+1. `pawl check --format json`(可选 `--only <id>`,提交前加 `--since HEAD`)。
+2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
+3. 指标 `status: better` 时跑该 metric 的 `next_action`(`pawl record --only <id>`),不要全量 `record`。
+4. Exit 1 / `failure_class: regression` → 改代码。Exit 2 / `could-not-measure` → 修环境(`error`、`failed_metrics`),不要伪造数字。CI:全量 `pawl check`(不要 `--only`)。
+5. 裁决里带顶层 `only` 数组时,本次只测了这些维度——它的 exit 0 不等于全量门禁通过。
+6. 指标带 `artifact` 块时,这个数字是从那个文件读出来的。`generated: false` 且 `age_seconds` 很大,说明它描述的是一份旧报告而不是当前代码——先重新生成再信任或记录这个值。工件年龄不改变退出码。
+
+`pawl measure` 不能替代第 1 步:它只打印当前数字、不读基线,所以它能说出某个维度**是多少**,永远说不出它有没有变好。
+
+针对 AI 生成债务的现成配方见 [RECIPES.md](./RECIPES.md#ai-generated-debt);这套说明是怎么评测的、以及它在哪些运行里**没有**起作用,见 [demo/](./demo/README.md)。
 
 ## 命令
 
@@ -361,21 +377,6 @@ pawl record --only <id> --current .pawl/current.json
 ### 防篡改:`baseline-guard`
 
 `pawl check` 只证明磁盘上的快照与一次新鲜测量一致——不证明快照的历史是诚实的。`pawl baseline-guard <base-ref>` 把已提交的快照与 PR 目标分支对比,若被手改成更差的值就失败。在 PR 上与 `check` 一起跑。
-
-## 给 AI agent 用 pawl
-
-`pawl agent-md >> AGENTS.md` 把下面这套闭环装到 agent 本来就会看的地方。要点:
-
-1. `pawl check --format json`(可选 `--only <id>`,提交前加 `--since HEAD`)。
-2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
-3. 指标 `status: better` 时跑该 metric 的 `next_action`(`pawl record --only <id>`),不要全量 `record`。
-4. Exit 1 / `failure_class: regression` → 改代码。Exit 2 / `could-not-measure` → 修环境(`error`、`failed_metrics`),不要伪造数字。CI:全量 `pawl check`(不要 `--only`)。
-5. 裁决里带顶层 `only` 数组时,本次只测了这些维度——它的 exit 0 不等于全量门禁通过。
-6. 指标带 `artifact` 块时,这个数字是从那个文件读出来的。`generated: false` 且 `age_seconds` 很大,说明它描述的是一份旧报告而不是当前代码——先重新生成再信任或记录这个值。工件年龄不改变退出码。
-
-`pawl measure` 不能替代第 1 步:它只打印当前数字、不读基线,所以它能说出某个维度**是多少**,永远说不出它有没有变好。
-
-针对 AI 生成债务的现成配方见 [RECIPES.md](./RECIPES.md#ai-generated-debt)。这套说明是怎么在真实 agent 运行上评测的,见 [demo/README.md](./demo/README.md)。
 
 ## pawl 不做什么
 

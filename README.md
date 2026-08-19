@@ -1,33 +1,39 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="pawl — a language-agnostic anti-regression quality gate" width="820">
+  <img src="assets/banner.svg" alt="pawl — the regression gate a coding agent runs on itself" width="820">
 </p>
 
 <p align="center">
   中文文档见 <a href="./README.zh-CN.md">README.zh-CN.md</a> · Full behavioral contract in <a href="./SPEC.md">SPEC.md</a> (<a href="./spec/README.md">spec/</a>)
 </p>
 
-Each **dimension** measures one number — files over a length limit, duplicated
-lines, functions over a complexity threshold, test coverage, whatever you can
-express as a command that prints a number. `pawl record` snapshots those numbers;
-`pawl check` re-measures and **fails CI when any dimension gets worse**. Numbers
-can only hold or improve — the gate never slips backward.
+**Asserting that nothing got worse is cheap. Measuring it is not.** A coding agent
+reports a task complete; a PR description says "no regressions". pawl is the step
+in between — it re-measures every number you gate on and fails when one of them
+moved the wrong way.
+
+Each **dimension** is one number: files over a length limit, functions over a
+complexity threshold, coverage, `as any` count — anything you can express as a
+command that prints a number. `pawl record` snapshots those numbers; `pawl check`
+re-measures and **exits 1 when any dimension got worse**. Numbers can only hold or
+improve; the gate never slips backward.
 
 ```bash
 pawl record                     # measure everything, write the baseline
-pawl check                      # CI gate: exit 1 on any regression
-pawl baseline-guard origin/main # anti-tamper: catch hand-edited baselines
+pawl check                      # the gate: exit 1 on any regression
+pawl agent-md >> AGENTS.md      # tell your coding agent the gate is there
+pawl baseline-guard origin/main # anti-tamper: catch a hand-edited baseline
 ```
 
 The measuring tool is an implementation detail of each dimension. Swapping ESLint
-for another linter, or migrating a whole project onto pawl, means rewriting one
-adapter command — the baseline and the CI gate stay put.
+for another linter, or moving a whole project onto pawl, rewrites one adapter
+command — the baseline and the gate stay put.
 
 ## Contents
 
 [Why pawl](#why-pawl) · [Install](#install) · [Quickstart](#quickstart) ·
+[Working with a coding agent](#working-with-a-coding-agent) ·
 [Commands](#commands) · [Configuring dimensions](#configuring-dimensions) ·
 [Everyday use](#everyday-use) · [CI integration](#ci-integration) ·
-[Working with an AI agent](#working-with-an-ai-agent) ·
 [What pawl is not](#what-pawl-is-not)
 
 ## Why pawl
@@ -117,12 +123,35 @@ pawl check
 `pawl record --only <id>` writes the new, lower baseline so it can never slip back
 up.
 
-**5. Tell your coding agent the gate exists** — otherwise it finds out from a
-red CI run, or not at all:
+**5. Tell your coding agent the gate exists.** Otherwise it finds out from a red
+CI run, or not at all — see
+[Working with a coding agent](#working-with-a-coding-agent).
 
-```bash
-pawl agent-md >> AGENTS.md   # append the operating loop where an agent looks
-```
+## Working with a coding agent
+
+An agent will report a task complete; whether it measured anything is a separate
+question. In this repo's own A/B ([demo/](./demo/README.md)), the arm that was
+never told the gate existed ran it before finishing in **0 of 4** cells, against
+**4 of 6** for the arm with the block installed. The control agents that did go
+looking for a verdict found `pawl measure`, stopped there, and reported a
+dimension "improved" — from a delta they had taken out of an earlier `grep`.
+
+`pawl agent-md >> AGENTS.md` installs the loop below where an agent already
+looks. The short version:
+
+1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
+2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
+3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
+4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
+5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
+6. A metric with an `artifact` block read that file off disk. `generated: false` plus a large `age_seconds` means the number describes an old report, not the current tree — regenerate it before trusting or recording the value. The age never changes the exit code.
+
+`pawl measure` is not a substitute for step 1: it prints current numbers and no
+baseline, so it can say what a dimension *is* and never whether it got better.
+
+Copy-paste dimensions that catch AI-shaped debt are in
+[RECIPES.md](./RECIPES.md#ai-generated-debt); how the block was evaluated, with
+the runs where it did **not** help, is in [demo/](./demo/README.md).
 
 ## Commands
 
@@ -486,24 +515,6 @@ pawl record --only <id> --current .pawl/current.json
 that the snapshot's history is honest. `pawl baseline-guard <base-ref>` compares
 the committed snapshot against the PR's base branch and fails if it was
 hand-edited to a worse value. Run it on PRs alongside `check`.
-
-## Working with an AI agent
-
-`pawl agent-md >> AGENTS.md` installs the loop below where an agent already
-looks. The short version:
-
-1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
-2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
-3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
-4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
-5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
-6. A metric with an `artifact` block read that file off disk. `generated: false` plus a large `age_seconds` means the number describes an old report, not the current tree — regenerate it before trusting or recording the value. The age never changes the exit code.
-
-`pawl measure` is not a substitute for step 1: it prints current numbers and no
-baseline, so it can say what a dimension *is* and never whether it got better.
-
-Copy-paste dimensions that catch AI-shaped debt are in [RECIPES.md](./RECIPES.md#ai-generated-debt).
-How this block was evaluated against real agent runs is in [demo/README.md](./demo/README.md).
 
 ## What pawl is not
 
