@@ -7,7 +7,6 @@
       --bg: #ffffff;
       --fg: #1f2328;
       --muted: #59636e;
-      --hair: #d1d9e0;
       --term-bg: #0d1117;
       --term-bar: #161b22;
       --term-edge: #30363d;
@@ -15,14 +14,12 @@
       --dim: #8b949e;
       --good: #3fb950;
       --bad: #f85149;
-      --warn: #d29922;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #0d1117;
         --fg: #e6edf3;
         --muted: #9198a1;
-        --hair: #2a313c;
         --term-bg: #010409;
         --term-bar: #0d1117;
         --term-edge: #21262d;
@@ -31,13 +28,9 @@
 
     .bg { fill: var(--bg); }
     .wordmark { fill: var(--fg); font: 700 84px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
-    .tagline  { fill: var(--muted); font: 400 20px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
-    .badge    { fill: var(--muted); font: 400 16px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .tagline  { fill: var(--muted); font: 400 19px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .badge    { fill: var(--muted); font: 400 15px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .tick     { stroke: var(--good); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-    /* Exit 1 and exit 2 are different colours because they are different
-       claims: one measured a worse number, the other measured nothing. */
-    .exits    { fill: var(--muted); font: 400 14px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
-    .warn     { fill: var(--warn); }
 
     .term-bg  { fill: var(--term-bg); stroke: var(--term-edge); stroke-width: 1.5; }
     .term-bar { fill: var(--term-bar); }
@@ -120,20 +113,20 @@
 
   <rect class="bg" width="1200" height="520"/>
 
-  <!-- Identity -->
-  <text class="wordmark" x="48" y="200">pawl</text>
-  <text class="tagline"  x="51" y="242">numbers can only hold or improve</text>
+  <!-- Identity. The four claims are the ones the terminal panel cannot make
+       for itself: it already shows a multi-dimension verdict down to the file,
+       so repeating that here would spend the space twice. -->
+  <text class="wordmark" x="40" y="185">pawl</text>
+  <text class="tagline"  x="43" y="227">numbers can only hold or improve</text>
 
-  <g class="tick"><path d="M52 289 l7 7 l13 -14"/></g>
-  <text class="badge" x="82" y="296">any language, any metric</text>
-  <g class="tick"><path d="M52 327 l7 7 l13 -14"/></g>
-  <text class="badge" x="82" y="334">baseline lives in your repo</text>
-  <g class="tick"><path d="M52 365 l7 7 l13 -14"/></g>
-  <text class="badge" x="82" y="372">one static binary, no server</text>
-
-  <line x1="51" y1="406" x2="330" y2="406" stroke="var(--hair)" stroke-width="1.5"/>
-  <text class="exits" x="51" y="434"><tspan class="bad">exit 1</tspan>  something got worse</text>
-  <text class="exits" x="51" y="456"><tspan class="warn">exit 2</tspan>  measurement failed</text>
+  <g class="tick"><path d="M44 272 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="279">any language, any tool</text>
+  <g class="tick"><path d="M44 310 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="317">baseline is a file, not a service</text>
+  <g class="tick"><path d="M44 348 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="355">unapproved baseline drops fail CI</text>
+  <g class="tick"><path d="M44 386 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="393">your AI agent gets the same loop</text>
 
   <!-- Terminal -->
   <rect class="term-bg"  x="372" y="30" width="792" height="460" rx="10"/>
