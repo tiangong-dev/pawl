@@ -344,7 +344,7 @@ pawl 是单个二进制——任何 CI 都能跑。pawl 自己的 CI 就在 dogf
 action 负责安装二进制;不传 `command` 时它只做这件事:
 
 ```yaml
-- uses: tiangong-dev/pawl@v0.6.0   # 把 pawl 二进制放进 PATH——无需 Go/Node
+- uses: tiangong-dev/pawl@v0       # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
     version: v0.6.0                # 可选;默认取最新 release
 - run: pawl check
@@ -355,7 +355,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 
 ```yaml
 # ... 门禁需要的前置步骤,如构建 exec adapter ...
-- uses: tiangong-dev/pawl@v0.6.0
+- uses: tiangong-dev/pawl@v0
   with:
     command: check
     args: --since origin/${{ github.base_ref }}   # 可选的附加参数

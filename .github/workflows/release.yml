@@ -116,6 +116,12 @@ jobs:
           git tag "$tag"
           git push origin "$tag"
 
+          # Rolling major tag, so `uses: tiangong-dev/pawl@v0` tracks the latest
+          # release the way `actions/checkout@v4` does.
+          major="v${VERSION%%.*}"
+          git tag -f "$major"
+          git push -f origin "$major"
+
           last="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
           if [[ -n "$last" ]] && git rev-parse --verify "refs/tags/$last" >/dev/null 2>&1; then
             notes="$(git log --pretty=format:'- %s (%h)' "${last}..HEAD")"
