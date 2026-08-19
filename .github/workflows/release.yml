@@ -135,3 +135,24 @@ jobs:
             "$header" "$VERSION" "Prebuilt binaries are attached below." "$notes" > /tmp/notes.md
 
           gh release create "$tag" --title "$tag" --notes-file /tmp/notes.md archives/*
+
+      # The Marketplace listing is not updated by this workflow, and there is no
+      # API for it: the badge, description and version shown there are snapshotted
+      # from action.yml the moment a release is ticked for publication. A release
+      # that skips the step below leaves the listing on the previous version.
+      - name: Marketplace listing needs a manual tick
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: |
+          {
+            echo "## One manual step left: the Marketplace listing"
+            echo
+            echo "Open <https://github.com/tiangong-dev/pawl/releases/edit/v${VERSION}>, tick"
+            echo "**Publish this Action to the GitHub Marketplace**, set Primary Category to"
+            echo "**Code quality** and Another Category to **Continuous integration**, then click"
+            echo "**Update release**."
+            echo
+            echo "Skipping this is only safe when \`action.yml\` is unchanged and you are fine with"
+            echo "<https://github.com/marketplace/actions/setup-pawl> still showing the previous version."
+          } >> "$GITHUB_STEP_SUMMARY"
