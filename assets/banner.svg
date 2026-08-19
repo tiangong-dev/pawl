@@ -28,7 +28,11 @@
     }
 
     .bg { fill: var(--bg); }
-    .wordmark { fill: var(--fg); font: 700 84px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
+    /* The logomark is assets/logo.svg scaled to 120px: black plate, white
+       wordmark. The plate carries the same edge stroke as the terminal so it
+       still reads as a shape against the dark-mode canvas. */
+    .logomark { fill: #000000; stroke: var(--term-edge); stroke-width: 1.5; }
+    .logotype { fill: #ffffff; font: 700 48px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -1.76px; }
     .tagline  { fill: var(--fg); font: 600 21px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .subtag   { fill: var(--muted); font: 400 17px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .badge    { fill: var(--muted); font: 400 15px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
@@ -127,7 +131,8 @@
   <!-- Identity. The four claims are the ones the session on the right cannot
        make for itself: it shows one run, not how an agent comes to run it,
        what it reads back, or what stops it moving the bar instead. -->
-  <text class="wordmark" x="40" y="205">pawl</text>
+  <rect class="logomark" x="40" y="85" width="120" height="120" rx="26"/>
+  <text class="logotype" x="98.8" y="161.8" text-anchor="middle">Pawl</text>
   <text class="tagline"  x="43" y="247">agents assert — pawl measures</text>
   <text class="subtag"   x="43" y="275">numbers can only hold or improve</text>
 

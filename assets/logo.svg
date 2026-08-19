@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Pawl">
+  <title>Pawl</title>
+  <rect width="512" height="512" fill="#000000"/>
+  <!-- x is nudged left by half the letter-spacing: the trailing space is
+       included in the advance width that text-anchor="middle" centers on. -->
+  <text x="251" y="327.5"
+        text-anchor="middle"
+        fill="#ffffff"
+        font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-weight="700"
+        font-size="205"
+        letter-spacing="-7.5">Pawl</text>
+</svg>
