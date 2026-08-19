@@ -6,6 +6,10 @@
   English docs: <a href="./README.md">README.md</a> · 完整行为契约见 <a href="./SPEC.md">SPEC.md</a>(<a href="./spec/README.md">spec/</a>)
 </p>
 
+<p align="center">
+  <a href="https://github.com/marketplace/actions/setup-pawl"><img src="https://img.shields.io/badge/GitHub%20Marketplace-setup--pawl-2ea44f?logo=github" alt="GitHub Marketplace: setup-pawl"></a>
+</p>
+
 **声称"什么都没变差"很便宜,量出来不便宜。** coding agent 会报告任务完成,PR 描述会写"无回归"。pawl 是中间那一步:把你在意的每个数字重新测一遍,只要有一个朝错误方向动了就失败。
 
 每个**维度(dimension)** 就是一个数字:超长文件数、超过复杂度阈值的函数、覆盖率、`as any` 个数……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就退出码 1**。数字只能持平或变好,门禁永不倒退。
