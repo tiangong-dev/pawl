@@ -136,23 +136,49 @@ jobs:
 
           gh release create "$tag" --title "$tag" --notes-file /tmp/notes.md archives/*
 
-      # The Marketplace listing is not updated by this workflow, and there is no
-      # API for it: the badge, description and version shown there are snapshotted
-      # from action.yml the moment a release is ticked for publication. A release
-      # that skips the step below leaves the listing on the previous version.
-      - name: Marketplace listing needs a manual tick
+      # Nothing about the Marketplace listing is reachable from CI: there is no
+      # REST or GraphQL endpoint for the publish tick, so a human has to open the
+      # release page. What CI *can* do is say whether this release needs it, which
+      # is decided entirely by action.yml — the only file the listing renders.
+      - name: Say whether the Marketplace listing needs a tick
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
         run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          # The tag right below this one in version order — not just "the second
+          # newest", so that back-porting a patch compares against its own
+          # predecessor rather than whatever happens to sort first.
+          prev="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname |
+            awk -v t="$tag" 'BEGIN { seen = 0 } { if ($0 == t) { seen = 1; next } if (seen) { print; exit } }')"
+
+          if [[ -z "$prev" ]]; then
+            verdict="first release — tick it to create the listing"
+          elif ! git diff --quiet "$prev" "$tag" -- action.yml; then
+            verdict="**required** — \`action.yml\` changed since \`${prev}\`"
+          else
+            verdict="optional — \`action.yml\` is unchanged since \`${prev}\`"
+          fi
+
           {
-            echo "## One manual step left: the Marketplace listing"
+            echo "## Marketplace listing: ${verdict}"
             echo
-            echo "Open <https://github.com/tiangong-dev/pawl/releases/edit/v${VERSION}>, tick"
+            echo "To tick it: open <https://github.com/tiangong-dev/pawl/releases/edit/${tag}>, check"
             echo "**Publish this Action to the GitHub Marketplace**, set Primary Category to"
-            echo "**Code quality** and Another Category to **Continuous integration**, then click"
+            echo "**Code quality** and Another Category to **Continuous integration**, then"
             echo "**Update release**."
             echo
-            echo "Skipping this is only safe when \`action.yml\` is unchanged and you are fine with"
-            echo "<https://github.com/marketplace/actions/setup-pawl> still showing the previous version."
+            echo "Skipping it costs nothing to anyone running the action — \`uses:\` resolves a git"
+            echo "ref and never consults the Marketplace. The only casualty is"
+            echo "<https://github.com/marketplace/actions/setup-pawl>, which keeps showing the"
+            echo "name, description, badge and version of the last release that was ticked."
+            if [[ -n "$prev" ]] && ! git diff --quiet "$prev" "$tag" -- action.yml; then
+              echo
+              echo "### What changed in \`action.yml\`"
+              echo
+              echo '```diff'
+              git diff "$prev" "$tag" -- action.yml | tail -n +5
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
