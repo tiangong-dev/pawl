@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 460" width="1200" height="460" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" role="img" aria-labelledby="t d">
   <title id="t">pawl — a language-agnostic anti-regression quality gate</title>
-  <desc id="d">A terminal runs `pawl check -q`. Four dimensions report against the recorded baseline: eslint-warnings 342 to 338 better, todo-markers unchanged, line-coverage 71.2 to 73.4 better, complexity 15 to 18 worse. The gate then lists the one regression, the dimension's description, its totals, and the file the change came from, and exits 1.</desc>
+  <desc id="d">A terminal runs `pawl check -q`. Four dimensions report against the recorded baseline: eslint-warnings 342 to 338 better, todo-markers unchanged, line-coverage unchanged, complexity 15 to 18 worse. The gate lists the one regression with the dimension's description, its totals and the file the change came from, then names the dimension that improved and the scoped record command that would lock the gain in. It exits 1.</desc>
 
   <style>
     :root {
@@ -30,7 +30,7 @@
     }
 
     .bg { fill: var(--bg); }
-    .wordmark { fill: var(--fg); font: 700 82px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
+    .wordmark { fill: var(--fg); font: 700 84px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
     .tagline  { fill: var(--muted); font: 400 20px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .badge    { fill: var(--muted); font: 400 16px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .tick     { stroke: var(--good); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -43,10 +43,12 @@
     .term-bar { fill: var(--term-bar); }
     .title    { fill: var(--dim); font: 400 14px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
 
-    /* 19px monospace at 0.6em advance = 11.4px per column, which is the grid
-       the real table is laid out on: metric at column 0, baseline right-aligned
-       at 29, current at 40, Δ at 48, status at 50. */
-    .mono   { font: 400 19px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    /* 18px monospace at 0.6em advance = 10.8px per column. Column positions
+       below are that grid times the columns `check` actually prints for this
+       table — 26, 37, 45, 47, with a 51-character rule. The widths are derived
+       from the longest metric id, so they are a property of these four
+       dimensions, not a constant. */
+    .mono   { font: 400 18px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
     .prompt { fill: var(--good); }
     .cmd    { fill: var(--term-fg); }
     .dimtxt { fill: var(--dim); }
@@ -73,133 +75,138 @@
     .l6 { animation: l6 14s linear infinite; }
     .l7 { animation: l7 14s linear infinite; }
     .l8 { animation: l8 14s linear infinite; }
+    .l9 { animation: l9 14s linear infinite; }
+    .l10 { animation: l10 14s linear infinite; }
     @keyframes cmdline { 0%,  1.9% { opacity: 0 }  2%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l1 { 0%, 13.9% { opacity: 0 } 14%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l2 { 0%, 18.9% { opacity: 0 } 19%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l3 { 0%, 22.9% { opacity: 0 } 23%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l4 { 0%, 26.9% { opacity: 0 } 27%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l5 { 0%, 30.9% { opacity: 0 } 31%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l6 { 0%, 43.9% { opacity: 0 } 44%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l7 { 0%, 47.9% { opacity: 0 } 48%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l8 { 0%, 51.9% { opacity: 0 } 52%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l1  { 0%, 13.9% { opacity: 0 } 14%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l2  { 0%, 17.9% { opacity: 0 } 18%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l3  { 0%, 21.9% { opacity: 0 } 22%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l4  { 0%, 25.9% { opacity: 0 } 26%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l5  { 0%, 29.9% { opacity: 0 } 30%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l6  { 0%, 40.9% { opacity: 0 } 41%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l7  { 0%, 44.9% { opacity: 0 } 45%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l8  { 0%, 48.9% { opacity: 0 } 49%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l9  { 0%, 54.9% { opacity: 0 } 55%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l10 { 0%, 58.9% { opacity: 0 } 59%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
 
     /* The command types itself: a clip rect widens one character at a time,
        and the caret rides along on the same 15 steps. */
     .typed { animation: typed 14s steps(15, end) infinite; }
-    @keyframes typed { 0%, 2% { width: 0 } 10%, 100% { width: 171px } }
+    @keyframes typed { 0%, 2% { width: 0 } 10%, 100% { width: 162px } }
 
     .caret { fill: var(--term-fg); animation: caret-move 14s steps(15, end) infinite, caret-blink 14s steps(1, end) infinite; }
-    @keyframes caret-move  { 0%, 2% { transform: translateX(-171px) } 10%, 100% { transform: translateX(0) } }
+    @keyframes caret-move  { 0%, 2% { transform: translateX(-162px) } 10%, 100% { transform: translateX(0) } }
     @keyframes caret-blink { 0%, 1.9% { opacity: 0 } 2%, 5% { opacity: 1 } 6%, 8% { opacity: 0 } 9%, 11% { opacity: 1 } 12%, 100% { opacity: 0 } }
 
     /* The regressions header and the title-bar exit code share one pulse,
        because they are one event: the gate refusing to let a number slip back. */
     .alarm { animation: alarm 14s ease-in-out infinite; }
     @keyframes alarm {
-      0%, 37.9% { opacity: 0 }
-      38%       { opacity: 1 }
-      41%       { opacity: .4 }
-      44%       { opacity: 1 }
-      47%       { opacity: .4 }
-      50%, 88%  { opacity: 1 }
+      0%, 35.9% { opacity: 0 }
+      36%       { opacity: 1 }
+      39%       { opacity: .4 }
+      42%       { opacity: 1 }
+      45%       { opacity: .4 }
+      48%, 88%  { opacity: 1 }
       95%, 100% { opacity: 0 }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .cmdline,.l1,.l2,.l3,.l4,.l5,.l6,.l7,.l8,.typed,.caret,.alarm { animation: none; }
-      .typed { width: 171px; }
+      .cmdline,.l1,.l2,.l3,.l4,.l5,.l6,.l7,.l8,.l9,.l10,.typed,.caret,.alarm { animation: none; }
+      .typed { width: 162px; }
       .caret { opacity: 0; }
     }
   </style>
 
-  <rect class="bg" width="1200" height="460"/>
+  <rect class="bg" width="1200" height="520"/>
 
   <!-- Identity -->
-  <text class="wordmark" x="60" y="168">pawl</text>
-  <text class="tagline"  x="63" y="208">numbers can only hold or improve</text>
+  <text class="wordmark" x="48" y="200">pawl</text>
+  <text class="tagline"  x="51" y="242">numbers can only hold or improve</text>
 
-  <g class="tick"><path d="M64 254 l7 7 l13 -14"/></g>
-  <text class="badge" x="94" y="261">any language, any metric</text>
-  <g class="tick"><path d="M64 292 l7 7 l13 -14"/></g>
-  <text class="badge" x="94" y="299">baseline lives in your repo</text>
-  <g class="tick"><path d="M64 330 l7 7 l13 -14"/></g>
-  <text class="badge" x="94" y="337">one static binary, no server</text>
+  <g class="tick"><path d="M52 289 l7 7 l13 -14"/></g>
+  <text class="badge" x="82" y="296">any language, any metric</text>
+  <g class="tick"><path d="M52 327 l7 7 l13 -14"/></g>
+  <text class="badge" x="82" y="334">baseline lives in your repo</text>
+  <g class="tick"><path d="M52 365 l7 7 l13 -14"/></g>
+  <text class="badge" x="82" y="372">one static binary, no server</text>
 
-  <line x1="63" y1="372" x2="336" y2="372" stroke="var(--hair)" stroke-width="1.5"/>
-  <text class="exits" x="63" y="398"><tspan class="bad">exit 1</tspan>  something got worse</text>
-  <text class="exits" x="63" y="420"><tspan class="warn">exit 2</tspan>  something could not be measured</text>
+  <line x1="51" y1="406" x2="330" y2="406" stroke="var(--hair)" stroke-width="1.5"/>
+  <text class="exits" x="51" y="434"><tspan class="bad">exit 1</tspan>  something got worse</text>
+  <text class="exits" x="51" y="456"><tspan class="warn">exit 2</tspan>  measurement failed</text>
 
   <!-- Terminal -->
-  <rect class="term-bg"  x="400" y="30" width="740" height="390" rx="10"/>
-  <path class="term-bar" d="M400 40 a10 10 0 0 1 10 -10 h720 a10 10 0 0 1 10 10 v24 h-740 z"/>
-  <line x1="400" y1="64" x2="1140" y2="64" stroke="var(--term-edge)" stroke-width="1.5"/>
-  <circle cx="422" cy="47" r="5.5" fill="#ff5f57"/>
-  <circle cx="442" cy="47" r="5.5" fill="#febc2e"/>
-  <circle cx="462" cy="47" r="5.5" fill="#28c840"/>
+  <rect class="term-bg"  x="372" y="30" width="792" height="460" rx="10"/>
+  <path class="term-bar" d="M372 40 a10 10 0 0 1 10 -10 h772 a10 10 0 0 1 10 10 v24 h-792 z"/>
+  <line x1="372" y1="64" x2="1164" y2="64" stroke="var(--term-edge)" stroke-width="1.5"/>
+  <circle cx="394" cy="47" r="5.5" fill="#ff5f57"/>
+  <circle cx="414" cy="47" r="5.5" fill="#febc2e"/>
+  <circle cx="434" cy="47" r="5.5" fill="#28c840"/>
   <!-- The exit code is window chrome, not terminal output: a shell prints the
        table and returns 1, it does not print the number. Putting it in the
        title bar keeps the punchline without inventing a line pawl never emits. -->
   <g class="alarm">
-    <rect x="1024" y="36" width="92" height="22" rx="11" fill="var(--bad)" fill-opacity=".15" stroke="var(--bad)" stroke-width="1"/>
-    <text class="title" x="1070" y="51" text-anchor="middle" fill="var(--bad)" font-weight="600">exit 1</text>
+    <rect x="1048" y="36" width="92" height="22" rx="11" fill="var(--bad)" fill-opacity=".15" stroke="var(--bad)" stroke-width="1"/>
+    <text class="title" x="1094" y="51" text-anchor="middle" fill="var(--bad)" font-weight="600">exit 1</text>
   </g>
 
-  <!-- Command line, typed -->
+  <!-- Row 1: the command, typed. -->
   <clipPath id="typewriter">
-    <rect class="typed" x="428" y="82" width="171" height="26"/>
+    <rect class="typed" x="400" y="86" width="162" height="24"/>
   </clipPath>
   <g class="cmdline" clip-path="url(#typewriter)">
-    <text class="mono prompt" x="428" y="102">$ <tspan class="cmd">pawl check -q</tspan></text>
+    <text class="mono prompt" x="400" y="104">$ <tspan class="cmd">pawl check -q</tspan></text>
   </g>
-  <rect class="caret" x="599" y="86" width="10" height="20"/>
+  <rect class="caret" x="562" y="88" width="10" height="20"/>
 
-  <!-- Verdict table. Columns sit on the character grid the CLI prints:
-       metric at 0, baseline right-aligned at 29, current at 40, Δ at 48,
-       status at 50. -->
+  <!-- Rows 3-4: table header. -->
   <g class="l1">
-    <text class="mono head" x="428" y="150">metric</text>
-    <text class="mono head" x="759" y="150" text-anchor="end">baseline</text>
-    <text class="mono head" x="884" y="150" text-anchor="end">current</text>
-    <text class="mono head" x="975" y="150" text-anchor="end">Δ</text>
-    <text class="mono head" x="998" y="150">status</text>
-    <text class="mono head" x="428" y="170">------------------------------------------------------</text>
+    <text class="mono head" x="400" y="156">metric</text>
+    <text class="mono head" x="681" y="156" text-anchor="end">baseline</text>
+    <text class="mono head" x="800" y="156" text-anchor="end">current</text>
+    <text class="mono head" x="886" y="156" text-anchor="end">Δ</text>
+    <text class="mono head" x="908" y="156">status</text>
+    <text class="mono head" x="400" y="182">---------------------------------------------------</text>
   </g>
 
+  <!-- Rows 5-8: one line per dimension. -->
   <g class="l2">
-    <text class="mono name" x="428" y="204">eslint-warnings</text>
-    <text class="mono num"  x="759" y="204" text-anchor="end">342</text>
-    <text class="mono num"  x="884" y="204" text-anchor="end">338</text>
-    <text class="mono num"  x="975" y="204" text-anchor="end">-4</text>
-    <text class="mono good" x="998" y="204">🎉 better</text>
+    <text class="mono name" x="400" y="208">eslint-warnings</text>
+    <text class="mono num"  x="681" y="208" text-anchor="end">342</text>
+    <text class="mono num"  x="800" y="208" text-anchor="end">338</text>
+    <text class="mono num"  x="886" y="208" text-anchor="end">-4</text>
+    <text class="mono good" x="908" y="208">🎉 better</text>
   </g>
-
   <g class="l3">
-    <text class="mono name" x="428" y="230">todo-markers</text>
-    <text class="mono num"  x="759" y="230" text-anchor="end">12</text>
-    <text class="mono num"  x="884" y="230" text-anchor="end">12</text>
-    <text class="mono num"  x="975" y="230" text-anchor="end">±0</text>
-    <text class="mono dimtxt" x="998" y="230">✅ same</text>
+    <text class="mono name"   x="400" y="234">todo-markers</text>
+    <text class="mono num"    x="681" y="234" text-anchor="end">12</text>
+    <text class="mono num"    x="800" y="234" text-anchor="end">12</text>
+    <text class="mono num"    x="886" y="234" text-anchor="end">±0</text>
+    <text class="mono dimtxt" x="908" y="234">✅ same</text>
   </g>
-
   <g class="l4">
-    <text class="mono name" x="428" y="256">line-coverage</text>
-    <text class="mono num"  x="759" y="256" text-anchor="end">71.2</text>
-    <text class="mono num"  x="884" y="256" text-anchor="end">73.4</text>
-    <text class="mono num"  x="975" y="256" text-anchor="end">+2.2</text>
-    <text class="mono good" x="998" y="256">🎉 better</text>
+    <text class="mono name"   x="400" y="260">line-coverage</text>
+    <text class="mono num"    x="681" y="260" text-anchor="end">71.2</text>
+    <text class="mono num"    x="800" y="260" text-anchor="end">71.2</text>
+    <text class="mono num"    x="886" y="260" text-anchor="end">±0</text>
+    <text class="mono dimtxt" x="908" y="260">✅ same</text>
   </g>
-
   <g class="l5">
-    <text class="mono name" x="428" y="282">complexity</text>
-    <text class="mono num"  x="759" y="282" text-anchor="end">15</text>
-    <text class="mono num"  x="884" y="282" text-anchor="end">18</text>
-    <text class="mono num"  x="975" y="282" text-anchor="end">+3</text>
-    <text class="mono bad"  x="998" y="282">❌ worse</text>
+    <text class="mono name" x="400" y="286">complexity</text>
+    <text class="mono num"  x="681" y="286" text-anchor="end">15</text>
+    <text class="mono num"  x="800" y="286" text-anchor="end">18</text>
+    <text class="mono num"  x="886" y="286" text-anchor="end">+3</text>
+    <text class="mono bad"  x="908" y="286">❌ worse</text>
   </g>
 
-  <!-- The catch -->
-  <text class="mono bad alarm"  x="428" y="330">❌ regressions:</text>
-  <text class="mono name l6"    x="451" y="356">• complexity (cyclomatic complexity per function)</text>
-  <text class="mono dimtxt l7"  x="496" y="382">total 15 → 18</text>
-  <text class="mono dimtxt l8"  x="496" y="404">src/parser.ts  9 → 12</text>
+  <!-- Rows 10-13: what regressed, down to the file. -->
+  <text class="mono bad alarm" x="400" y="338">❌ regressions:</text>
+  <text class="mono name l6"   x="422" y="364">• complexity (cyclomatic complexity per function)</text>
+  <text class="mono dimtxt l7" x="465" y="390">total 15 → 18</text>
+  <text class="mono dimtxt l8" x="465" y="416">src/parser.ts  9 → 12</text>
+
+  <!-- Rows 14-15: what improved, and the scoped record that locks it in
+       without re-blessing the dimensions this run did not touch. -->
+  <text class="mono good l9"    x="400" y="442">🎉 improved: eslint-warnings</text>
+  <text class="mono dimtxt l10" x="432" y="468">run `pawl record --only eslint-warnings` to lock in the gains.</text>
 </svg>
