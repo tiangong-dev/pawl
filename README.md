@@ -184,6 +184,7 @@ Omitting the command runs `check`.
 | `--limit <n>` | `trend` | cap history rows (default 20, `0` = all) |
 | `-q`, `--quiet` | `check`, `record`, `measure` | silence progress and advisory output; print a text verdict only when the exit code is non-zero, so a passing gate says nothing at all |
 
+`--version` is valid everywhere and prints what `pawl version` prints.
 `--format` is a usage error on `agent-md` (it emits Markdown) and on `measure`
 (it emits the measurement document).
 

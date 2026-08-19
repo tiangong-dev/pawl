@@ -140,7 +140,7 @@ agent 会报告任务完成;它到底有没有测过是另一回事。在本仓�
 | `--limit <n>` | `trend` | 限制历史行数(默认 20,`0` = 全部) |
 | `-q`, `--quiet` | `check`、`record`、`measure` | 静音进度和提示,只在退出码非 0 时才打印文本裁决——门禁通过时一个字都不说 |
 
-`--format` 在 `agent-md`(输出 Markdown)和 `measure`(输出测量文档)上是用法错误。
+`--version` 在所有命令上都可用,输出与 `pawl version` 相同。`--format` 在 `agent-md`(输出 Markdown)和 `measure`(输出测量文档)上是用法错误。
 
 ### 退出码
 
