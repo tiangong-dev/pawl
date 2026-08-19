@@ -477,7 +477,7 @@ The action installs the binary; on its own that is all it does:
 ```yaml
 - uses: tiangong-dev/pawl@v0       # puts the pawl binary on PATH — no Go/Node
   with:
-    version: v0.7.0                # optional; defaults to the latest release
+    version: v0.7.1                # optional; defaults to the latest release
 - run: pawl check
 - run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
 ```
@@ -503,7 +503,7 @@ dimension improved but the baseline wasn't re-recorded.
 
 ### Any other CI
 
-Run `npx -y @pawl-tools/cli@0.7.0 check` (or download the release binary) in any
+Run `npx -y @pawl-tools/cli@0.7.1 check` (or download the release binary) in any
 CI. One measurement can drive both the verdict and the record that follows it,
 which matters when a dimension reads a report off disk — two separate passes can
 read two different builds:

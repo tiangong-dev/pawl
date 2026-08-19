@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+### Changed
+
+- Marketplace badge color from green to black, matching the `Pawl` wordmark. The
+  badge is snapshotted from `action.yml` when a release is published, so it takes
+  a release to change. The binary is byte-for-byte what 0.7.0 shipped.
+
 ## 0.7.0
 
 ### Breaking
