@@ -14,12 +14,12 @@ func mustRecord(t *testing.T, dir, config string) {
 	}
 }
 
-// check and diff both refuse to run without a snapshot to compare against —
-// there is no honest verdict to give.
-func TestCheckAndDiffRequireSnapshot(t *testing.T) {
+// check refuses to run without a snapshot to compare against — there is no
+// honest verdict to give.
+func TestCheckRequiresSnapshot(t *testing.T) {
 	config := buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 1}'`})
 
-	for _, cmd := range []string{"check", "diff", ""} {
+	for _, cmd := range []string{"check", ""} {
 		t.Run("command="+cmd, func(t *testing.T) {
 			dir := t.TempDir()
 			writeFile(t, dir, "pawl.yaml", config)
@@ -69,9 +69,8 @@ func TestCheckGreen(t *testing.T) {
 	}
 }
 
-// A scalar regression fails check (exit 1) with the pinned detail line, but
-// never fails diff (always exit 0) even though it prints the same detail.
-func TestCheckRegressionScalarFailsDiffDoesNot(t *testing.T) {
+// A scalar regression fails check (exit 1) and prints the pinned detail line.
+func TestCheckRegressionScalarFails(t *testing.T) {
 	dir := t.TempDir()
 	base := buildConfig("", dimDef{id: "m", direction: "lower-is-better", command: `echo '{"value": 5}'`})
 	mustRecord(t, dir, base)
@@ -88,14 +87,6 @@ func TestCheckRegressionScalarFailsDiffDoesNot(t *testing.T) {
 	}
 	if !strings.Contains(check.stdout, "total 5 → 8") {
 		t.Errorf("check stdout missing detail line: %s", check.stdout)
-	}
-
-	diff := runPawl(t, dir, baseEnv(), "diff")
-	if diff.exit != 0 {
-		t.Fatalf("diff exit = %d, want 0 (diff always exits 0)\nstdout=%s\nstderr=%s", diff.exit, diff.stdout, diff.stderr)
-	}
-	if !strings.Contains(diff.stdout, "❌ regressions:") || !strings.Contains(diff.stdout, "total 5 → 8") {
-		t.Errorf("diff stdout missing regressions detail: %s", diff.stdout)
 	}
 }
 

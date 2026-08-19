@@ -10,14 +10,14 @@ silently accepts whatever the others currently measure — including a regressio
 elsewhere you did not mean to bless. `--only` locks in the improved dimension
 alone, so the committed baseline for the rest stays exactly where it was.
 
-- Valid on `record`, `check`, and `diff`; on any other command it is a usage
+- Valid on `record` and `check`; on any other command it is a usage
   error (exit 2). An empty list (`--only ""` / `--only ,`) is a usage error
   (exit 2).
-- On `check` and `diff`, only the listed dimensions are measured and compared.
+- On `check`, only the listed dimensions are measured and compared.
   An unlisted dimension's regression or broken adapter does not affect the
   verdict. The snapshot orphan check still uses the **full** config, so a stale
-  extra metric cannot hide behind `--only`. `--format codeclimate` with `--only`
-  is a usage error (exit 2). CI should keep running a full `pawl check`.
+  extra metric cannot hide behind `--only`. CI should keep running a full
+  `pawl check`.
 - Every listed id must be a configured dimension id; an unknown id → exit 2
   (naming the id), before anything is measured or written.
 - Requires an existing, **well-formed** snapshot to preserve: a missing snapshot,
@@ -37,9 +37,6 @@ alone, so the committed baseline for the rest stays exactly where it was.
 - Text output shows preserved metrics with `current —`, delta `—`, and status
   `preserved`. JSON uses `measurement_state:"preserved"`, `current:null`, and
   `snapshot_value`; measured metrics use `measurement_state:"measured"`.
-  `record --only --format codeclimate` is a usage error (exit 2), because Code
-  Climate cannot mark a finding as preserved and a partial set cannot honestly
-  claim to be the current findings report.
 
 ## Accepted debt (`--dry-run`, `--accept-worse`)
 

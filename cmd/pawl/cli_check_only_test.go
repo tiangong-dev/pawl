@@ -68,17 +68,6 @@ func TestCheckOnlySkipsBrokenUnlistedAdapter(t *testing.T) {
 	}
 }
 
-func TestDiffOnlyAccepted(t *testing.T) {
-	dir := t.TempDir()
-	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
-	writeFile(t, dir, "pawl.yaml", twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 9}'`))
-
-	res := runPawl(t, dir, baseEnv(), "diff", "--only", "a")
-	if res.exit != 0 {
-		t.Fatalf("diff --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
-	}
-}
-
 func TestCheckOnlyUnknownIDExitsTwo(t *testing.T) {
 	dir := t.TempDir()
 	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
@@ -116,7 +105,7 @@ func TestOnlyJSONNamesNarrowedScope(t *testing.T) {
 		t.Errorf("full check reported only = %v, want it omitted", r.Only)
 	}
 
-	for _, command := range []string{"check", "diff", "record"} {
+	for _, command := range []string{"check", "record"} {
 		t.Run(command, func(t *testing.T) {
 			res := runPawl(t, dir, baseEnv(), command, "--only", "b,a", "--format", "json")
 			r := parseReport(t, res.stdout)
@@ -141,6 +130,78 @@ func TestOnlyJSONNamesScopeOnCouldNotMeasure(t *testing.T) {
 	r := parseReport(t, res.stdout)
 	if len(r.Only) != 1 || r.Only[0] != "a" {
 		t.Errorf("only = %v, want [a]", r.Only)
+	}
+}
+
+// check --only must say what it left unmeasured, not just what it measured —
+// an agent that scopes down to fix one broken dimension needs a way to
+// notice the others still exist rather than a --only habit silently dropping
+// a dimension from view forever. A real eval run (see demo/README.md for the
+// harness) surfaced exactly this: an agent that never once looked back at
+// the dimensions it had scoped out.
+func TestOnlyJSONNamesExcludedDimensions(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("",
+		dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`},
+		dimDef{id: "b", direction: "lower-is-better", command: `echo '{"value": 1}'`},
+		dimDef{id: "c", direction: "lower-is-better", command: `echo '{"value": 1}'`},
+	)
+	mustRecord(t, dir, config)
+
+	full := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if r := parseReport(t, full.stdout); r.Excluded != nil {
+		t.Errorf("full check reported excluded = %v, want nil", r.Excluded)
+	}
+
+	res := runPawl(t, dir, baseEnv(), "check", "--only", "b", "--format", "json")
+	if res.exit != 0 {
+		t.Fatalf("check --only b exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	if len(r.Excluded) != 2 || r.Excluded[0] != "a" || r.Excluded[1] != "c" {
+		t.Errorf("excluded = %v, want [a c] (sorted)", r.Excluded)
+	}
+}
+
+// The excluded scope has to survive onto the exit-2 could-not-measure
+// object too — the same reasoning as TestOnlyJSONNamesScopeOnCouldNotMeasure,
+// for the new field.
+func TestOnlyJSONNamesExcludedDimensionsOnCouldNotMeasure(t *testing.T) {
+	dir := t.TempDir()
+	mustRecord(t, dir, twoDimConfig(`echo '{"value": 1}'`, `echo '{"value": 1}'`))
+	writeFile(t, dir, "pawl.yaml", twoDimConfig(`sh -c 'echo broken >&2; exit 1'`, `echo '{"value": 1}'`))
+
+	res := runPawl(t, dir, baseEnv(), "check", "--only", "a", "--format", "json")
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2 (a is broken)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	if len(r.Excluded) != 1 || r.Excluded[0] != "b" {
+		t.Errorf("excluded = %v, want [b]", r.Excluded)
+	}
+}
+
+// The text default must carry the same information as the JSON field, since
+// most real agent runs never touch --format json at all.
+func TestCheckOnlyTextAdvisesExcludedDimensions(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("",
+		dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`},
+		dimDef{id: "b", direction: "lower-is-better", command: `echo '{"value": 1}'`},
+	)
+	mustRecord(t, dir, config)
+
+	res := runPawl(t, dir, baseEnv(), "check", "--only", "a")
+	if res.exit != 0 {
+		t.Fatalf("check --only a exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "1 dimension(s) not measured this run (--only scope): b") {
+		t.Errorf("stdout missing excluded-dimension advisory: %s", res.stdout)
+	}
+
+	full := runPawl(t, dir, baseEnv(), "check")
+	if strings.Contains(full.stdout, "not measured this run") {
+		t.Errorf("full check (no --only) printed an excluded-dimension advisory: %s", full.stdout)
 	}
 }
 

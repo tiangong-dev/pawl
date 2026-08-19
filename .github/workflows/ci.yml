@@ -42,18 +42,24 @@ jobs:
       # verdict via scripts/render-comment.mjs; unit-test that rendering here.
       - name: node action-script tests
         run: node --test scripts/*.test.mjs
+      # demo/scripts/ scores the agent evaluations that justify `agent-md`, and
+      # both scripts have silently mis-scored a real run — one of them because a
+      # new pawl subcommand was not in its command list. Adding a subcommand
+      # must fail here, not quietly inflate the next eval.
+      - name: demo eval-scorer tests
+        run: python3 demo/scripts/test_eval_scripts.py
       # pawl gates its own Go source (dogfooding — the self-closed loop).
       - name: Build pawl
         run: go build -o /tmp/pawl ./cmd/pawl
+      # Measure once, then judge that measurement — dogfooding `measure` and
+      # `--current`. It also closes a real gap: the self-check and any record
+      # that follows it used to be two separate passes over a tree that had
+      # moved, and both junit dimensions read a report off disk.
       - name: Self-check (pawl on pawl)
         run: |
           set -o pipefail
-          /tmp/pawl check | tee /tmp/pawl-check.txt
-      # Dogfood --format codeclimate: the findings array must be valid JSON on
-      # every PR, so a break in the Code Quality output path fails here.
-      - name: Self-check (codeclimate findings are valid JSON)
-        run: |
-          /tmp/pawl check --format codeclimate | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"utf8"));if(!Array.isArray(a))throw new Error("codeclimate output is not an array");console.log(a.length+" codeclimate finding(s)")'
+          /tmp/pawl measure > /tmp/pawl-measure.json
+          /tmp/pawl check --current /tmp/pawl-measure.json | tee /tmp/pawl-check.txt
       - name: Guard pawl's own baseline
         if: github.event_name == 'pull_request'
         run: /tmp/pawl baseline-guard origin/main

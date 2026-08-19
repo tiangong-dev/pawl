@@ -1,27 +1,48 @@
-# pawl
+<p align="center">
+  <img src="assets/banner.svg" alt="pawl — the regression gate a coding agent runs on itself" width="820">
+</p>
 
-**A language-agnostic anti-regression quality gate.**
+<p align="center">
+  中文文档见 <a href="./README.zh-CN.md">README.zh-CN.md</a> · Full behavioral contract in <a href="./SPEC.md">SPEC.md</a> (<a href="./spec/README.md">spec/</a>)
+</p>
 
-中文文档见 [README.zh-CN.md](./README.zh-CN.md) · Full behavioral contract in [SPEC.md](./SPEC.md) ([spec/](./spec/README.md)).
+**Asserting that nothing got worse is cheap. Measuring it is not.** A coding agent
+reports a task complete; a PR description says "no regressions". pawl is the step
+in between — it re-measures every number you gate on and fails when one of them
+moved the wrong way.
 
-Each **dimension** measures one number — files over a length limit, duplicated
-lines, functions over a complexity threshold, test coverage, whatever you can
-express as a command that prints a number. `pawl record` snapshots those numbers;
-`pawl check` re-measures and **fails CI when any dimension gets worse**. Numbers
-can only hold or improve — the gate never slips backward.
+Each **dimension** is one number: files over a length limit, functions over a
+complexity threshold, coverage, `as any` count — anything you can express as a
+command that prints a number. `pawl record` snapshots those numbers; `pawl check`
+re-measures and **exits 1 when any dimension got worse**. Numbers can only hold or
+improve; the gate never slips backward.
 
 ```bash
 pawl record                     # measure everything, write the baseline
-pawl check                      # CI gate: exit 1 on any regression
-pawl diff                       # measure + compare, print the table, never fail
-pawl baseline-guard origin/main # anti-tamper: catch hand-edited baselines
+pawl check                      # the gate: exit 1 on any regression
+pawl agent-md >> AGENTS.md      # tell your coding agent the gate is there
+pawl baseline-guard origin/main # anti-tamper: catch a hand-edited baseline
 ```
 
 The measuring tool is an implementation detail of each dimension. Swapping ESLint
-for another linter, or migrating a whole project onto pawl, means rewriting one
-adapter command — the baseline and the CI gate stay put.
+for another linter, or moving a whole project onto pawl, rewrites one adapter
+command — the baseline and the gate stay put.
+
+## Contents
+
+[Why pawl](#why-pawl) · [Install](#install) · [Quickstart](#quickstart) ·
+[Working with a coding agent](#working-with-a-coding-agent) ·
+[Commands](#commands) · [Configuring dimensions](#configuring-dimensions) ·
+[Everyday use](#everyday-use) · [CI integration](#ci-integration) ·
+[What pawl is not](#what-pawl-is-not)
 
 ## Why pawl
+
+A one-shot threshold ("coverage must be ≥ 80%") either blocks the team on day one
+or is set so loose it never bites. An anti-regression gate instead locks in
+*wherever you are today* and only lets it improve: a PR that adds a 600-line file,
+a new `as any`, or drops coverage fails; a PR that removes them re-baselines
+lower. You pay down debt monotonically without ever picking a magic number.
 
 - **Measure anything, in any language.** A dimension is any command that prints a
   number — coverage, passing-test count, bundle size, `as any` count, cycles in a
@@ -40,26 +61,8 @@ adapter command — the baseline and the CI gate stay put.
   "measured zero", and a hand-edited baseline is caught by `baseline-guard`. The
   gate would rather stop loud than pass a lie.
 - **One static binary.** Drop it into any CI in seconds; it sits on top of the
-  tools you already run, and renders natively as GitHub PR comments/annotations or
-  a GitLab Code Quality report.
-
----
-
-## Why a quality gate?
-
-A one-shot threshold ("coverage must be ≥ 80%") either blocks the team on day one
-or is set so loose it never bites. An anti-regression quality gate instead locks
-in *wherever you are today* and only lets it improve: a PR that adds a 600-line
-file, a new `as any`, or drops coverage fails; a PR that removes them re-baselines
-lower. You pay down debt monotonically without ever picking a magic number.
-
-pawl also guards **honesty**, not just the numbers:
-
-- A measurement that *can't run* (tool crash, missing report, timeout) exits `2`
-  — never silently reads as "measured zero". "Could not measure" and "measured
-  zero" are different things.
-- `baseline-guard` compares the committed snapshot against the PR's base branch,
-  so a hand-edited baseline faking a pass is caught.
+  tools you already run, and renders natively as GitHub PR comments and
+  annotations.
 
 ## Install
 
@@ -74,7 +77,7 @@ binary download. Prebuilt binaries cover darwin / linux / win32 on x64 / arm64 a
 are fully static (CGO-free), so one Linux binary works on glibc and musl alike.
 
 pawl itself is a small dependency-free Go binary. Adapters bring their own runtime
-(Node for an ESLint dimension, etc.) — see [Custom adapters](#custom-adapters).
+(Node for an ESLint dimension, etc.) — see [custom commands](#custom-commands).
 
 ## Quickstart
 
@@ -117,57 +120,93 @@ pawl check
 ```
 
 **4. Lock in wins.** When a PR improves a number, `check` tells you to re-record;
-`pawl record` writes the new, lower baseline so it can never slip back up.
+`pawl record --only <id>` writes the new, lower baseline so it can never slip back
+up.
+
+**5. Tell your coding agent the gate exists.** Otherwise it finds out from a red
+CI run, or not at all — see
+[Working with a coding agent](#working-with-a-coding-agent).
+
+## Working with a coding agent
+
+An agent will report a task complete; whether it measured anything is a separate
+question. In this repo's own A/B ([demo/](./demo/README.md)), the arm that was
+never told the gate existed ran it before finishing in **0 of 4** cells, against
+**4 of 6** for the arm with the block installed. The control agents that did go
+looking for a verdict found `pawl measure`, stopped there, and reported a
+dimension "improved" — from a delta they had taken out of an earlier `grep`.
+
+`pawl agent-md >> AGENTS.md` installs the loop below where an agent already
+looks. The short version:
+
+1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
+2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
+3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
+4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
+5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
+6. A metric with an `artifact` block read that file off disk. `generated: false` plus a large `age_seconds` means the number describes an old report, not the current tree — regenerate it before trusting or recording the value. The age never changes the exit code.
+
+`pawl measure` is not a substitute for step 1: it prints current numbers and no
+baseline, so it can say what a dimension *is* and never whether it got better.
+
+Copy-paste dimensions that catch AI-shaped debt are in
+[RECIPES.md](./RECIPES.md#ai-generated-debt); how the block was evaluated, with
+the runs where it did **not** help, is in [demo/](./demo/README.md).
 
 ## Commands
 
 | command | what it does |
 |---|---|
 | `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
+| `pawl agent-md` | print the operating loop a coding agent needs to use this gate (install it with `>> AGENTS.md`) |
+| `pawl measure` | measure every dimension and print the numbers — no baseline, no verdict; the document is the snapshot format |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
-| `pawl diff` | measure + compare, print the table, always exit 0 |
 | `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
-| `pawl status` | print the committed snapshot without measuring |
-| `pawl constraints` | print configured thresholds, globs, and patterns |
 | `pawl rank` | rank included files by line or byte size (including near-threshold files) |
 | `pawl version` | print `pawl <version>` (works with no config present) |
 | `pawl help [<command>]` | print global or command help (also `-h` / `--help`) |
 
-`-c <path>` selects the config file (default `./pawl.yaml`). Omitting the
-command runs `check`.
+Omitting the command runs `check`.
 
-**Flags.** `--format json` makes `record`/`check`/`diff` print a stable
-machine-readable verdict instead of the table ([schema](./spec/engine/verdict.md#machine-readable-output)) — pawl stays
-the gate, any reporter consumes the JSON. `--format codeclimate` emits a
-[Code Climate issue array](#gitlab-code-quality) for GitLab's Code Quality widget.
-`check --since <ref>` scopes the gate to lines changed in the working tree since `<ref>`
-([clean-as-you-code](#diff-scoped-checking)). `--only <id>[,<id>…]` on `record`
-re-records just those dimensions and preserves the rest of the committed
-baseline; on `check`/`diff` it measures and compares only those dimensions (the
-agent inner loop — CI should still run a full `check`). `record` refuses to write
-a dimension worse than the committed baseline unless you pass `--accept-worse`;
-`--dry-run` previews what a record would write without writing it
-([accepted debt](#accepting-debt---accept-worse---dry-run)).
+### Flags
+
+| flag | valid on | what it does |
+|---|---|---|
+| `-c`, `--config <path>` | all | config file (default `./pawl.yaml`) |
+| `--format json` | `check`, `record`, `trend`, `rank` | stable machine-readable output instead of the table ([schema](./spec/engine/verdict.md#machine-readable-output)) — pawl stays the gate, any reporter consumes the JSON |
+| `--only <id>[,<id>…]` | `check`, `record`, `measure` | scope to those dimensions. On `record`, the rest of the committed baseline is preserved verbatim; on `check`, it is the agent inner loop — **CI should still run a full `check`** |
+| `--since <ref>` | `check` | gate only lines changed since `<ref>` ([clean-as-you-code](#diff-scoped-checking---since)) |
+| `--current <path\|->` | `check`, `record` | judge or record a `pawl measure` document instead of running the dimensions, so one measurement drives every decision after it ([measure](./spec/commands/measure.md)) |
+| `--accept-worse` | `record` | write a value worse than the committed baseline, and print the commit trailer that authorizes it |
+| `--dry-run` | `record` | preview what a record would write, without writing |
+| `--limit <n>` | `trend` | cap history rows (default 20, `0` = all) |
+| `-q`, `--quiet` | `check`, `record`, `measure` | silence progress and advisory output; print a text verdict only when the exit code is non-zero, so a passing gate says nothing at all |
+
+`--version` is valid everywhere and prints what `pawl version` prints.
+`--format` is a usage error on `agent-md` (it emits Markdown) and on `measure`
+(it emits the measurement document).
 
 ### Exit codes
 
 | code | meaning |
 |------|---------|
-| **0** | pass (also `diff` with regressions, and legitimate `baseline-guard` skips) |
+| **0** | pass (including legitimate `baseline-guard` skips) |
 | **1** | `check`: a dimension regressed · `baseline-guard`: the snapshot regressed vs `<ref>` (and isn't covered by an accepted-debt trailer) · `record`: refused a worse value without `--accept-worse` |
 | **2** | cannot measure/compare honestly: bad config, missing/malformed snapshot, tool crash, timeout, unknown command, … |
 
 The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
 `2` means "could not measure honestly" and must never read as a pass.
 
-## Configuration
+## Configuring dimensions
 
 `pawl.yaml` lists dimensions; each is a **built-in**, a **custom command**, or a
 projection from a named analyzer (exactly one of `builtin` / `command` / `source`).
 Named analyzers run once per invocation and let several dimensions filter one
-complete ESLint, Oxlint, or SARIF report.
+complete report — ESLint, Oxlint, or SARIF, or a `lines` analyzer that turns any
+tool's `path:line: message` output into the same findings via one regex, so a
+tool pawl has never heard of gets the same shared-scan treatment.
 
 ```yaml
 snapshot: "pawl.snapshot.json"   # optional, relative to this file
@@ -201,7 +240,7 @@ dimensions:
     command: "./scripts/coverage.sh"   # … or a custom command
 ```
 
-## Built-in adapters
+### Built-in adapters
 
 Three tiers. **Primitives** are Go-native (zero dependencies). **Tool adapters**
 run an analyzer *you* invoke and parse its machine output. **Report-format
@@ -219,6 +258,7 @@ the tool setup.
 | `jscpd` | adapter | duplicated lines from a jscpd JSON report | `total` |
 | `swift-complexity` | adapter | Swift **cognitive** complexity offenders (what SwiftLint can't) | `per-file-count` |
 | `json-value` | adapter | one number out of any tool's JSON (coverage %, passing tests, type-coverage) — the home of `higher-is-better` | `per-key-value` |
+| `lines` | adapter | any tool's `path:line: message` output, via one regex — one scan, several rule/level-filtered dimensions (named analyzers only) | `per-file-count` |
 | `sarif` | ingest | findings in a SARIF log (CodeQL, Semgrep, …), filtered by rule/level | `per-file-count` |
 | `junit` | ingest | failing / passing / total tests from a JUnit XML report | `total` |
 | `coverage` | ingest | line/branch/function coverage % from lcov or cobertura | `total` |
@@ -240,7 +280,7 @@ Each builtin's exact options, exit-code handling, and breakdown shape are in
 Copy-paste configs for all of them — plus SARIF/JUnit/coverage/complexity/
 duplication — are in the [recipe cookbook](./RECIPES.md).
 
-## Custom adapters
+### Custom commands
 
 **pawl imposes no language requirement.** A dimension's `command` is run via
 `sh -c` — it can be a shell script, Node, Python, Go, a compiled binary, `curl |
@@ -253,8 +293,10 @@ jq`, anything. It just has to honor the contract:
   `value` is required and finite. `unit` defaults to `"count"`. `breakdown` is
   optional (`null` / omitted are equivalent).
 - **Exit 0 = a measurement. Non-zero / timeout / non-JSON stdout = a measurement
-  failure** → pawl aborts with exit 2. This is why a raw command beats `tool ||
-  true`: real failures stay detectable.
+  failure** → pawl aborts with exit 2. Declare `valid_exit_codes: [0, 1]` for a
+  tool that reports findings through a non-zero exit; that is strictly better
+  than `tool || true`, which accepts *every* exit code and turns a crashed tool
+  into a clean zero.
 - cwd is the config directory; `PAWL_ROOT` is set to its absolute path; stderr
   passes through for human diagnostics.
 
@@ -272,9 +314,10 @@ wrapper script. Four forms:
 
 ```yaml
 - id: todos
-  command: "grep -rn TODO src || true"
+  command: "grep -rn TODO src"
   direction: "lower-is-better"
-  extract: lines            # value = non-empty line count
+  valid_exit_codes: [0, 1]   # grep exits 1 when it matches nothing
+  extract: lines             # value = non-empty line count
 
 - id: legacy-lint
   command: "my-linter --format concise"
@@ -285,15 +328,13 @@ wrapper script. Four forms:
 ```
 
 Also `extract: number` (stdout is one number) and `extract: { json_path: "a.b.c" }`
-(read one number from the command's stdout JSON). Same honesty rule: a non-zero
-exit, or output that can't be extracted, is a measurement failure (exit 2). With
-`regex`, every non-empty line must match, so a mistyped pattern can't report a
-silent zero. Tools whose "findings found" exit code is non-zero should use a
-report-format builtin (for example the shared SARIF recipe) rather than hiding
-every failure with `|| true`. Details in
+(read one number from the command's stdout JSON). Same honesty rule: an exit code
+outside `valid_exit_codes`, or output that can't be extracted, is a measurement
+failure (exit 2). With `regex`, every non-empty line must match, so a mistyped
+pattern can't report a silent zero. Details in
 [SPEC.md § Declarative extract layer](./spec/adapters/extract.md).
 
-## Gate modes
+### Gate modes
 
 The scalar total is **always** checked (with `tolerance`). A per-breakdown check
 on top stops a localized regression from hiding behind a net-zero total (file A
@@ -318,7 +359,9 @@ Pick the gate for the shape: `per-file-count` is the strong net-zero defense for
 guards keys already in the baseline. Neither is a universal net-zero proof — the
 [SPEC](./spec/engine/comparison.md#gate-modes) spells out the edges.
 
-## Locking in one win (`record --only`)
+## Everyday use
+
+### Locking in one win (`record --only`)
 
 A full `pawl record` re-measures and re-blesses **every** dimension at once — so
 locking in a win on one metric silently accepts whatever the others currently
@@ -335,11 +378,9 @@ committed value verbatim. A broken adapter on an unrelated dimension doesn't
 block the win either — it isn't run at all.
 
 Preserved rows show `current —` / `preserved`; JSON uses
-`measurement_state:"preserved"`, `current:null`, and `snapshot_value`. A partial
-record cannot emit Code Climate because that format has no way to distinguish a
-preserved finding from current evidence.
+`measurement_state:"preserved"`, `current:null`, and `snapshot_value`.
 
-## Accepting debt (`--accept-worse`, `--dry-run`)
+### Accepting debt (`--accept-worse`, `--dry-run`)
 
 `record` (with or without `--only`) refuses to write a dimension worse than the
 committed baseline — a full record must not silently bless a regression in a
@@ -374,7 +415,35 @@ comparison itself is unchanged.
 trailer lines) without writing anything; its exit code matches what a real
 record would do.
 
-## Watching the trend (`pawl trend`)
+### Diff-scoped checking (`--since`)
+
+`pawl check --since <ref>` keeps the full gate but **only fails on regressions
+introduced by lines changed in the working tree since `<ref>`** — pre-existing
+debt on untouched lines is exempted, so a large legacy baseline doesn't block
+every PR while new code still can't regress. Uncommitted and untracked edits
+count (so a local agent loop that has not committed yet still gates new debt).
+It still needs the snapshot (it's the gate narrowed to new code, not a
+standalone scanner).
+
+```bash
+pawl check --since origin/main        # on a PR: gate only the changed lines
+```
+
+`per-file-count` dimensions (breakdown keyed `"path:line"`, scalar = the offender
+count) are scoped to the added lines; `total` and `per-key-value` dimensions
+have no line to attribute faithfully and are **enforced in full** (loudly
+labelled, never silently skipped), keeping `--since` exactly the full-mode
+verdict narrowed to changed lines. The output reports the merge-base, what was
+enforced in full, and how many pre-existing regressions were exempted; add
+`--format json` for the machine-readable form (`mode: "since"`, each exempted
+regression flagged `suppressed`).
+
+Scoping is line-based (like reviewdog / Sonar clean-as-you-code): a pre-existing
+offender that merely shifts position isn't flagged, but one on a line whose
+content actually changed counts even if it "moved" there — it never
+under-reports a changed line. Details in [SPEC.md](./spec/commands/since.md#diff-scoped-checking).
+
+### Watching the trend (`pawl trend`)
 
 The snapshot is a committed file, so its git history **is** the metric history.
 `pawl trend [<id>]` renders it — fully local, no cloud, no account:
@@ -395,7 +464,7 @@ Omit the id to see every dimension. `--limit <n>` caps the rows (default 20,
 pawl is a single binary — any CI can run it. pawl's own CI dogfoods the whole
 loop: it pipes `go test` through go-junit-report and gates its passing-test
 floor with the `junit` builtin, so the ingest path runs on real report output
-on every commit ([pawl.yaml](./pawl.yaml)). Two common wirings:
+on every commit ([pawl.yaml](./pawl.yaml)).
 
 ### GitHub Actions
 
@@ -428,83 +497,27 @@ comment posts. Under `GITHUB_ACTIONS`, `check` also emits inline `::error::`
 annotations on the PR diff for each regression, and a `::notice::` when a
 dimension improved but the baseline wasn't re-recorded.
 
-### GitLab Code Quality
+### Any other CI
 
-`--format codeclimate` emits a Code Climate issue array — every current
-per-file-count offender as a located finding — which GitLab renders as the Merge
-Request **Code Quality** widget and inline diff annotations. New-vs-fixed is
-GitLab's own comparison of the MR-branch report against the target branch, so the
-job just publishes the artifact:
+Run `npx -y @pawl-tools/cli@0.6.0 check` (or download the release binary) in any
+CI. One measurement can drive both the verdict and the record that follows it,
+which matters when a dimension reads a report off disk — two separate passes can
+read two different builds:
 
-```yaml
-quality-gate:
-  image: node:22
-  script:
-    - npx -y @pawl-tools/cli@0.6.0 check --format codeclimate > gl-code-quality-report.json
-  artifacts:
-    when: always                 # publish the report even when the gate fails
-    reports:
-      codequality: gl-code-quality-report.json
+```bash
+pawl measure > .pawl/current.json
+pawl check  --current .pawl/current.json
+pawl record --only <id> --current .pawl/current.json
 ```
 
-`check`'s exit code still gates the pipeline (1 on a regression vs the snapshot);
-`total`/`per-key-value` dimensions have no per-line location and so add no inline
-findings, but their gate is still enforced through that exit code.
-
-### Anything else
-
-pawl is a single binary — run `npx -y @pawl-tools/cli@0.6.0 check` (or download
-the release binary) in any CI.
-
-### Anti-tamper
+### Anti-tamper: `baseline-guard`
 
 `pawl check` only proves the snapshot on disk matches a fresh measurement — not
 that the snapshot's history is honest. `pawl baseline-guard <base-ref>` compares
 the committed snapshot against the PR's base branch and fails if it was
 hand-edited to a worse value. Run it on PRs alongside `check`.
 
-## Diff-scoped checking
-
-`pawl check --since <ref>` keeps the full gate but **only fails on regressions
-introduced by lines changed in the working tree since `<ref>`** — pre-existing
-debt on untouched lines is exempted, so a large legacy baseline doesn't block
-every PR while new code still can't regress. Uncommitted and untracked edits
-count (so a local agent loop that has not committed yet still gates new debt).
-It still needs the snapshot (it's the gate narrowed to new code, not a
-standalone scanner).
-
-```bash
-pawl check --since origin/main        # on a PR: gate only the changed lines
-```
-
-`per-file-count` dimensions (breakdown keyed `"path:line"`, scalar = the offender
-count) are scoped to the added lines; `total` and `per-key-value` dimensions
-have no line to attribute faithfully and are **enforced in full** (loudly
-labelled, never silently skipped), keeping `--since` exactly the full-mode
-verdict narrowed to changed lines. The output reports the merge-base, what was
-enforced in full, and how many pre-existing regressions were exempted; add
-`--format json` for the machine-readable form (`mode: "since"`, each exempted
-regression flagged `suppressed`).
-
-Scoping is line-based (like reviewdog / Sonar clean-as-you-code): a pre-existing
-offender that merely shifts position isn't flagged, but one on a line whose
-content actually changed counts even if it "moved" there — it never
-under-reports a changed line. Details in [SPEC.md](./spec/commands/since.md#diff-scoped-checking).
-
-## Using pawl from an AI agent
-
-pawl is a gate, not an analyzer. The loop is one command:
-
-1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
-2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
-3. On `status: better`, run the metric's `next_action` (`pawl record --only <id>`), not a full `record`.
-4. Exit 1 / `failure_class: regression` → fix code. Exit 2 / `could-not-measure` → fix the environment (`error`, `failed_metrics`); do not invent numbers. CI: full `pawl check` (never `--only`).
-5. A verdict with a top-level `only` array covered just those dimensions — exit 0 on it is not a green full gate.
-6. A metric with an `artifact` block read that file off disk. `generated: false` plus a large `age_seconds` means the number describes an old report, not the current tree — regenerate it before trusting or recording the value. The age never changes the exit code.
-
-Copy-paste dimensions that catch AI-shaped debt are in [RECIPES.md](./RECIPES.md#ai-generated-debt).
-
-## Scope boundary
+## What pawl is not
 
 pawl is a **quality gate + honesty guard, not a code analyzer** — it never parses a
 language. Line counting and regexp matching are Go-native because they need no

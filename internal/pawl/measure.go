@@ -28,13 +28,15 @@ type MeasureResult struct {
 }
 
 // MeasureAll runs every dimension's measurement concurrently — one slow
-// adapter must not serialize the batch behind it. Progress lines go to
-// stderr as each measurement starts. Any single failure fails the whole
+// adapter must not serialize the batch behind it. Progress lines and artifact
+// notes go to progress as each measurement starts; an adapter's own stderr
+// still goes to stderr, so --quiet silences pawl's chatter without silencing
+// the diagnostics of a tool that is about to fail. Any single failure fails the whole
 // batch: "could not measure" must never degrade into a fabricated value.
 // The artifacts map carries, for each dimension that read a file, which file it
 // read and how old it was — provenance the verdict reports and the snapshot
 // does not.
-func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, map[string]*ArtifactInfo, error) {
+func MeasureAll(cfg *Config, progress, stderr io.Writer) (map[string]Metric, map[string]*ArtifactInfo, error) {
 	type outcome struct {
 		id     string
 		result MeasureResult
@@ -44,7 +46,7 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, map[string]*A
 	analyzerRuns := newAnalyzerRuns(cfg)
 	var wg sync.WaitGroup
 	for i, dim := range cfg.Dimensions {
-		fmt.Fprintf(stderr, "  measuring %s…\n", dim.ID)
+		fmt.Fprintf(progress, "  measuring %s…\n", dim.ID)
 		wg.Add(1)
 		go func(i int, dim Dimension) {
 			defer wg.Done()
@@ -112,7 +114,7 @@ func MeasureAll(cfg *Config, stderr io.Writer) (map[string]Metric, map[string]*A
 	// and never interleave with a parallel adapter's own stderr.
 	for _, dim := range cfg.Dimensions {
 		if art := artifacts[dim.ID]; art != nil && !art.Generated {
-			fmt.Fprintf(stderr, "  %s read %s (%s old — nothing in this run produced it)\n",
+			fmt.Fprintf(progress, "  %s read %s (%s old — nothing in this run produced it)\n",
 				dim.ID, art.Path, formatArtifactAge(art.AgeSeconds))
 		}
 	}
@@ -170,15 +172,15 @@ func measureOne(cfg *Config, dim Dimension, stderr io.Writer, analyzerRuns analy
 
 // measureExec runs one exec adapter under the SPEC contract: sh -c in the
 // config dir with PAWL_ROOT set, stdout parsed as exactly one JSON object,
-// stderr passed through for humans, and non-zero exit / timeout / bad JSON
+// stderr passed through for humans, and an unaccepted exit / timeout / bad JSON
 // all surfacing as measurement failures rather than numbers.
 func measureExec(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, dim.Command)
 	if err != nil {
 		return MeasureResult{}, err
 	}
-	if exitCode != 0 {
-		return MeasureResult{}, fmt.Errorf("command exited with an error: exit status %d", exitCode)
+	if !exitAccepted(dim.OkExit, exitCode) {
+		return MeasureResult{}, exitCodeError(dim.OkExit, exitCode)
 	}
 	return parseAdapterOutput(stdout)
 }

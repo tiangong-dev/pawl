@@ -25,6 +25,7 @@ type Dimension struct {
 	Tolerance *float64
 	Timeout   time.Duration
 	Command   string
+	OkExit    map[int]bool
 	Builtin   string
 	Options   map[string]any
 	Extract   *ExtractSpec
@@ -64,6 +65,7 @@ type dimensionConfig struct {
 	Tolerance *float64       `yaml:"tolerance"`
 	Timeout   string         `yaml:"timeout"`
 	Command   string         `yaml:"command"`
+	OkExit    any            `yaml:"valid_exit_codes"`
 	Builtin   string         `yaml:"builtin"`
 	Options   map[string]any `yaml:"options"`
 	Extract   any            `yaml:"extract"`
@@ -224,6 +226,17 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 		}
 		extract = spec
 	}
+	var okExit map[int]bool
+	if d.OkExit != nil {
+		if d.Command == "" {
+			return fail("valid_exit_codes describes the exit code of a command and cannot be set on a builtin/source dimension")
+		}
+		parsed, err := exitCodeSet(d.OkExit)
+		if err != nil {
+			return fail("valid_exit_codes: %v", err)
+		}
+		okExit = parsed
+	}
 	return Dimension{
 		ID:        d.ID,
 		Title:     d.Title,
@@ -232,11 +245,32 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 		Tolerance: d.Tolerance,
 		Timeout:   timeout,
 		Command:   d.Command,
+		OkExit:    okExit,
 		Builtin:   d.Builtin,
 		Options:   d.Options,
 		Extract:   extract,
 		Source:    d.Source,
 	}, nil
+}
+
+// exitAccepted judges one command's exit code against the dimension's declared
+// contract. The default is "exit 0 or bust". `valid_exit_codes` widens it for
+// tools that report findings through a non-zero exit — which is not the same as
+// appending `|| true` to the command, because that also swallows the crashes,
+// missing binaries, and bad flags the contract is supposed to surface. It is
+// the same option a named SARIF analyzer already takes, spelled the same way.
+func exitAccepted(ok map[int]bool, code int) bool {
+	if ok == nil {
+		return code == 0
+	}
+	return ok[code]
+}
+
+func exitCodeError(ok map[int]bool, code int) error {
+	if ok == nil {
+		return fmt.Errorf("command exited with an error: exit status %d", code)
+	}
+	return fmt.Errorf("command exited with %d, which valid_exit_codes does not list (accepts %s)", code, formatExitCodes(ok))
 }
 
 func validateBuiltinOptions(builtin string, options map[string]any) error {
@@ -376,6 +410,11 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if metric == "functions" && format == "cobertura" {
 			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
 		}
+	case builtinLines:
+		// Only reachable from a dimension: validateAnalyzer handles the lines
+		// kind before it gets here. A dimension has nowhere to put the one run
+		// several dimensions are meant to share, which is the whole point of it.
+		return fmt.Errorf("builtin %q is a named-analyzer kind, not a dimension builtin — declare it under analyzers: and point dimensions at it with source: (a single line-oriented dimension wants command: + extract: regex instead)", builtin)
 	default:
 		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
 			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,

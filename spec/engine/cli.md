@@ -3,18 +3,19 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] [--only <ids>] [--dry-run] [--accept-worse] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
+  agent-md             print the operating loop a coding agent needs to use
+                       this gate; install it with a redirect
+  measure              measure every dimension and print the measurement
+                       document; no baseline read, no verdict rendered
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
-  diff                 measure + compare, print the table, always exit 0
   baseline-guard <ref> compare the working tree's snapshot against the version
                        committed at <ref> — the anti-tamper gate
   trend [<id>]         print each metric's value across the committed snapshot's
                        git history — a fully local trend, no cloud
-  status               print the committed snapshot without measuring
-  constraints          print configured thresholds, globs, and patterns
   rank                 rank included files by line or byte size (including
                        under-threshold files)
   version              print `pawl <version>` and exit 0
@@ -33,27 +34,39 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 - `--only <id>[,<id>…]` limits which dimensions this invocation measures.
   On `record` it re-records those dimensions and preserves the rest of the
   committed snapshot, specified in [§ Partial record](../commands/record.md#partial-record---only).
-  On `check` and `diff` it measures and compares only those dimensions (the
-  inner loop: a broken or regressed unlisted adapter does not block). The
+  On `check` it measures and compares only those dimensions (the inner loop: a
+  broken or regressed unlisted adapter does not block). The
   orphan check still uses the full config. `--format json` reports the narrowed
   set as the top-level `only` array on every command, so a partial verdict never
   reads as a full one — see [§ Machine-readable output](verdict.md#machine-readable-output).
-  `--format codeclimate` with `--only`
-  is a usage error (exit 2) on every command — a partial measurement is not a
-  complete current findings report. On any other command `--only` is a usage
-  error (exit 2).
+  On `measure` it scopes the emitted document to those dimensions. On any other
+  command `--only` is a usage error (exit 2).
 - `--dry-run` previews what `record` (with or without `--only`) would write —
   same table, nothing written — and `--accept-worse` explicitly authorizes
   writing a dimension worse than the committed baseline. Both are valid only on
   `record`; specified in [§ Accepted debt](../commands/record.md#accepted-debt---dry-run---accept-worse). On any other
   command either is a usage error (exit 2).
-- `--format <text|json|codeclimate>` selects the output format of
-  `record`/`check`/`diff`; default `text`. `json` is specified in
-  [§ Machine-readable output](verdict.md#machine-readable-output); `codeclimate` in
-  [§ Code Quality output](verdict.md#code-quality-output).
-  `baseline-guard` ignores `--format` (its output is not tabular). `trend`,
-  `status`, `constraints`, and `rank` honor `text` (default) and `json`;
-  `--format codeclimate` on any of them is a usage error (exit 2).
+- `-q` / `--quiet` silences pawl's own progress lines, artifact notes, and the
+  `--format json` hint, and buffers a `text` run's stdout so it is released only
+  when the exit code is non-zero. Exit 0 says every dimension held; exit 1 and
+  exit 2 carry a "which one, and by how much" the code alone cannot. An
+  adapter's own stderr is never suppressed — a quiet run must lose the noise,
+  not the diagnosis of the tool that is failing — and `--format json` always
+  emits its verdict, since a caller parsing one must always receive one. Valid
+  on `measure`, `record` and `check`; on any other command a usage error
+  (exit 2).
+- `--current <path|->` supplies `check` or `record` with a measurement document
+  — the output of `pawl measure`, from a file or (with `-`) stdin — instead of
+  running the dimensions, specified in
+  [§ Measure](../commands/measure.md#measure). On any other command it is a
+  usage error (exit 2).
+- `--format <text|json>` selects the output format of `record`/`check`;
+  default `text`. `json` is specified in
+  [§ Machine-readable output](verdict.md#machine-readable-output).
+  `baseline-guard` ignores `--format` (its output is not tabular). `trend` and
+  `rank` honor `text` (default) and `json`. `agent-md` emits Markdown and
+  `measure` emits the measurement document by definition, so any `--format` on
+  either is a usage error (exit 2).
 - `--since <ref>` scopes `check` (only) to lines changed in the **working
   tree** since `<ref>`, specified in [§ Diff-scoped checking](../commands/since.md#diff-scoped-checking).
   `--since` on any command other than `check` is a usage error (exit 2).
@@ -68,7 +81,7 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
   directory with no `pawl.yaml`. A `--version` riding on a **valid,
   validly-flagged** command (`pawl check --version`) also prints the version;
   any usage error in the invocation — an unknown command, a mis-scoped flag, a
-  disallowed format (`trend --format codeclimate`) — outranks the version
+  disallowed format (`agent-md --format json`) — outranks the version
   print and exits 2. Unknown-command outranks mis-scoped-flag in diagnostics. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
@@ -81,9 +94,9 @@ pawl [command] [-c <config>] [--format <text|json|codeclimate>] [--since <ref>] 
 
 | code | meaning |
 |------|---------|
-| 0 | pass (including `diff` with regressions, and legitimate baseline-guard skips) |
+| 0 | pass (including legitimate baseline-guard skips) |
 | 1 | `check`: at least one dimension regressed; `baseline-guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
-| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`/`diff`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
+| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.

@@ -2,6 +2,7 @@ package pawl
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -15,6 +16,9 @@ type Analyzer struct {
 	Timeout time.Duration
 	Options map[string]any
 	Verify  []string
+	// Regex is the compiled line pattern of a `lines` analyzer. It is compiled
+	// at config load so an uncompilable pattern aborts before anything runs.
+	Regex *regexp.Regexp
 }
 
 type analyzerConfig struct {
@@ -31,9 +35,9 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 		id = fmt.Sprintf("#%d", index+1)
 		return Analyzer{}, fmt.Errorf("analyzer %s: missing id", id)
 	}
-	if raw.Builtin != builtinEslint && raw.Builtin != builtinOxlint && raw.Builtin != builtinSarif {
-		return Analyzer{}, fmt.Errorf("analyzer %s: builtin must be %q, %q or %q, got %q",
-			id, builtinEslint, builtinOxlint, builtinSarif, raw.Builtin)
+	if raw.Builtin != builtinEslint && raw.Builtin != builtinOxlint && raw.Builtin != builtinSarif && raw.Builtin != builtinLines {
+		return Analyzer{}, fmt.Errorf("analyzer %s: builtin must be %q, %q, %q or %q, got %q",
+			id, builtinEslint, builtinOxlint, builtinSarif, builtinLines, raw.Builtin)
 	}
 	timeout := defaultTimeout
 	if raw.Timeout != "" {
@@ -42,6 +46,9 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 			return Analyzer{}, fmt.Errorf("analyzer %s: timeout %q is not a positive duration", id, raw.Timeout)
 		}
 		timeout = parsed
+	}
+	if raw.Builtin == builtinLines {
+		return validateLinesAnalyzer(id, raw, timeout)
 	}
 	if err := validateBuiltinOptions(raw.Builtin, raw.Options); err != nil {
 		return Analyzer{}, fmt.Errorf("analyzer %s: %v", id, err)
@@ -72,7 +79,7 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 		}
 	}
 	if raw.Builtin == builtinSarif {
-		if _, err := strictExitCodeList(raw.Options["valid_exit_codes"]); err != nil {
+		if _, err := exitCodeSet(raw.Options["valid_exit_codes"]); err != nil {
 			return Analyzer{}, fmt.Errorf("analyzer %s: valid_exit_codes: %v", id, err)
 		}
 		if _, exists := raw.Options["valid_exit_codes"]; exists {
@@ -89,9 +96,48 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 	return Analyzer{ID: raw.ID, Builtin: raw.Builtin, Timeout: timeout, Options: raw.Options, Verify: raw.Verify}, nil
 }
 
+// validateLinesAnalyzer takes the options the line-oriented analyzer can honour
+// and refuses the ones it cannot. min_files is refused rather than approximated
+// from the paths in the findings: those are the files that had findings, not
+// the files the tool scanned, and a completeness floor that cannot tell the
+// difference is worse than no floor at all.
+func validateLinesAnalyzer(id string, raw analyzerConfig, timeout time.Duration) (Analyzer, error) {
+	allowed := map[string]bool{"command": true, "regex": true, "valid_exit_codes": true}
+	for option := range raw.Options {
+		if !allowed[option] {
+			if option == "min_files" {
+				return Analyzer{}, fmt.Errorf(
+					"analyzer %s: min_files is not available for a %s analyzer — line output names the files that had findings, not the files that were scanned", id, builtinLines)
+			}
+			return Analyzer{}, fmt.Errorf("analyzer %s: option %q is not valid for a %s analyzer", id, option, builtinLines)
+		}
+	}
+	if len(raw.Verify) > 0 {
+		return Analyzer{}, fmt.Errorf(
+			"analyzer %s: verify is not available for a %s analyzer — line output carries no rule catalog to verify against", id, builtinLines)
+	}
+	command, _ := raw.Options["command"].(string)
+	if command == "" {
+		return Analyzer{}, fmt.Errorf("analyzer %s: %s requires a command option (the tool invocation)", id, builtinLines)
+	}
+	pattern, _ := raw.Options["regex"].(string)
+	if pattern == "" {
+		return Analyzer{}, fmt.Errorf(
+			"analyzer %s: %s requires a regex option with named groups (path, line, rule, level — all optional)", id, builtinLines)
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return Analyzer{}, fmt.Errorf("analyzer %s: regex: %v", id, err)
+	}
+	if _, err := exitCodeSet(raw.Options["valid_exit_codes"]); err != nil {
+		return Analyzer{}, fmt.Errorf("analyzer %s: valid_exit_codes: %v", id, err)
+	}
+	return Analyzer{ID: raw.ID, Builtin: builtinLines, Timeout: timeout, Options: raw.Options, Regex: re}, nil
+}
+
 func validateAnalyzerSelector(builtin string, options map[string]any) error {
 	allowed := map[string]bool{"rules": true}
-	if builtin == builtinSarif || builtin == builtinOxlint {
+	if builtin == builtinSarif || builtin == builtinOxlint || builtin == builtinLines {
 		allowed["levels"] = true
 	}
 	for option := range options {
@@ -108,6 +154,12 @@ func validateAnalyzerSelector(builtin string, options map[string]any) error {
 	levels, err := strictStringList(options["levels"])
 	if err != nil {
 		return fmt.Errorf("levels: %v", err)
+	}
+	// A line analyzer's levels are whatever strings its regex captures. Checking
+	// them against a fixed list would be knowledge of one tool's severity names,
+	// which is exactly what this analyzer exists to avoid holding.
+	if builtin == builtinLines {
+		return nil
 	}
 	for _, lv := range levels {
 		if !validAnalyzerLevel(builtin, lv) {
@@ -136,10 +188,9 @@ func analyzerLevelsDescription(builtin string) string {
 	return "error, warning, note or none"
 }
 
-// strictExitCodeList validates a named SARIF producer's explicit successful
-// exit-code contract. The nil map means no contract was configured and keeps
-// the legacy "parseable report is success" behavior.
-func strictExitCodeList(v any) (map[int]bool, error) {
+// exitCodeSet validates a declared successful-exit contract into a set. The nil
+// map means nothing was declared, which every caller reads as "exit 0 or bust".
+func exitCodeSet(v any) (map[int]bool, error) {
 	if v == nil {
 		return nil, nil
 	}

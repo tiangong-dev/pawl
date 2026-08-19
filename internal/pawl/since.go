@@ -331,6 +331,10 @@ func renderSinceText(w io.Writer, rep *Report, scope *sinceScope) {
 		short = short[:7]
 	}
 	fmt.Fprintf(w, "\ndiff mode — since %s (merge-base %s)\n", scope.ref, short)
+	if len(rep.Excluded) > 0 {
+		fmt.Fprintf(w, "ℹ️  %d dimension(s) not measured this run (--only scope): %s\n",
+			len(rep.Excluded), strings.Join(rep.Excluded, ", "))
+	}
 	if len(scope.enforcedFull) > 0 {
 		full := append([]string(nil), scope.enforcedFull...)
 		sort.Strings(full)

@@ -12,11 +12,18 @@ import (
 // improvement, or a `--since` suppression, which are pawl's own semantics.
 // See spec/engine/verdict.md § Machine-readable output.
 type Report struct {
-	SchemaVersion int                  `json:"schema_version"`
-	Command       string               `json:"command"`
-	Mode          string               `json:"mode"`
-	Since         *string              `json:"since"`
-	Only          []string             `json:"only,omitempty"`
+	SchemaVersion int      `json:"schema_version"`
+	Command       string   `json:"command"`
+	Mode          string   `json:"mode"`
+	Since         *string  `json:"since"`
+	Only          []string `json:"only,omitempty"`
+	// Excluded lists configured dimension ids `--only` left unmeasured this
+	// run — present whenever Only is, even on the exit-2 could-not-measure
+	// object. An agent that scopes down to fix one broken dimension still
+	// needs a way to notice the others still exist, rather than a --only
+	// habit silently dropping a dimension from view forever. See
+	// spec/engine/verdict.md § Machine-readable output.
+	Excluded      []string             `json:"excluded,omitempty"`
 	DryRun        bool                 `json:"dry_run,omitempty"`
 	AcceptedWorse []AcceptedWorseEntry `json:"accepted_worse,omitempty"`
 	ExitCode      int                  `json:"exit_code"`
@@ -42,7 +49,7 @@ type WatchEntry struct {
 // AcceptedWorseEntry is one dimension record wrote (or, under --dry-run,
 // would write) worse than the committed baseline — the machine-readable twin
 // of the `Pawl-Accept: <id> <value>` trailer hint text mode prints, so a
-// `--format json`/`--format codeclimate` caller can build the same commit
+// `--format json` caller can build the same commit
 // trailer without re-deriving it from Metrics/status.
 type AcceptedWorseEntry struct {
 	ID    string  `json:"id"`
@@ -220,7 +227,7 @@ func annotateReport(rep *Report) {
 	case 2:
 		rep.FailureClass = "could-not-measure"
 	}
-	if rep.Command != "check" && rep.Command != "diff" {
+	if rep.Command != "check" {
 		return
 	}
 	for i := range rep.Metrics {
@@ -249,14 +256,16 @@ func renderReportJSON(w io.Writer, rep *Report) error {
 // carry it, so a consumer never has to infer coverage from which metrics happen
 // to be present — an exit-0 subset must not read as a green full gate.
 type reportScope struct {
-	command string
-	since   string
-	only    []string
+	command  string
+	since    string
+	only     []string
+	excluded []string
 }
 
 func (s reportScope) apply(rep *Report) {
 	rep.Command = s.command
 	rep.Only = s.only
+	rep.Excluded = s.excluded
 	if s.since != "" {
 		ref := s.since
 		rep.Mode = "since"

@@ -426,24 +426,3 @@ func TestRecordOnlyTextFooterNamesRecordedIDsAndPreservedCount(t *testing.T) {
 		t.Errorf("preserved metric is rendered as current evidence: stdout=%s", res.stdout)
 	}
 }
-
-func TestRecordOnlyRejectsCodeClimateBeforeWriting(t *testing.T) {
-	dir := t.TempDir()
-	mustRecord(t, dir, buildConfig("",
-		dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 3}'`},
-		dimDef{id: "b", direction: "lower-is-better", command: `echo '{"value": 6}'`},
-	))
-	snapshotPath := filepath.Join(dir, "pawl.snapshot.json")
-	before := readFile(t, snapshotPath)
-
-	res := runPawl(t, dir, baseEnv(), "record", "--only", "a", "--format", "codeclimate")
-	if res.exit != 2 {
-		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
-	}
-	if !strings.Contains(res.stderr, "partial measurement") {
-		t.Fatalf("stderr does not explain why Code Climate is unsafe: %s", res.stderr)
-	}
-	if after := readFile(t, snapshotPath); after != before {
-		t.Fatalf("snapshot changed despite rejected format\nbefore=%s\nafter=%s", before, after)
-	}
-}

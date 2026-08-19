@@ -9,5 +9,5 @@ import (
 )
 
 func main() {
-	os.Exit(pawl.RunCLI(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(pawl.RunCLI(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }

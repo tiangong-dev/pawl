@@ -1,0 +1,35 @@
+{
+  "metrics": {
+    "file-length": {
+      "direction": "lower-is-better",
+      "value": 1,
+      "unit": "files \u003e 40 lines",
+      "breakdown": {
+        "src/legacy-long.js": 58
+      }
+    },
+    "file-length-growth": {
+      "direction": "lower-is-better",
+      "value": 1,
+      "unit": "files \u003e 40 lines",
+      "breakdown": {
+        "src/legacy-long.js": 58
+      }
+    },
+    "passing-tests": {
+      "direction": "higher-is-better",
+      "value": 4,
+      "unit": "passing",
+      "breakdown": null
+    },
+    "todo-markers": {
+      "direction": "lower-is-better",
+      "value": 2,
+      "unit": "matches",
+      "breakdown": {
+        "src/legacy-long.js:13": 1,
+        "src/legacy-long.js:42": 1
+      }
+    }
+  }
+}

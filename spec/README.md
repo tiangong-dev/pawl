@@ -37,12 +37,14 @@ still work on the file that now owns that heading.
 ### Commands
 
 - [commands/init.md](commands/init.md) — `init`
+- [commands/agent-md.md](commands/agent-md.md) — `agent-md`
+- [commands/measure.md](commands/measure.md) — `measure` + `--current`
 - [commands/config.md](commands/config.md) — Config — `pawl.yaml`
 - [commands/record.md](commands/record.md) — Partial record (`--only`) + Accepted debt (`--dry-run`, `--accept-worse`)
 - [commands/since.md](commands/since.md) — [Diff-scoped checking](commands/since.md#diff-scoped-checking)
 - [commands/guard.md](commands/guard.md) — `baseline-guard`
 - [commands/trend.md](commands/trend.md) — Trend
-- [commands/query.md](commands/query.md) — Query commands: `status`, `constraints`, `rank`
+- [commands/rank.md](commands/rank.md) — `rank`
 
 ### API
 

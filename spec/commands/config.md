@@ -8,7 +8,7 @@ snapshot: "pawl.snapshot.json"
 
 analyzers:
   - id: "frontend-lint"         # required, unique across analyzers
-    builtin: "eslint"           # eslint, oxlint or sarif
+    builtin: "eslint"           # eslint, oxlint, sarif or lines
     timeout: "10m"              # applies to acquisition and verification
     verify:                     # optional ESLint/Oxlint --print-config commands
       - "npx eslint --print-config src/probe.ts"
@@ -24,6 +24,7 @@ dimensions:
     tolerance: 0.0               # optional, absolute slack in the worse direction, default 0
     timeout: "10m"               # optional Go duration, default "10m"
     command: "./scripts/count-nolint.sh"  # exactly one of command | builtin | source
+    valid_exit_codes: [0, 1]     # optional, command dimensions only; default [0]
 
   - id: "file-length"
     title: "Files over 500 lines"
@@ -49,8 +50,23 @@ invalid `direction`, invalid `gate`, not exactly one of `command`/`builtin`/`sou
 `extract` set on a `builtin` dimension (extract is an exec-adapter feature),
 unknown `extract` form, an `extract` object with neither/both of `regex`/`json_path`,
 an uncompilable `extract.regex`, an empty `extract.json_path`,
-an unknown named-analyzer acquisition option or dimension selector, zero
-dimensions, unparseable YAML, config file not found.
+an unknown named-analyzer acquisition option or dimension selector,
+`valid_exit_codes` on a `builtin`/`source` dimension or holding a non-integer or
+out-of-range entry, zero dimensions, unparseable YAML, config file not found.
+
+### `valid_exit_codes`
+
+Optional on a `command` dimension (raw exec or `extract`), and spelled the same
+way as the named SARIF analyzer's acquisition option. Absent, the contract is
+the historical one: exit 0 or the run is a measurement failure. Present, it is
+the complete set of exit codes that count as a successful run.
+
+It exists for tools that report findings through a non-zero exit. Appending
+`|| true` to the command says something weaker and more dangerous: it accepts
+*every* exit code, so a crashed tool, a missing binary, or a rejected flag
+becomes a clean measurement of whatever partial output existed. Declaring the
+set keeps "could not measure" and "measured zero" apart, which is the property
+the whole engine is built on.
 
 ### Named analyzers
 
@@ -85,6 +101,26 @@ the source identity.
   report's `tool.driver.rules` catalog, so a misspelling cannot become a clean
   zero. It requires at least one `rules` selector and fails if the producer
   omits that catalog. Referencing dimensions may filter `rules` and/or `levels`.
+- `builtin: lines`: the tool-agnostic kind. `options.command` and
+  `options.regex` are required; `options.valid_exit_codes` is accepted with the
+  same meaning it has on a dimension. The regex is compiled at config load and
+  applied to every non-empty output line; an unmatched line is a measurement
+  failure, not a skip. Named groups `path`, `line`, `rule`, and `level` are all
+  optional — `path`/`line` build the per-file breakdown, `rule`/`level` are what
+  referencing dimensions select on. Level names are not checked against any
+  vocabulary, because they belong to the tool.
+
+  It refuses two options the other kinds accept, rather than approximating
+  them: `min_files`, because line output reveals the files that *had* findings
+  and not the files that were scanned, and `verify`/`verify_rules`, because
+  there is no rule catalog in line output to verify against. Strict matching is
+  the partial substitute: a pattern that stops matching because the tool changed
+  its output format fails loudly instead of quietly zeroing every dimension that
+  sources it.
+
+  `lines` is a named-analyzer kind only. On a dimension it is a validation
+  error naming the analyzer form — a single line-oriented dimension wants
+  `command:` with `extract: regex` instead.
 - Acquisition options live on the analyzer; selectors live on referencing
   dimensions. Unknown options/selectors fail validation instead of being
   silently ignored.

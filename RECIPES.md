@@ -279,13 +279,64 @@ files were scanned.
   direction: "lower-is-better"
   gate: "per-file-count"
   command: "my-linter --format concise"
+  valid_exit_codes: [0, 1]   # this linter exits 1 when it finds something
   extract:
     regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
 ```
 
-Use this only when the command exits 0 after a successful scan. If “findings
-found” is non-zero, prefer its SARIF output and declare `valid_exit_codes`;
-`|| true` also hides crashes and configuration failures.
+`valid_exit_codes` is the complete set of exit codes that count as a successful
+run; leave it out and the contract is the default `[0]`. Reach for it instead of
+appending `|| true`, which accepts *every* exit code — a crashed linter, a typo
+in a flag, or a missing binary would then measure a clean zero.
+
+### Any linter, several rules, one run (`lines`)
+
+The recipe above runs the tool once per dimension. When you want three
+rule-scoped dimensions out of one scan — the thing the ESLint and Oxlint
+analyzers do — use a `lines` analyzer. It works with any tool that prints one
+finding per line, and pawl needs to know nothing about that tool beyond the
+pattern you give it. Ruff, as an example:
+
+```yaml
+analyzers:
+  - id: "ruff"
+    builtin: "lines"
+    options:
+      command: "ruff check src --output-format concise"
+      valid_exit_codes: [0, 1]   # ruff exits 1 when it finds something
+      # Named groups are all optional. path/line build the per-file breakdown;
+      # rule/level are what the dimensions below select on.
+      regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+: (?P<rule>\S+) .*$'
+
+dimensions:
+  - id: "unused-imports"
+    title: "Unused imports"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "ruff"
+    options:
+      rules: ["F401"]
+
+  - id: "long-lines"
+    title: "Lines over the limit"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "ruff"
+    options:
+      rules: ["E501"]
+```
+
+Every non-empty line must match the pattern. A tool that prints a trailing
+`Found 3 errors.` summary will fail the measurement until you either filter it
+out in the command or widen the pattern — deliberately, because the alternative
+is that a tool changing its output format silently drops every dimension
+sourcing it to zero. That strictness is also the closest a line-oriented tool
+gets to rule verification: there is no rule catalog in line output, so `lines`
+does not accept `verify`. It also does not accept `min_files`, since the paths
+it sees are the files that had findings, not the files that were scanned.
+
+Omit the selectors entirely and the dimension counts every finding — the "one
+number for the whole tool" case.
 
 ---
 
@@ -305,7 +356,7 @@ signal findings/failures).
   gate: "per-file-count"
   builtin: "sarif"
   options:
-    command: "semgrep --config auto --sarif src || true"
+    command: "semgrep --config auto --sarif src"
     # file: "results.sarif"            # …or read a report a prior step wrote
     # levels: ["error", "warning"]     # optional: count only these levels
     # rules: ["python.lang.security.audit.xss"]   # optional: only these ruleIds
@@ -319,7 +370,7 @@ signal findings/failures).
   direction: "higher-is-better"
   builtin: "junit"
   options:
-    command: "pytest --junitxml=.pawl/junit.xml || true"
+    command: "pytest --junitxml=.pawl/junit.xml"
     file: ".pawl/junit.xml"
     count: "passing"   # or "failures" (lower-is-better), "tests", "skipped"
 ```
@@ -336,7 +387,7 @@ signal findings/failures).
     file: "coverage/lcov.info"
     format: "lcov"        # or "cobertura"
     metric: "lines"       # or "branches"; "functions" (lcov only)
-    # command: "npm test -- --coverage || true"   # optional: produce the file first
+    # command: "npm test -- --coverage"   # optional: produce the file first
 ```
 
 A `coverage-summary.json` (Istanbul/nyc) is a one-number read — use `json-value`:
@@ -411,7 +462,7 @@ environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see
 ```bash
 pawl record        # snapshot the baseline — commit pawl.snapshot.json
 pawl check         # the CI gate: exit 1 on any regression
-pawl diff          # see the table without gating (always exit 0)
+pawl measure       # just the numbers — no baseline read, no verdict
 pawl trend         # each metric's value over the committed snapshot's git history
 ```
 

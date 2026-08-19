@@ -68,7 +68,11 @@ dimensions:
     title: "Bare fmt.Print* (write via the injected io.Writer instead)"
     direction: "lower-is-better"
     gate: "per-file-count"
-    command: "grep -rnE 'fmt\\.Print(ln|f)?\\(' internal cmd --include='*.go' | grep -v _test.go || true"
+    command: "grep -rnE 'fmt\\.Print(ln|f)?\\(' internal cmd --include='*.go' | grep -v _test.go"
+    # grep exits 1 when it matches nothing, which here is the good outcome. The
+    # old `|| true` said the same thing but also swallowed grep's exit 2 — an
+    # unreadable directory would have measured a clean 0.
+    valid_exit_codes: [0, 1]
     extract:
       regex: '^(?P<path>[^:]+):(?P<line>\d+):'
 

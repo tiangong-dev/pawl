@@ -68,12 +68,8 @@ func configWithOnly(cfg *Config, onlySet map[string]bool) *Config {
 // otherwise — the same accepted-debt gate a full record applies, scoped to
 // just the dimensions this invocation actually measured. See
 // spec/commands/record.md § Partial record and § Accepted debt.
-func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format string, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format string, dryRun, acceptWorse bool, supplied map[string]Metric, progress, stdout, stderr io.Writer) int {
 	runScope := reportScope{command: "record", only: only}
-	if format == "codeclimate" {
-		fmt.Fprintln(stderr, "record --only cannot emit codeclimate: a partial measurement is not a complete current findings report")
-		return 2
-	}
 
 	// An existing, well-formed snapshot is what --only preserves; "preserve the
 	// rest" is meaningless without a baseline.
@@ -97,7 +93,7 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 	// Measure only the listed dimensions — an unrelated broken adapter must not
 	// block locking in the win.
 	sub := configWithOnly(cfg, onlySet)
-	measured, artifacts, err := MeasureAll(sub, stderr)
+	measured, artifacts, err := acquireMeasurement(sub, supplied, progress, stderr)
 	if err != nil {
 		return abortCouldNotMeasure(runScope, format, err.Error(), failedMetricIDs(err), stdout, stderr)
 	}

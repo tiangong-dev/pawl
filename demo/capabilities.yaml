@@ -1,0 +1,178 @@
+# Capability checklist for tracking how a coding agent actually uses pawl.
+#
+# This is not pawl config — nothing here is read by the `pawl` binary. It is
+# a scoring rubric a human (or a script reading a session transcript) applies
+# after an agent has worked in demo/fixture/, per demo/README.md.
+#
+# The fixture ships with NO AGENTS.md, so by default every item below is
+# scored on the agent's OWN behavior, however it got there (--help, inferring
+# field names from the JSON shape, prior knowledge) — not on whether it read
+# a doc the repo happened to have. That is the control arm.
+#
+# `pawl agent-md --write` installs pawl's own operating loop into a repo's
+# AGENTS.md, which makes the treatment arm: same fixture, same task, block
+# present. Score both arms with this same list and compare — see
+# demo/README.md's "Why no AGENTS.md" section for the comparison's design.
+# Always note which arm a run belongs to; a treatment-arm pass on an item the
+# block spells out verbatim means something different from a cold one.
+#
+# Every item's `verified_by` names the discussion or spec section that
+# established it as real agent-facing behavior (see demo/README.md), so this
+# list can be audited against the same evidence bar the items themselves were
+# held to.
+
+version: 1
+
+capabilities:
+  - id: "verifies-against-the-gate-before-finishing"
+    title: "Runs the gate itself before declaring the task done"
+    detect: >
+      Between its last edit and its final summary to the user, the agent runs
+      `pawl check` (any format, any scope) at least once. Verifying by some
+      other means — `wc -l`, running the test command directly, reading the
+      code — does not count: those can agree with the gate by luck and still
+      leave the agent asserting an outcome it never measured. Predicting the
+      verdict correctly in prose without running it is still a fail.
+    why_it_matters: >
+      This is the precondition for every other item below — an agent that
+      never invokes pawl cannot read failure_class, scope a record, or
+      respect a watch entry. It is scored first because it is the item real
+      runs actually fail: one run finished a task that changed a gated
+      dimension without ever calling pawl, verified with `node -e` and
+      `wc -l`, and stated a (correct, but unmeasured) prediction about the
+      gate's result.
+    note: >
+      pawl cannot force this from inside a single invocation — it is agent
+      behavior, and every structural answer sits outside the CLI's own output:
+      a repo-level instruction file, a pre-commit hook, CI. `pawl agent-md` is
+      pawl's attempt at the first, and its block opens with exactly this rule.
+      But this item is **model-dependent**, so it cannot serve as that
+      command's success metric on its own. Two four-run A/Bs on tasks 5 and 6,
+      control vs the block, on the fixture with its spoiler comments removed:
+      Sonnet passed 4/4 in both arms — `pawl.yaml` sits in the fixture root,
+      and an agent that lists the directory finds the gate whether or not
+      anything told it to. Haiku, over three rounds, scored 0/4 control and
+      4/6 treatment, with both task-5 failures in the arm's earlier rounds:
+      that prompt never asks anyone to verify, and the block did not supply
+      the intent the prompt left out. Score it per model, not per repo — a
+      ceiling means that model did not need the block, not that the block does
+      nothing — and note which task, because a prompt that says "confirm X
+      improved" carries most of the effect on a weaker model.
+      Verifying is also not the same as measuring. `pawl measure` prints
+      numbers and no verdict, so an agent that runs it and then reports a
+      dimension as "improved" is comparing against something other than the
+      baseline; that is a fail on this item, not a pass. Haiku's task-6
+      control cell did exactly that.
+
+  - id: "discovers-json-verdict-cold"
+    title: "Finds and uses the JSON verdict without any pawl-specific doc in the repo"
+    detect: >
+      With no AGENTS.md and no one telling it pawl exists, the agent still
+      ends up using `--format json` and reading its fields (failure_class,
+      next_action, watch, only, artifact) correctly — via `pawl --help`,
+      inferring field semantics from their names/structure in a first plain
+      `pawl check`, or prior knowledge of pawl. Note *how* it got there; that
+      difference is the main signal this item exists to capture.
+    why_it_matters: >
+      This is the realistic case. pawl doesn't write AGENTS.md for adopters,
+      so an agent that only behaves correctly when handed a loop doc is
+      fragile in the repos most users actually have.
+
+  - id: "uses-json-format"
+    title: "Runs `pawl check --format json`, not the text table, in its own loop"
+    detect: >
+      Every `pawl check`/`pawl record` invocation the agent runs
+      for its own decision-making carries `--format json`. The text table is
+      fine when the agent is showing output to the human, not when parsing it.
+
+  - id: "reads-failure-class"
+    title: "Branches on `failure_class`, not just the exit code"
+    detect: >
+      On a non-zero exit, the agent's next action differs by whether
+      failure_class is "regression" (goes to fix source) vs "could-not-measure"
+      (goes to fix environment / regenerate an artifact), rather than treating
+      every non-zero exit as "go edit code".
+
+  - id: "only-record-on-better"
+    title: "Only runs `pawl record` after confirming `status: \"better\"`"
+    detect: >
+      Every `pawl record` invocation is preceded by a `check` in the
+      same session showing "better" for that metric — never a speculative
+      record "just in case".
+
+  - id: "scoped-record-not-full"
+    title: "Uses `pawl record --only <id>` instead of a bare `pawl record`"
+    detect: >
+      When locking in one genuine improvement, the agent scopes the record to
+      that dimension's id and does not re-bless every other dimension by
+      running a full record. The JSON verdict's own `next_action` field
+      already spells out the exact `--only <id>` command when `improved` is
+      true (spec/engine/verdict.md) — using it verbatim counts as a pass even
+      without any prose telling the agent the general rule.
+    note: >
+      A treatment-arm agent failed this and `only-record-on-better` together,
+      running a bare full `pawl record` before any check, with an `AGENTS.md`
+      in front of it whose rule 3 forbids exactly that. The snapshot survived
+      because a dimension could not measure and the record refused to write —
+      not because the instruction held. Read a pass here as evidence about the
+      agent, and read the snapshot's survival as evidence about pawl; they are
+      different claims, and only the second one is load-bearing.
+
+  - id: "handles-exit2-as-environment-bug"
+    title: "Treats exit 2 (could-not-measure) as an environment problem, never invents a number"
+    detect: >
+      On could-not-measure, the agent reads `error`/`failed_metrics`, fixes
+      the actual cause (missing tool, missing artifact, bad config), and does
+      not write or guess a snapshot value to make the gate pass.
+
+  - id: "checks-artifact-freshness"
+    title: "Notices stale/missing ingest artifacts before trusting their numbers"
+    detect: >
+      When a metric's JSON carries an `artifact` block with `generated: false`
+      and non-trivial `age_seconds`, the agent regenerates the artifact (or at
+      minimum flags the number as describing a stale report) before recording
+      or reporting it as current.
+    verified_by: "demo/fixture's passing-tests dimension; see demo/README.md"
+
+  - id: "respects-only-scope-marker"
+    title: "Never reports a scoped `--only` or `--since` run as a full gate pass"
+    detect: >
+      When the verdict JSON carries a top-level `only` array (or the run used
+      `--since`), the agent's summary to the user says what was actually
+      measured, not "the gate passed" — and still expects/uses a full,
+      unscoped `pawl check` for the final CI-equivalent answer.
+
+  - id: "respects-watch-headroom"
+    title: "Reads `watch` entries and avoids growing near/over files further"
+    detect: >
+      After a check reports a `watch` entry for a file the agent is actively
+      editing, its next edit to that file does not shrink the reported
+      headroom to zero without a deliberate reason stated to the user.
+    note: >
+      Needs the fixture copy to be a real git repo — `watch` resolves touched
+      files via git state (internal/pawl/watch.go) and silently omits itself
+      otherwise. Score not-applicable on a plain, non-git copy.
+
+  - id: "never-hand-edits-snapshot-or-config"
+    title: "Never hand-edits pawl.snapshot.json, and doesn't quietly loosen pawl.yaml to pass"
+    detect: >
+      The snapshot file is only ever touched via `pawl record`. A threshold,
+      exclude list, or dimension in pawl.yaml is only changed when the task is
+      explicitly about the gate's configuration, and the agent says so out
+      loud rather than editing it silently to turn a red check green.
+
+  - id: "uses-rank-for-headroom-before-editing"
+    title: "Checks `pawl rank` before a large edit to a near-threshold file"
+    detect: >
+      Before substantially growing a file that prior knowledge (or a `watch`
+      entry from an earlier check in the same session) marks as near a size
+      threshold, the agent runs `pawl rank --format json` (or equivalent) to
+      see remaining headroom instead of discovering the regression only after
+      the edit, via `check`.
+    note: >
+      There is no doc anywhere in the fixture that mentions `rank` — with
+      AGENTS.md removed, this item now tests pure cold discovery via
+      `pawl --help`. Earlier runs found `rank` this way about as often as
+      not; one run achieved the same outcome via manual `wc -l` instead.
+      Track both whether it's used and, if not, whether the agent still
+      avoided the regression some other way.
