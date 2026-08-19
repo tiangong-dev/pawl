@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" width="1200" height="520" role="img" aria-labelledby="t d">
-  <title id="t">pawl — a language-agnostic anti-regression quality gate</title>
-  <desc id="d">A terminal runs `pawl check -q`. Four dimensions report against the recorded baseline: eslint-warnings 342 to 338 better, todo-markers unchanged, line-coverage unchanged, complexity 15 to 18 worse. The gate lists the one regression with the dimension's description, its totals and the file the change came from, then names the dimension that improved and the scoped record command that would lock the gain in. It exits 1.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 590" width="1200" height="590" role="img" aria-labelledby="t d">
+  <title id="t">pawl — the regression gate a coding agent runs on itself</title>
+  <desc id="d">A coding agent reports a refactor complete, then runs `pawl check -q`. Four dimensions report against the recorded baseline: eslint-warnings 342 to 338 better, todo-markers unchanged, line-coverage unchanged, complexity 15 to 18 worse. The gate lists the regression down to src/parser.ts, names the dimension that improved and the scoped record that would lock it in, and exits 1 — so the agent withdraws the claim and goes back to the file.</desc>
 
   <style>
     :root {
@@ -14,6 +14,7 @@
       --dim: #8b949e;
       --good: #3fb950;
       --bad: #f85149;
+      --agent: #a371f7;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -28,20 +29,22 @@
 
     .bg { fill: var(--bg); }
     .wordmark { fill: var(--fg); font: 700 84px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: -2.5px; }
-    .tagline  { fill: var(--muted); font: 400 19px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .tagline  { fill: var(--fg); font: 600 21px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .subtag   { fill: var(--muted); font: 400 17px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
     .badge    { fill: var(--muted); font: 400 15px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .badgem   { fill: var(--muted); font: 400 14px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
     .tick     { stroke: var(--good); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
     .term-bg  { fill: var(--term-bg); stroke: var(--term-edge); stroke-width: 1.5; }
     .term-bar { fill: var(--term-bar); }
     .title    { fill: var(--dim); font: 400 14px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
 
-    /* 18px monospace at 0.6em advance = 10.8px per column. Column positions
-       below are that grid times the columns `check` actually prints for this
-       table — 26, 37, 45, 47, with a 51-character rule. The widths are derived
-       from the longest metric id, so they are a property of these four
-       dimensions, not a constant. */
-    .mono   { font: 400 18px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    /* 17px monospace at 0.6em advance = 10.2px per column. The table's column
+       positions below are that grid times the columns `check` actually prints
+       for this table — 26, 37, 45, 47, with a 51-character rule. Those widths
+       are derived from the longest metric id, so they are a property of these
+       four dimensions, not a constant. */
+    .mono   { font: 400 17px ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
     .prompt { fill: var(--good); }
     .cmd    { fill: var(--term-fg); }
     .dimtxt { fill: var(--dim); }
@@ -50,6 +53,10 @@
     .num    { fill: var(--term-fg); }
     .good   { fill: var(--good); }
     .bad    { fill: var(--bad); }
+    /* The agent's two turns are the only text here that is not captured CLI
+       output, so they are coloured as speech and never sit on the table grid. */
+    .agent  { fill: var(--agent); }
+    .say    { fill: var(--term-fg); }
 
     /* One 14s take. Each line is held from the moment it lands until the whole
        frame fades, so the finished screen — the part that says what pawl does —
@@ -59,6 +66,7 @@
        take: every element is opacity 0 at both 0% and 100%, so the restart has
        nothing to jump. Ending on the finished screen instead would snap a full
        terminal back to an empty one in one frame. */
+    .a1 { animation: a1 14s linear infinite; }
     .cmdline { animation: cmdline 14s linear infinite; }
     .l1 { animation: l1 14s linear infinite; }
     .l2 { animation: l2 14s linear infinite; }
@@ -70,26 +78,29 @@
     .l8 { animation: l8 14s linear infinite; }
     .l9 { animation: l9 14s linear infinite; }
     .l10 { animation: l10 14s linear infinite; }
-    @keyframes cmdline { 0%,  1.9% { opacity: 0 }  2%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l1  { 0%, 13.9% { opacity: 0 } 14%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l2  { 0%, 17.9% { opacity: 0 } 18%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l3  { 0%, 21.9% { opacity: 0 } 22%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l4  { 0%, 25.9% { opacity: 0 } 26%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    .a2 { animation: a2 14s linear infinite; }
+    @keyframes a1      { 0%,  1.9% { opacity: 0 }  2%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes cmdline { 0%,  4.9% { opacity: 0 }  5%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l1  { 0%, 16.9% { opacity: 0 } 17%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l2  { 0%, 20.9% { opacity: 0 } 21%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l3  { 0%, 23.9% { opacity: 0 } 24%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l4  { 0%, 26.9% { opacity: 0 } 27%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
     @keyframes l5  { 0%, 29.9% { opacity: 0 } 30%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l6  { 0%, 40.9% { opacity: 0 } 41%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l7  { 0%, 44.9% { opacity: 0 } 45%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l8  { 0%, 48.9% { opacity: 0 } 49%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l9  { 0%, 54.9% { opacity: 0 } 55%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
-    @keyframes l10 { 0%, 58.9% { opacity: 0 } 59%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l6  { 0%, 39.9% { opacity: 0 } 40%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l7  { 0%, 42.9% { opacity: 0 } 43%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l8  { 0%, 45.9% { opacity: 0 } 46%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l9  { 0%, 49.9% { opacity: 0 } 50%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes l10 { 0%, 52.9% { opacity: 0 } 53%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
+    @keyframes a2  { 0%, 59.9% { opacity: 0 } 60%, 88% { opacity: 1 } 95%, 100% { opacity: 0 } }
 
     /* The command types itself: a clip rect widens one character at a time,
        and the caret rides along on the same 15 steps. */
     .typed { animation: typed 14s steps(15, end) infinite; }
-    @keyframes typed { 0%, 2% { width: 0 } 10%, 100% { width: 162px } }
+    @keyframes typed { 0%, 5% { width: 0 } 13%, 100% { width: 153px } }
 
     .caret { fill: var(--term-fg); animation: caret-move 14s steps(15, end) infinite, caret-blink 14s steps(1, end) infinite; }
-    @keyframes caret-move  { 0%, 2% { transform: translateX(-162px) } 10%, 100% { transform: translateX(0) } }
-    @keyframes caret-blink { 0%, 1.9% { opacity: 0 } 2%, 5% { opacity: 1 } 6%, 8% { opacity: 0 } 9%, 11% { opacity: 1 } 12%, 100% { opacity: 0 } }
+    @keyframes caret-move  { 0%, 5% { transform: translateX(-153px) } 13%, 100% { transform: translateX(0) } }
+    @keyframes caret-blink { 0%, 4.9% { opacity: 0 } 5%, 8% { opacity: 1 } 9%, 11% { opacity: 0 } 12%, 14% { opacity: 1 } 15%, 100% { opacity: 0 } }
 
     /* The regressions header and the title-bar exit code share one pulse,
        because they are one event: the gate refusing to let a number slip back. */
@@ -105,36 +116,37 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .cmdline,.l1,.l2,.l3,.l4,.l5,.l6,.l7,.l8,.l9,.l10,.typed,.caret,.alarm { animation: none; }
-      .typed { width: 162px; }
+      .a1,.cmdline,.l1,.l2,.l3,.l4,.l5,.l6,.l7,.l8,.l9,.l10,.a2,.typed,.caret,.alarm { animation: none; }
+      .typed { width: 153px; }
       .caret { opacity: 0; }
     }
   </style>
 
-  <rect class="bg" width="1200" height="520"/>
+  <rect class="bg" width="1200" height="590"/>
 
-  <!-- Identity. The four claims are the ones the terminal panel cannot make
-       for itself: it already shows a multi-dimension verdict down to the file,
-       so repeating that here would spend the space twice. -->
-  <text class="wordmark" x="40" y="185">pawl</text>
-  <text class="tagline"  x="43" y="227">numbers can only hold or improve</text>
+  <!-- Identity. The four claims are the ones the session on the right cannot
+       make for itself: it shows one run, not how an agent comes to run it,
+       what it reads back, or what stops it moving the bar instead. -->
+  <text class="wordmark" x="40" y="205">pawl</text>
+  <text class="tagline"  x="43" y="247">agents assert — pawl measures</text>
+  <text class="subtag"   x="43" y="275">numbers can only hold or improve</text>
 
-  <g class="tick"><path d="M44 272 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="279">any language, any tool</text>
-  <g class="tick"><path d="M44 310 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="317">baseline is a file, not a service</text>
-  <g class="tick"><path d="M44 348 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="355">unapproved baseline drops fail CI</text>
-  <g class="tick"><path d="M44 386 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="393">your AI agent gets the same loop</text>
+  <g class="tick"><path d="M44 320 l7 7 l13 -14"/></g>
+  <text class="badgem" x="74" y="327">pawl agent-md &gt;&gt; AGENTS.md</text>
+  <g class="tick"><path d="M44 358 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="365">JSON verdict with next_action</text>
+  <g class="tick"><path d="M44 396 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="403">can't measure ≠ measured zero</text>
+  <g class="tick"><path d="M44 434 l7 7 l13 -14"/></g>
+  <text class="badge" x="74" y="441">it can't lower its own bar</text>
 
-  <!-- Terminal -->
-  <rect class="term-bg"  x="372" y="30" width="792" height="460" rx="10"/>
-  <path class="term-bar" d="M372 40 a10 10 0 0 1 10 -10 h772 a10 10 0 0 1 10 10 v24 h-792 z"/>
-  <line x1="372" y1="64" x2="1164" y2="64" stroke="var(--term-edge)" stroke-width="1.5"/>
-  <circle cx="394" cy="47" r="5.5" fill="#ff5f57"/>
-  <circle cx="414" cy="47" r="5.5" fill="#febc2e"/>
-  <circle cx="434" cy="47" r="5.5" fill="#28c840"/>
+  <!-- The session -->
+  <rect class="term-bg"  x="445" y="30" width="719" height="526" rx="10"/>
+  <path class="term-bar" d="M445 40 a10 10 0 0 1 10 -10 h699 a10 10 0 0 1 10 10 v24 h-719 z"/>
+  <line x1="445" y1="64" x2="1164" y2="64" stroke="var(--term-edge)" stroke-width="1.5"/>
+  <circle cx="467" cy="47" r="5.5" fill="#ff5f57"/>
+  <circle cx="487" cy="47" r="5.5" fill="#febc2e"/>
+  <circle cx="507" cy="47" r="5.5" fill="#28c840"/>
   <!-- The exit code is window chrome, not terminal output: a shell prints the
        table and returns 1, it does not print the number. Putting it in the
        title bar keeps the punchline without inventing a line pawl never emits. -->
@@ -143,63 +155,64 @@
     <text class="title" x="1094" y="51" text-anchor="middle" fill="var(--bad)" font-weight="600">exit 1</text>
   </g>
 
-  <!-- Row 1: the command, typed. -->
+  <!-- The claim. -->
+  <text class="mono a1" x="473" y="100"><tspan class="agent">●</tspan> <tspan class="say">Split the long functions in src/parser.ts. Task complete.</tspan></text>
+
+  <!-- The command, typed. -->
   <clipPath id="typewriter">
-    <rect class="typed" x="400" y="86" width="162" height="24"/>
+    <rect class="typed" x="473" y="130" width="153" height="24"/>
   </clipPath>
   <g class="cmdline" clip-path="url(#typewriter)">
-    <text class="mono prompt" x="400" y="104">$ <tspan class="cmd">pawl check -q</tspan></text>
+    <text class="mono prompt" x="473" y="148">$ <tspan class="cmd">pawl check -q</tspan></text>
   </g>
-  <rect class="caret" x="562" y="88" width="10" height="20"/>
+  <rect class="caret" x="626" y="132" width="10" height="19"/>
 
-  <!-- Rows 3-4: table header. -->
+  <!-- Everything from here to the improved block is `pawl check -q` verbatim. -->
   <g class="l1">
-    <text class="mono head" x="400" y="156">metric</text>
-    <text class="mono head" x="681" y="156" text-anchor="end">baseline</text>
-    <text class="mono head" x="800" y="156" text-anchor="end">current</text>
-    <text class="mono head" x="886" y="156" text-anchor="end">Δ</text>
-    <text class="mono head" x="908" y="156">status</text>
-    <text class="mono head" x="400" y="182">---------------------------------------------------</text>
+    <text class="mono head" x="473" y="196">metric</text>
+    <text class="mono head" x="738" y="196" text-anchor="end">baseline</text>
+    <text class="mono head" x="850" y="196" text-anchor="end">current</text>
+    <text class="mono head" x="932" y="196" text-anchor="end">Δ</text>
+    <text class="mono head" x="952" y="196">status</text>
+    <text class="mono head" x="473" y="220">---------------------------------------------------</text>
   </g>
 
-  <!-- Rows 5-8: one line per dimension. -->
   <g class="l2">
-    <text class="mono name" x="400" y="208">eslint-warnings</text>
-    <text class="mono num"  x="681" y="208" text-anchor="end">342</text>
-    <text class="mono num"  x="800" y="208" text-anchor="end">338</text>
-    <text class="mono num"  x="886" y="208" text-anchor="end">-4</text>
-    <text class="mono good" x="908" y="208">🎉 better</text>
+    <text class="mono name" x="473" y="244">eslint-warnings</text>
+    <text class="mono num"  x="738" y="244" text-anchor="end">342</text>
+    <text class="mono num"  x="850" y="244" text-anchor="end">338</text>
+    <text class="mono num"  x="932" y="244" text-anchor="end">-4</text>
+    <text class="mono good" x="952" y="244">🎉 better</text>
   </g>
   <g class="l3">
-    <text class="mono name"   x="400" y="234">todo-markers</text>
-    <text class="mono num"    x="681" y="234" text-anchor="end">12</text>
-    <text class="mono num"    x="800" y="234" text-anchor="end">12</text>
-    <text class="mono num"    x="886" y="234" text-anchor="end">±0</text>
-    <text class="mono dimtxt" x="908" y="234">✅ same</text>
+    <text class="mono name"   x="473" y="268">todo-markers</text>
+    <text class="mono num"    x="738" y="268" text-anchor="end">12</text>
+    <text class="mono num"    x="850" y="268" text-anchor="end">12</text>
+    <text class="mono num"    x="932" y="268" text-anchor="end">±0</text>
+    <text class="mono dimtxt" x="952" y="268">✅ same</text>
   </g>
   <g class="l4">
-    <text class="mono name"   x="400" y="260">line-coverage</text>
-    <text class="mono num"    x="681" y="260" text-anchor="end">71.2</text>
-    <text class="mono num"    x="800" y="260" text-anchor="end">71.2</text>
-    <text class="mono num"    x="886" y="260" text-anchor="end">±0</text>
-    <text class="mono dimtxt" x="908" y="260">✅ same</text>
+    <text class="mono name"   x="473" y="292">line-coverage</text>
+    <text class="mono num"    x="738" y="292" text-anchor="end">71.2</text>
+    <text class="mono num"    x="850" y="292" text-anchor="end">71.2</text>
+    <text class="mono num"    x="932" y="292" text-anchor="end">±0</text>
+    <text class="mono dimtxt" x="952" y="292">✅ same</text>
   </g>
   <g class="l5">
-    <text class="mono name" x="400" y="286">complexity</text>
-    <text class="mono num"  x="681" y="286" text-anchor="end">15</text>
-    <text class="mono num"  x="800" y="286" text-anchor="end">18</text>
-    <text class="mono num"  x="886" y="286" text-anchor="end">+3</text>
-    <text class="mono bad"  x="908" y="286">❌ worse</text>
+    <text class="mono name" x="473" y="316">complexity</text>
+    <text class="mono num"  x="738" y="316" text-anchor="end">15</text>
+    <text class="mono num"  x="850" y="316" text-anchor="end">18</text>
+    <text class="mono num"  x="932" y="316" text-anchor="end">+3</text>
+    <text class="mono bad"  x="952" y="316">❌ worse</text>
   </g>
 
-  <!-- Rows 10-13: what regressed, down to the file. -->
-  <text class="mono bad alarm" x="400" y="338">❌ regressions:</text>
-  <text class="mono name l6"   x="422" y="364">• complexity (cyclomatic complexity per function)</text>
-  <text class="mono dimtxt l7" x="465" y="390">total 15 → 18</text>
-  <text class="mono dimtxt l8" x="465" y="416">src/parser.ts  9 → 12</text>
+  <text class="mono bad alarm" x="473" y="364">❌ regressions:</text>
+  <text class="mono name l6"   x="493" y="388">• complexity (cyclomatic complexity per function)</text>
+  <text class="mono dimtxt l7" x="534" y="412">total 15 → 18</text>
+  <text class="mono dimtxt l8" x="534" y="436">src/parser.ts  9 → 12</text>
+  <text class="mono good l9"   x="473" y="460">🎉 improved: eslint-warnings</text>
+  <text class="mono dimtxt l10" x="504" y="484">run `pawl record --only eslint-warnings` to lock in the gains.</text>
 
-  <!-- Rows 14-15: what improved, and the scoped record that locks it in
-       without re-blessing the dimensions this run did not touch. -->
-  <text class="mono good l9"    x="400" y="442">🎉 improved: eslint-warnings</text>
-  <text class="mono dimtxt l10" x="432" y="468">run `pawl record --only eslint-warnings` to lock in the gains.</text>
+  <!-- The claim, withdrawn. -->
+  <text class="mono a2" x="473" y="532"><tspan class="agent">●</tspan> <tspan class="say">Not complete — complexity 15 → 18 in src/parser.ts. Fixing.</tspan></text>
 </svg>
