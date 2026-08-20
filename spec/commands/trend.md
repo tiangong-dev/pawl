@@ -9,7 +9,7 @@ snapshot path, parses the snapshot committed at each commit that touched it, and
 prints the series. This is the fully-local answer to "is this metric trending the
 right way?" — the history is already in the repo.
 
-- The snapshot's repo-relative path is resolved as `baseline-guard` does
+- The snapshot's repo-relative path is resolved as `guard` does
   (`git rev-parse --show-toplevel`, then Rel). `trend` reads the config only for
   the snapshot path; it needs no measurement. Not inside a git repo, or the
   snapshot path outside the repo → exit 2.

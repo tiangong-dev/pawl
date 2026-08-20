@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # baseline-guard compares the PR's snapshot against origin/main.
+          # guard compares the PR's snapshot against origin/main.
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
@@ -62,7 +62,7 @@ jobs:
           /tmp/pawl check --current /tmp/pawl-measure.json | tee /tmp/pawl-check.txt
       - name: Guard pawl's own baseline
         if: github.event_name == 'pull_request'
-        run: /tmp/pawl baseline-guard origin/main
+        run: /tmp/pawl guard origin/main
       # Dogfood --since: scope the gate to lines changed since the PR base, so
       # the diff-scoping path (git diff + added-line attribution) runs on every
       # PR. pawl's own baseline is clean, so this passes — it exercises the code.

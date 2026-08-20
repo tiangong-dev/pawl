@@ -1,8 +1,8 @@
 Part of the pawl engine contract. See [spec/README.md](../README.md).
 
-## baseline-guard
+## guard
 
-`pawl baseline-guard <ref>` compares the working tree's snapshot file against the
+`pawl guard <ref>` compares the working tree's snapshot file against the
 version committed at `<ref>` (in CI: the PR's base branch). This is what stops a
 hand-edited snapshot from faking a pass — `check` alone only verifies consistency
 between the snapshot on disk and a fresh measurement, not that the file's history

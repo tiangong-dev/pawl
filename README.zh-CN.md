@@ -22,7 +22,7 @@
 pawl record                     # 测量全部维度,写入基线
 pawl check                      # 门禁:任何维度回归即退出码 1
 pawl agent                      # 告诉你的 coding agent 这道门禁存在
-pawl baseline-guard origin/main # 防篡改:抓手改过的基线
+pawl guard origin/main          # 防篡改:抓手改过的基线
 ```
 
 用什么工具测量是每个维度自己的实现细节。把 ESLint 换成别的 linter、或把整个项目迁移到 pawl,只需改写**一条 adapter 命令**——基线和门禁原封不动。
@@ -42,7 +42,7 @@ pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 - **基线就在你自己的仓库里。** 快照是一份提交进 git 的 JSON——"你今天所在位置"的单一真相源。**全本地、离线**:无账号、无服务器、无面板,你的代码一个字节都不出 CI。
 - **是棘轮,不是阈值。** 锁定你此刻所在,只放行变好。存量债按文件被 grandfather,你**永远不必一次性全修**——而数字永远回不去。
 - **按文件 / 按 key 的精度。** 局部劣化藏不进"净零总量",offender 在文件**内部**挪位也不会误报——基线记的是**每个文件各自的计数**,不只是总数。
-- **诚实是结构性保证。** "没测出来"(退出码 `2`)绝不与"测得零"混淆;手改基线会被 `baseline-guard` 抓出。门禁宁可大声中止,也不放过一个谎。
+- **诚实是结构性保证。** "没测出来"(退出码 `2`)绝不与"测得零"混淆;手改基线会被 `pawl guard` 抓出。门禁宁可大声中止,也不放过一个谎。
 - **一个静态二进制。** 几秒钟丢进任何 CI;它坐在你**已在用的工具之上**,并能原生渲染成 GitHub PR 评论与注解。
 
 ## 安装
@@ -126,7 +126,7 @@ agent 会报告任务完成;它到底有没有测过是另一回事。在本仓�
 | `pawl measure` | 只测量并打印数字——不读基线、不下判决;输出就是快照格式 |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
-| `pawl baseline-guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
+| `pawl guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
 | `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
 | `pawl rank` | 按行数/字节给 include 文件排序(含近阈值文件) |
 | `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
@@ -155,8 +155,8 @@ agent 会报告任务完成;它到底有没有测过是另一回事。在本仓�
 
 | 码 | 含义 |
 |------|---------|
-| **0** | 通过(包括 `baseline-guard` 的合理跳过) |
-| **1** | `check`:某维度回归 · `baseline-guard`:快照相对 `<ref>` 变差(且未被 accepted-debt trailer 覆盖) · `record`:未传 `--accept-worse` 时拒绝写入更差的值 |
+| **0** | 通过(包括 `guard` 的合理跳过) |
+| **1** | `check`:某维度回归 · `guard`:快照相对 `<ref>` 变差(且未被 accepted-debt trailer 覆盖) · `record`:未传 `--accept-worse` 时拒绝写入更差的值 |
 | **2** | 无法诚实测量/对比:配置错误、快照缺失/损坏、工具崩溃、超时、未知命令…… |
 
 **1 与 2 的区分是承重的**:`1` 表示"测量正常,代码变差了";`2` 表示"没能诚实测量",绝不能被当成通过。
@@ -304,17 +304,17 @@ $ pawl record
 re-run with --accept-worse to record this as accepted debt, or fix the regression first.
 ```
 
-`--accept-worse` 会照样写入,并打印一行 trailer(提交信息末尾的 `Key: value` 元数据)供你贴进提交信息,好让 `baseline-guard` 分辨这次回归是故意接受的,而不是手改基线:
+`--accept-worse` 会照样写入,并打印一行 trailer(提交信息末尾的 `Key: value` 元数据)供你贴进提交信息,好让 `pawl guard` 分辨这次回归是故意接受的,而不是手改基线:
 
 ```console
 $ pawl record --accept-worse
 📸 snapshot written to pawl.snapshot.json
 ⚠️  recorded worse — add these trailers to the commit that includes the snapshot:
     Pawl-Accept: complexity 15
-baseline-guard treats a worsened metric without a matching trailer as unauthorized.
+`pawl guard` treats a worsened metric without a matching trailer as unauthorized.
 ```
 
-`baseline-guard <ref>` 会读取 `<ref>..HEAD` 之间每个提交里的 `Pawl-Accept: <id> <value>` trailer;只要某个回归维度的当前值不比 trailer 里声明的值更差,就把它打印成"已接受"提示而非违规。trailer 存在 git 历史里,不进快照文件,防篡改对比本身(基线 vs 当前)因此完全不受影响。
+`pawl guard <ref>` 会读取 `<ref>..HEAD` 之间每个提交里的 `Pawl-Accept: <id> <value>` trailer;只要某个回归维度的当前值不比 trailer 里声明的值更差,就把它打印成"已接受"提示而非违规。trailer 存在 git 历史里,不进快照文件,防篡改对比本身(基线 vs 当前)因此完全不受影响。
 
 `--dry-run` 只预览表格(叠加 `--accept-worse` 时还会预览 trailer 那几行)、不写入任何东西;它的退出码和一次真实 record 会给出的一致。
 
@@ -357,7 +357,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
   with:
     version: v0.7.1                # 可选;默认取最新 release
 - run: pawl check
-- run: pawl baseline-guard origin/${{ github.base_ref }}   # PR 上跑
+- run: pawl guard origin/${{ github.base_ref }}   # PR 上跑
 ```
 
 传 `command` 时,action 还会跑门禁,并在 pull_request 上把结果渲染成一条 sticky 评论(取自 `--format json` 裁决)回写——不用再手写 `github-script`:
@@ -383,9 +383,9 @@ pawl check  --current .pawl/current.json
 pawl record --only <id> --current .pawl/current.json
 ```
 
-### 防篡改:`baseline-guard`
+### 防篡改:`pawl guard`
 
-`pawl check` 只证明磁盘上的快照与一次新鲜测量一致——不证明快照的历史是诚实的。`pawl baseline-guard <base-ref>` 把已提交的快照与 PR 目标分支对比,若被手改成更差的值就失败。在 PR 上与 `check` 一起跑。
+`pawl check` 只证明磁盘上的快照与一次新鲜测量一致——不证明快照的历史是诚实的。`pawl guard <base-ref>` 把已提交的快照与 PR 目标分支对比,若被手改成更差的值就失败。在 PR 上与 `check` 一起跑。
 
 ## pawl 不做什么
 

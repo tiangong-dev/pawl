@@ -143,9 +143,9 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "agent", "measure", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
+	case "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | guard <ref> | trend [<id>] | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -153,7 +153,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// forgotten) fails loud instead of silently running a different,
 	// state-writing command.
 	maxOperands := 0
-	if command == "trend" || command == "baseline-guard" || command == "help" {
+	if command == "trend" || command == "guard" || command == "help" {
 		maxOperands = 1
 	}
 	if len(positional) > 1+maxOperands {
@@ -264,12 +264,12 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if command == "baseline-guard" {
+	if command == "guard" {
 		ref := ""
 		if len(positional) > 1 {
 			ref = positional[1]
 		}
-		return runBaselineGuard(cfg, ref, stdout, stderr)
+		return runGuard(cfg, ref, stdout, stderr)
 	}
 	// A supplied measurement is read once, before anything runs, so a malformed
 	// document fails before a snapshot is read or a dimension is executed.

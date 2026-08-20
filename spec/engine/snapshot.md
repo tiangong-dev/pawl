@@ -18,7 +18,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 
 - Field order per metric: `direction`, `value`, `unit`, `breakdown`, `tolerance`.
   `breakdown` is `null` when the measurement produced none. `tolerance` is present
-  only when the dimension declares it (so `baseline-guard`, which never sees the
+  only when the dimension declares it (so `guard`, which never sees the
   config, grants the same slack the gate does).
 - Metric ids are serialized in sorted order; 2-space indent; trailing newline.
 - Numbers print in minimal decimal notation, never exponent form
@@ -26,7 +26,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 
 ### Shape validation
 
-`check`, `diff`, and `baseline-guard` refuse (exit 2) to compare against a
+`check` and `guard` refuse (exit 2) to compare against a
 malformed snapshot. Shape errors, checked in this order per snapshot:
 
 1. not a JSON object → `snapshot is not an object`

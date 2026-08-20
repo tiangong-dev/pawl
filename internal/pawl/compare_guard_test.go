@@ -10,16 +10,16 @@ import (
 
 func f64(v float64) *float64 { return &v }
 
-// BaselineGuardViolations compares two recorded snapshots directly (not
+// GuardViolations compares two recorded snapshots directly (not
 // against a fresh measurement): a metric that worsened per its own recorded
 // direction and tolerance is a violation; a metric dropped from pr is
 // "removed" (legitimate, not a violation); a metric only in pr is ignored
 // (a newly added dimension has no baseline to violate).
-func TestBaselineGuardViolations(t *testing.T) {
+func TestGuardViolations(t *testing.T) {
 	t.Run("a worsened metric is a violation", func(t *testing.T) {
 		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 7}}
-		violations, removed := pawl.BaselineGuardViolations(base, pr)
+		violations, removed := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, []string{"a: 5 → 7"})
 		wantLines(t, removed, nil)
 	})
@@ -27,47 +27,47 @@ func TestBaselineGuardViolations(t *testing.T) {
 	t.Run("an unchanged or improved metric is not a violation", func(t *testing.T) {
 		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 5}}
-		violations, _ := pawl.BaselineGuardViolations(base, pr)
+		violations, _ := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, nil)
 
 		pr2 := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 3}}
-		violations2, _ := pawl.BaselineGuardViolations(base, pr2)
+		violations2, _ := pawl.GuardViolations(base, pr2)
 		wantViolations(t, violations2, nil)
 	})
 
 	t.Run("empty direction defaults to lower-is-better", func(t *testing.T) {
 		base := map[string]pawl.Metric{"b": {Direction: "", Value: 5}}
 		pr := map[string]pawl.Metric{"b": {Direction: "", Value: 7}}
-		violations, _ := pawl.BaselineGuardViolations(base, pr)
+		violations, _ := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, []string{"b: 5 → 7"})
 	})
 
 	t.Run("recorded tolerance is honored", func(t *testing.T) {
 		base := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 5, Tolerance: f64(2)}}
 		within := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 7, Tolerance: f64(2)}}
-		violations, _ := pawl.BaselineGuardViolations(base, within)
+		violations, _ := pawl.GuardViolations(base, within)
 		wantViolations(t, violations, nil)
 
 		beyond := map[string]pawl.Metric{"c": {Direction: pawl.LowerIsBetter, Value: 8, Tolerance: f64(2)}}
-		violations2, _ := pawl.BaselineGuardViolations(base, beyond)
+		violations2, _ := pawl.GuardViolations(base, beyond)
 		wantViolations(t, violations2, []string{"c: 5 → 8"})
 	})
 
 	t.Run("higher-is-better honors its own direction", func(t *testing.T) {
 		base := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 10}}
 		worse := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 8}}
-		violations, _ := pawl.BaselineGuardViolations(base, worse)
+		violations, _ := pawl.GuardViolations(base, worse)
 		wantViolations(t, violations, []string{"h: 10 → 8"})
 
 		better := map[string]pawl.Metric{"h": {Direction: pawl.HigherIsBetter, Value: 12}}
-		violations2, _ := pawl.BaselineGuardViolations(base, better)
+		violations2, _ := pawl.GuardViolations(base, better)
 		wantViolations(t, violations2, nil)
 	})
 
 	t.Run("a metric missing from pr is removed, not a violation", func(t *testing.T) {
 		base := map[string]pawl.Metric{"d": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{}
-		violations, removed := pawl.BaselineGuardViolations(base, pr)
+		violations, removed := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, nil)
 		wantLines(t, removed, []string{"d"})
 	})
@@ -75,7 +75,7 @@ func TestBaselineGuardViolations(t *testing.T) {
 	t.Run("a metric only in pr is ignored entirely", func(t *testing.T) {
 		base := map[string]pawl.Metric{}
 		pr := map[string]pawl.Metric{"e": {Direction: pawl.LowerIsBetter, Value: 100}}
-		violations, removed := pawl.BaselineGuardViolations(base, pr)
+		violations, removed := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, nil)
 		wantLines(t, removed, nil)
 	})
@@ -91,7 +91,7 @@ func TestBaselineGuardViolations(t *testing.T) {
 			"z": {Direction: pawl.LowerIsBetter, Value: 20},
 			"a": {Direction: pawl.LowerIsBetter, Value: 20},
 		}
-		violations, removed := pawl.BaselineGuardViolations(base, pr)
+		violations, removed := pawl.GuardViolations(base, pr)
 		wantViolations(t, violations, []string{"a: 10 → 20", "z: 10 → 20"})
 		wantLines(t, removed, []string{"b", "y"})
 	})

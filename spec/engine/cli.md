@@ -12,7 +12,7 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
                        document; no baseline read, no verdict rendered
   record               measure every dimension and (over)write the snapshot
   check                measure + compare; exit 1 on any regression — the CI gate
-  baseline-guard <ref> compare the working tree's snapshot against the version
+  guard <ref>          compare the working tree's snapshot against the version
                        committed at <ref> — the anti-tamper gate
   trend [<id>]         print each metric's value across the committed snapshot's
                        git history — a fully local trend, no cloud
@@ -63,7 +63,7 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 - `--format <text|json>` selects the output format of `record`/`check`;
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
-  `baseline-guard` ignores `--format` (its output is not tabular). `trend` and
+  `guard` ignores `--format` (its output is not tabular). `trend` and
   `rank` honor `text` (default) and `json`. `agent` emits Markdown and
   `measure` emits the measurement document by definition, so any `--format` on
   either is a usage error (exit 2).
@@ -77,7 +77,7 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   `--since` on any command other than `check` is a usage error (exit 2).
 - Unknown command → stderr message naming valid commands, exit 2.
 - Extra positional operands are usage errors (exit 2): `trend` takes at most
-  one operand (the metric id) and `baseline-guard` one (the ref); every other
+  one operand (the metric id) and `guard` one (the ref); every other
   command takes none. This keeps a mistyped invocation (`pawl record only x` —
   the dashes of `--only` forgotten) from silently running a different,
   state-writing command.
@@ -99,8 +99,8 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 
 | code | meaning |
 |------|---------|
-| 0 | pass (including legitimate baseline-guard skips) |
-| 1 | `check`: at least one dimension regressed; `baseline-guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
+| 0 | pass (including legitimate guard skips) |
+| 1 | `check`: at least one dimension regressed; `guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
 | 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";

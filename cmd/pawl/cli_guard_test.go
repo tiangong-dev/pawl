@@ -58,13 +58,13 @@ const guardConfig = `dimensions:
 `
 
 // A missing <ref> argument cannot produce an honest comparison.
-func TestBaselineGuardMissingRefExitsTwo(t *testing.T) {
+func TestGuardMissingRefExitsTwo(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
 	gitCommitAll(t, dir, homeDir, "initial")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard")
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -72,13 +72,13 @@ func TestBaselineGuardMissingRefExitsTwo(t *testing.T) {
 
 // An unresolvable ref is a loud error (exit 2, not a silent skip) naming the
 // bad ref — a typo must not disable the anti-tamper gate.
-func TestBaselineGuardUnresolvableRefExitsTwo(t *testing.T) {
+func TestGuardUnresolvableRefExitsTwo(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
 	gitCommitAll(t, dir, homeDir, "initial")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", "totally-bogus-ref-xyz")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", "totally-bogus-ref-xyz")
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -89,7 +89,7 @@ func TestBaselineGuardUnresolvableRefExitsTwo(t *testing.T) {
 
 // A ref that resolves fine but predates the snapshot is a legitimate skip
 // (exit 0), distinct from an unresolvable ref (exit 2).
-func TestBaselineGuardRefWithoutSnapshotSkips(t *testing.T) {
+func TestGuardRefWithoutSnapshotSkips(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -100,9 +100,9 @@ func TestBaselineGuardRefWithoutSnapshotSkips(t *testing.T) {
 		t.Fatalf("record exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 
-	res2 := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res2 := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res2.exit != 0 {
-		t.Fatalf("baseline-guard exit = %d, want 0 (ref predates the snapshot)\nstdout=%s\nstderr=%s",
+		t.Fatalf("guard exit = %d, want 0 (ref predates the snapshot)\nstdout=%s\nstderr=%s",
 			res2.exit, res2.stdout, res2.stderr)
 	}
 }
@@ -110,7 +110,7 @@ func TestBaselineGuardRefWithoutSnapshotSkips(t *testing.T) {
 // A working-tree snapshot that regressed against the version committed at
 // <ref> fails with a violation line; equal or better passes with a
 // consistency message.
-func TestBaselineGuardViolationAndConsistency(t *testing.T) {
+func TestGuardViolationAndConsistency(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -119,7 +119,7 @@ func TestBaselineGuardViolationAndConsistency(t *testing.T) {
 
 	t.Run("worse working tree fails with a violation line", func(t *testing.T) {
 		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":8,"unit":"count","breakdown":null}}}`+"\n")
-		res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+		res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 		if res.exit != 1 {
 			t.Fatalf("exit = %d, want 1\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 		}
@@ -130,7 +130,7 @@ func TestBaselineGuardViolationAndConsistency(t *testing.T) {
 
 	t.Run("equal working tree passes", func(t *testing.T) {
 		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
-		res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+		res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 		if res.exit != 0 {
 			t.Fatalf("exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 		}
@@ -138,7 +138,7 @@ func TestBaselineGuardViolationAndConsistency(t *testing.T) {
 
 	t.Run("better working tree passes", func(t *testing.T) {
 		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":3,"unit":"count","breakdown":null}}}`+"\n")
-		res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+		res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 		if res.exit != 0 {
 			t.Fatalf("exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 		}
@@ -147,8 +147,8 @@ func TestBaselineGuardViolationAndConsistency(t *testing.T) {
 
 // A metric removed in the working tree is a warning, not a failure — the
 // orphan check (a check/diff concern) covers that dishonesty, not
-// baseline-guard.
-func TestBaselineGuardRemovedMetricWarnsNotFails(t *testing.T) {
+// guard.
+func TestGuardRemovedMetricWarnsNotFails(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -159,7 +159,7 @@ func TestBaselineGuardRemovedMetricWarnsNotFails(t *testing.T) {
 
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -168,7 +168,7 @@ func TestBaselineGuardRemovedMetricWarnsNotFails(t *testing.T) {
 	}
 
 	ciEnv := append(gitEnv(homeDir), "GITHUB_ACTIONS=true")
-	ciRes := runPawl(t, dir, ciEnv, "baseline-guard", base)
+	ciRes := runPawl(t, dir, ciEnv, "guard", base)
 	if ciRes.exit != 0 {
 		t.Fatalf("CI exit = %d, want 0\nstdout=%s\nstderr=%s", ciRes.exit, ciRes.stdout, ciRes.stderr)
 	}
@@ -178,8 +178,8 @@ func TestBaselineGuardRemovedMetricWarnsNotFails(t *testing.T) {
 }
 
 // The recorded tolerance from the COMMITTED baseline is honored, since
-// baseline-guard has no config dimensions to fall back on.
-func TestBaselineGuardHonorsRecordedTolerance(t *testing.T) {
+// guard has no config dimensions to fall back on.
+func TestGuardHonorsRecordedTolerance(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -189,14 +189,14 @@ func TestBaselineGuardHonorsRecordedTolerance(t *testing.T) {
 
 	writeFile(t, dir, "pawl.snapshot.json",
 		`{"metrics":{"a":{"direction":"lower-is-better","value":6,"unit":"count","breakdown":null,"tolerance":2}}}`+"\n")
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("within recorded tolerance: exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 
 	writeFile(t, dir, "pawl.snapshot.json",
 		`{"metrics":{"a":{"direction":"lower-is-better","value":8,"unit":"count","breakdown":null,"tolerance":2}}}`+"\n")
-	res2 := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res2 := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res2.exit != 1 {
 		t.Fatalf("beyond recorded tolerance: exit = %d, want 1\nstdout=%s\nstderr=%s", res2.exit, res2.stdout, res2.stderr)
 	}
@@ -204,7 +204,7 @@ func TestBaselineGuardHonorsRecordedTolerance(t *testing.T) {
 
 // A missing working-tree snapshot cannot be compared honestly, even when a
 // baseline exists at <ref>.
-func TestBaselineGuardMissingWorkingTreeSnapshotExitsTwo(t *testing.T) {
+func TestGuardMissingWorkingTreeSnapshotExitsTwo(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -215,7 +215,7 @@ func TestBaselineGuardMissingWorkingTreeSnapshotExitsTwo(t *testing.T) {
 		t.Fatalf("removing working tree snapshot: %v", err)
 	}
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -224,7 +224,7 @@ func TestBaselineGuardMissingWorkingTreeSnapshotExitsTwo(t *testing.T) {
 // A commit between <ref> and HEAD carrying a `Pawl-Accept: <id> <value>`
 // trailer that covers the regressed value downgrades the violation to an
 // accepted notice: exit 0.
-func TestBaselineGuardHonorsAcceptTrailer(t *testing.T) {
+func TestGuardHonorsAcceptTrailer(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -234,7 +234,7 @@ func TestBaselineGuardHonorsAcceptTrailer(t *testing.T) {
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":8,"unit":"count","breakdown":null}}}`+"\n")
 	gitCommitAll(t, dir, homeDir, "accept the regression\n\nPawl-Accept: a 8\n")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -243,7 +243,7 @@ func TestBaselineGuardHonorsAcceptTrailer(t *testing.T) {
 	}
 
 	ciEnv := append(gitEnv(homeDir), "GITHUB_ACTIONS=true")
-	ciRes := runPawl(t, dir, ciEnv, "baseline-guard", base)
+	ciRes := runPawl(t, dir, ciEnv, "guard", base)
 	if ciRes.exit != 0 {
 		t.Fatalf("CI exit = %d, want 0\nstdout=%s\nstderr=%s", ciRes.exit, ciRes.stdout, ciRes.stderr)
 	}
@@ -254,7 +254,7 @@ func TestBaselineGuardHonorsAcceptTrailer(t *testing.T) {
 
 // A trailer that declares a smaller accepted value than the actual regression
 // does not cover it — the working tree moved past what was accepted.
-func TestBaselineGuardTrailerMustCoverActualValue(t *testing.T) {
+func TestGuardTrailerMustCoverActualValue(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -264,7 +264,7 @@ func TestBaselineGuardTrailerMustCoverActualValue(t *testing.T) {
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":8,"unit":"count","breakdown":null}}}`+"\n")
 	gitCommitAll(t, dir, homeDir, "accept a smaller regression than what actually happened\n\nPawl-Accept: a 6\n")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 1 {
 		t.Fatalf("exit = %d, want 1 (trailer declared 6, actual is 8)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -275,7 +275,7 @@ func TestBaselineGuardTrailerMustCoverActualValue(t *testing.T) {
 
 // A trailer with a non-numeric value is ignored, not treated as acceptance —
 // a malformed trailer must never silently disable the gate.
-func TestBaselineGuardMalformedTrailerIsIgnored(t *testing.T) {
+func TestGuardMalformedTrailerIsIgnored(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -285,7 +285,7 @@ func TestBaselineGuardMalformedTrailerIsIgnored(t *testing.T) {
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":8,"unit":"count","breakdown":null}}}`+"\n")
 	gitCommitAll(t, dir, homeDir, "malformed trailer\n\nPawl-Accept: a not-a-number\n")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 1 {
 		t.Fatalf("exit = %d, want 1 (malformed trailer must not be honored)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -297,7 +297,7 @@ func TestBaselineGuardMalformedTrailerIsIgnored(t *testing.T) {
 // permissive value (9); a buggy "only the last trailer counts" implementation
 // would see only the later, stricter one (6), which does not cover the
 // actual regressed value (8), and wrongly reject.
-func TestBaselineGuardMultipleTrailersTakeTheWorstDeclaredValue(t *testing.T) {
+func TestGuardMultipleTrailersTakeTheWorstDeclaredValue(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
@@ -309,8 +309,27 @@ func TestBaselineGuardMultipleTrailersTakeTheWorstDeclaredValue(t *testing.T) {
 	writeFile(t, dir, "note.txt", "unrelated change so the second commit is non-empty\n")
 	gitCommitAll(t, dir, homeDir, "a later, stricter accept that alone would not cover the regression\n\nPawl-Accept: a 6\n")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("exit = %d, want 0 (the earlier trailer's more permissive value must still count)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+// baseline-guard was renamed, not aliased. A CI step still calling the old name
+// must fail loudly: silently accepting it — or silently ignoring it — would drop
+// the anti-tamper gate while the job stayed green, which is the exact outcome
+// this command exists to prevent.
+func TestBaselineGuardIsGone(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", guardConfig)
+	gitCommitAll(t, dir, homeDir, "initial")
+
+	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", "HEAD")
+	if res.exit != 2 {
+		t.Fatalf("baseline-guard exit = %d, want 2 (unknown command)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stderr, "guard") {
+		t.Errorf("the unknown-command error does not name the replacement: %s", res.stderr)
 	}
 }

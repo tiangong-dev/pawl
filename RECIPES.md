@@ -469,5 +469,5 @@ pawl trend         # each metric's value over the committed snapshot's git histo
 - **Lock in a win on one dimension** without re-blessing the rest:
   `pawl record --only <id>`.
 - **Only fail on new code** (grandfather existing debt): `pawl check --since origin/main`.
-- **Stop hand-edited baselines**: `pawl baseline-guard origin/main` in CI.
+- **Stop hand-edited baselines**: `pawl guard origin/main` in CI.
 - **Give a noisy metric slack**: set `tolerance` (absolute, in the worse direction).

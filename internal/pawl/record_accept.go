@@ -122,7 +122,7 @@ func printAcceptedWorseTrailers(w io.Writer, worse []WorseDimension) {
 	for _, wd := range worse {
 		fmt.Fprintf(w, "    Pawl-Accept: %s %s\n", wd.ID, FormatNumber(wd.Current))
 	}
-	fmt.Fprintln(w, "baseline-guard treats a worsened metric without a matching trailer as unauthorized.")
+	fmt.Fprintln(w, "`pawl guard` treats a worsened metric without a matching trailer as unauthorized.")
 }
 
 // printWorseDetail prints one "• id (title)" header per dimension with a live

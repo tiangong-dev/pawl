@@ -368,16 +368,16 @@ func TestTrendLimitOnNonTrendCommandIsUsageError(t *testing.T) {
 		}
 	})
 
-	t.Run("baseline-guard", func(t *testing.T) {
+	t.Run("guard", func(t *testing.T) {
 		dir := t.TempDir()
 		homeDir := initGitRepo(t, dir)
 		writeFile(t, dir, "pawl.yaml", guardConfig)
 		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
 		base := gitCommitAll(t, dir, homeDir, "committed baseline")
 
-		res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base, "--limit", "3")
+		res := runPawl(t, dir, gitEnv(homeDir), "guard", base, "--limit", "3")
 		if res.exit != 2 {
-			t.Fatalf("baseline-guard --limit exit = %d, want 2 (usage error)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+			t.Fatalf("guard --limit exit = %d, want 2 (usage error)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 		}
 	})
 }

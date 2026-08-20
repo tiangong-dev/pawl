@@ -7,7 +7,7 @@ import (
 
 func validHelpTopic(topic string) bool {
 	switch topic {
-	case "", "init", "agent", "measure", "record", "check", "baseline-guard", "trend", "rank", "version":
+	case "", "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "version":
 		return true
 	default:
 		return false
@@ -29,7 +29,7 @@ Commands:
   measure                 measure every dimension and print the numbers, no verdict
   record                  measure and write the snapshot
   check                   fail when a metric regresses (default)
-  baseline-guard [ref]    ensure the snapshot did not regress
+  guard [ref]             ensure the snapshot did not regress
   trend [id]              show snapshot history
   rank                    rank files by line or byte size
   version                 print the version
@@ -55,14 +55,14 @@ Command flags:
 		return
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
-		"init":           "pawl init [-c pawl.yaml]",
-		"agent":          "pawl agent [--write agent|claude]",
-		"measure":        "pawl measure [--only <id>[,<id>…]] [-q]",
-		"record":         "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
-		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
-		"baseline-guard": "pawl baseline-guard [<ref>]",
-		"trend":          "pawl trend [<id>] [--limit <n>] [--format text|json]",
-		"rank":           "pawl rank [--format text|json]",
-		"version":        "pawl version",
+		"init":    "pawl init [-c pawl.yaml]",
+		"agent":   "pawl agent [--write agent|claude]",
+		"measure": "pawl measure [--only <id>[,<id>…]] [-q]",
+		"record":  "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
+		"check":   "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
+		"guard":   "pawl guard [<ref>]",
+		"trend":   "pawl trend [<id>] [--limit <n>] [--format text|json]",
+		"rank":    "pawl rank [--format text|json]",
+		"version": "pawl version",
 	}[topic])
 }
