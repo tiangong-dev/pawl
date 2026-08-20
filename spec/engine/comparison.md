@@ -1,5 +1,11 @@
 Part of the pawl engine contract. See [spec/README.md](../README.md).
 
+## Measurement-definition compatibility
+
+Two numbers carrying non-empty `definition` values are comparable only when those fingerprints match. An empty fingerprint is the single legacy compatibility state at every comparison boundary: it remains numerically comparable to a fingerprinted value during migration, rather than being treated as proof of redefinition. `check` refuses a proven mismatch as could-not-measure (exit 2) before reporting the number as better or worse. A full `record` is the explicit operation that establishes new definitions; `record --only` may redefine selected dimensions but refuses to preserve an incompatible unselected metric. Legacy snapshot and supplied-measurement entries remain readable; recording a measured or supplied selected metric binds it to the current definition.
+
+`guard` skips numeric comparison for a redefined metric and reports the definition change for review. `trend` marks the boundary as `redefined` instead of calculating a delta across unlike scales.
+
 ## Comparison semantics
 
 ### worse / better

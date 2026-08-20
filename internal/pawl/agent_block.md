@@ -15,8 +15,10 @@ what a dimension *is* and never whether it got better.
    `pawl check || true`, never a second command.
 2. Exit 1 / `failure_class: "regression"` → fix the source. Exit 2 /
    `failure_class: "could-not-measure"` → fix the environment named in `error`
-   and `failed_metrics` (a missing tool, a stale or absent report file). Never
-   write a snapshot number by hand to make either go away.
+   and `failed_metrics` (a missing tool, a stale report, or a changed measurement
+   definition). Review a definition change before the explicit `record` the error
+   names; unlike an improvement, its old and new numbers are not comparable.
+   Never write a snapshot number by hand to make either go away.
 3. `"status": "better"` → run that metric's `next_action`, which is
    `pawl record --only <id>`. Never a full `pawl record` to lock in one win: it
    silently re-blesses every dimension you did not touch.

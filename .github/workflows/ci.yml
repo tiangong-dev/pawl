@@ -69,10 +69,10 @@ jobs:
       - name: Self-check (diff-scoped, dogfoods --since)
         if: github.event_name == 'pull_request'
         run: /tmp/pawl check --since origin/main
-      # Validate the whole release path on the PR — a publish-time break
-      # (e.g. a non-package dir under dist/) then fails here, before merge,
-      # instead of on the release run after it.
-      - name: Validate npm release path (build + dry-run publish)
+      # Build every release package and locally dry-pack it on the PR. Registry
+      # authentication/provenance remains release-only, but broken manifests,
+      # lifecycle scripts and package contents fail before merge.
+      - name: Validate npm release packages (build + dry-run pack)
         id: releasepath
         if: github.event_name == 'pull_request'
         run: |
@@ -92,7 +92,7 @@ jobs:
               : '(self-check produced no output)';
             const outcome = process.env.RELEASE_OUTCOME;
             const releaseLine =
-              outcome === 'success' ? '✅ npm release path validated (build + dry-run publish)'
+              outcome === 'success' ? '✅ npm release packages validated (build + dry-run pack)'
               : outcome === 'failure' ? '❌ npm release path is broken — a real publish would fail'
               : `⏭️ npm release path not validated (${outcome || 'skipped'})`;
             const body = [

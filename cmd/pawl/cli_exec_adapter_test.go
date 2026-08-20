@@ -11,11 +11,12 @@ import (
 
 type snapshotFile struct {
 	Metrics map[string]struct {
-		Direction string             `json:"direction"`
-		Value     float64            `json:"value"`
-		Unit      string             `json:"unit"`
-		Breakdown map[string]float64 `json:"breakdown"`
-		Tolerance *float64           `json:"tolerance"`
+		Direction  string             `json:"direction"`
+		Definition string             `json:"definition"`
+		Value      float64            `json:"value"`
+		Unit       string             `json:"unit"`
+		Breakdown  map[string]float64 `json:"breakdown"`
+		Tolerance  *float64           `json:"tolerance"`
 	} `json:"metrics"`
 }
 

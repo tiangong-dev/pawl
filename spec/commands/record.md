@@ -2,6 +2,8 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 
 ## Partial record (`--only`)
 
+A full record also establishes fingerprints for new or changed measurement definitions, treating their old values as incomparable rather than better/worse. A partial record can do that for a selected dimension, but refuses when an unselected configured dimension's fingerprint changed: preserving that old value would knowingly write a snapshot the next check cannot compare. Use a full `pawl record` after reviewing a multi-dimension definition change.
+
 `pawl record --only <id>[,<id>…]` re-measures **only** the named dimensions and
 writes a snapshot that keeps every other metric's committed value untouched. It
 is the surgical counterpart to a full `record`: a full record re-measures and

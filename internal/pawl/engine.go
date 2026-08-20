@@ -374,6 +374,9 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 					full.SnapshotPath, strings.Join(orphans, ", ")),
 				nil, stdout, stderr)
 		}
+		if mismatches := definitionMismatches(measure, baseline.Metrics); len(mismatches) > 0 {
+			return abortCouldNotMeasure(runScope, format, definitionMismatchMessage(mismatches), nil, stdout, stderr)
+		}
 	}
 
 	current, artifacts, err := acquireMeasurement(measure, supplied, progress, stderr)

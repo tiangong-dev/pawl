@@ -64,6 +64,37 @@ func TestGuardViolations(t *testing.T) {
 		wantViolations(t, violations2, nil)
 	})
 
+	t.Run("legacy and fingerprinted metrics remain numerically comparable", func(t *testing.T) {
+		fingerprint := "v1:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		for _, tc := range []struct {
+			name       string
+			base, next string
+		}{
+			{name: "legacy baseline upgraded", base: "", next: fingerprint},
+			{name: "legacy working snapshot", base: fingerprint, next: ""},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: tc.base, Value: 5}}
+				pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: tc.next, Value: 50}}
+				violations, removed := pawl.GuardViolations(base, pr)
+				wantViolations(t, violations, []string{"a: 5 → 50"})
+				wantLines(t, removed, nil)
+				wantLines(t, pawl.RedefinedMetrics(base, pr), nil)
+			})
+		}
+	})
+
+	t.Run("a redefined metric is not numerically compared", func(t *testing.T) {
+		oldDefinition := "v1:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		newDefinition := "v1:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: oldDefinition, Value: 5}}
+		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: newDefinition, Value: 50}}
+		violations, removed := pawl.GuardViolations(base, pr)
+		wantViolations(t, violations, nil)
+		wantLines(t, removed, nil)
+		wantLines(t, pawl.RedefinedMetrics(base, pr), []string{"a"})
+	})
+
 	t.Run("a metric missing from pr is removed, not a violation", func(t *testing.T) {
 		base := map[string]pawl.Metric{"d": {Direction: pawl.LowerIsBetter, Value: 5}}
 		pr := map[string]pawl.Metric{}

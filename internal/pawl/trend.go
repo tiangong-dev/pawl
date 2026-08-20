@@ -62,8 +62,8 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 	}
 
 	type point struct {
-		commit, date string
-		value        float64
+		commit, date, definition string
+		value                    float64
 	}
 	series := map[string][]point{}    // id -> points, newest-first until reversed
 	latestMeta := map[string]Metric{} // id -> most recent Metric (for direction/unit)
@@ -96,7 +96,7 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 			if _, seen := latestMeta[id]; !seen {
 				latestMeta[id] = m // first sighting walking newest-first = most recent
 			}
-			series[id] = append(series[id], point{commit: c.sha, date: c.date, value: m.Value})
+			series[id] = append(series[id], point{commit: c.sha, date: c.date, definition: m.Definition, value: m.Value})
 		}
 	}
 
@@ -121,7 +121,7 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 		// series is newest-first; the output is oldest → newest.
 		points := make([]trendPoint, 0, len(pts))
 		for i := len(pts) - 1; i >= 0; i-- {
-			points = append(points, trendPoint{Commit: pts[i].commit, Date: pts[i].date, Value: pts[i].value})
+			points = append(points, trendPoint{Commit: pts[i].commit, Date: pts[i].date, Value: pts[i].value, Definition: pts[i].definition})
 		}
 		rep.Metrics = append(rep.Metrics, trendMetric{
 			ID:        id,
@@ -164,9 +164,10 @@ func trendSnapshotRelPath(cfg *Config, stderr io.Writer) (string, int) {
 }
 
 type trendPoint struct {
-	Commit string  `json:"commit"`
-	Date   string  `json:"date"`
-	Value  float64 `json:"value"`
+	Commit     string  `json:"commit"`
+	Date       string  `json:"date"`
+	Value      float64 `json:"value"`
+	Definition string  `json:"definition,omitempty"`
 }
 
 type trendMetric struct {
@@ -192,10 +193,16 @@ func renderTrendText(w io.Writer, metrics []trendMetric) {
 		}
 		fmt.Fprintf(w, "%s  (%s, %s)\n", tm.ID, tm.Direction, tm.Unit)
 		var prev *float64
+		prevDefinition := ""
 		for _, p := range tm.Points {
-			fmt.Fprintf(w, "  %s  %s  %s  %s\n", shortSHA(p.Commit), dateOnly(p.Date), FormatNumber(p.Value), trendDelta(prev, p.Value))
+			delta := trendDelta(prev, p.Value)
+			if prev != nil && !definitionsCompatible(p.Definition, prevDefinition) {
+				delta = "redefined"
+			}
+			fmt.Fprintf(w, "  %s  %s  %s  %s\n", shortSHA(p.Commit), dateOnly(p.Date), FormatNumber(p.Value), delta)
 			v := p.Value
 			prev = &v
+			prevDefinition = p.Definition
 		}
 	}
 }

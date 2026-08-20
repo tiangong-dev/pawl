@@ -30,7 +30,7 @@ asks rather than assumes.
   that quietly resolved to a default would write a file nobody chose. `--write`
   on any other command is a usage error (exit 2).
 - With **no `--write`**, the destination is chosen interactively — but only when
-  stdout and stdin are both terminals. Otherwise the block goes to stdout
+  stdin, stdout, and the stderr prompt are all attached to terminals. Otherwise the block goes to stdout
   unchanged, so `pawl agent >> AGENTS.md`, `pawl agent | pbcopy`, and an agent
   shelling out to read the loop all keep working instead of blocking on a prompt
   nobody can answer. The prompt itself goes to **stderr**, so choosing "print"

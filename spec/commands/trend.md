@@ -1,5 +1,7 @@
 Part of the pawl engine contract. See [spec/README.md](../README.md).
 
+A point carries its snapshot metric's optional `definition` in JSON. When adjacent points carry different non-empty definitions, text output prints `redefined` in the delta column instead of subtracting values from different measurement scales. A missing definition is the legacy compatibility state: legacy points omit the field and remain numerically comparable during migration.
+
 ## Trend
 
 `pawl trend [<id>]` reconstructs each metric's value over time from the

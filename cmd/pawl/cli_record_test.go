@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,11 +33,14 @@ func TestRecordSnapshotExactByteShape(t *testing.T) {
 		t.Fatalf("record exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 
-	got := readFile(t, filepath.Join(dir, "pawl.snapshot.json"))
-	want := `{
+	snapshotPath := filepath.Join(dir, "pawl.snapshot.json")
+	got := readFile(t, snapshotPath)
+	definitions := readSnapshot(t, snapshotPath).Metrics
+	want := fmt.Sprintf(`{
   "metrics": {
     "a": {
       "direction": "higher-is-better",
+      "definition": %q,
       "value": 5,
       "unit": "widgets",
       "breakdown": {
@@ -46,13 +50,14 @@ func TestRecordSnapshotExactByteShape(t *testing.T) {
     },
     "b": {
       "direction": "lower-is-better",
+      "definition": %q,
       "value": 2,
       "unit": "count",
       "breakdown": null
     }
   }
 }
-`
+`, definitions["a"].Definition, definitions["b"].Definition)
 	if got != want {
 		t.Errorf("snapshot bytes mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}

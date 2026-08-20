@@ -28,19 +28,30 @@
   re-running it after a pawl upgrade updates the loop instead of appending a
   second, diverging copy. A file whose markers are damaged or duplicated is
   refused (exit 2) and left exactly as found.
-- With no terminal on both stdout and stdin, `pawl agent` prints the block and
-  writes nothing, so pipes, CI steps and agents shelling out never meet a
-  prompt. The print path warns on stderr when either instruction file already
-  carries a block.
+- Unless stdin, stdout and the stderr prompt are all attached to terminals,
+  `pawl agent` prints the block and writes nothing, so pipes, hidden prompts,
+  CI steps and agents shelling out never block for a choice. The print path
+  warns on stderr when either instruction file already carries a block.
+- Snapshots and measurement documents now carry a versioned definition
+  fingerprint per metric. `check` refuses to compare a recorded number after
+  its threshold, pattern, gate, tolerance, extract semantics or analyzer
+  selectors change; adapter commands, paths and timeouts remain replaceable
+  implementation details. Full `record` explicitly establishes changed
+  definitions, `record --only` can redefine selected metrics, `guard` reports
+  the boundary, and trend no longer calculates a delta across it. A
+  missing fingerprint is one consistent legacy compatibility state across all
+  comparison paths; recording a selected legacy `--current` metric upgrades it
+  without rewriting preserved unselected metrics.
+- Publish-path dry runs use local `npm pack --dry-run` validation. npm 11 makes
+  `npm publish --dry-run` consult registry version uniqueness, which caused
+  every PR after a release to fail solely because that version already exists.
 
 ### Fixed
 
-- **A stream redirected to `/dev/null` no longer reads as a terminal.** The
-  check was the `os.ModeCharDevice` bit alone, which `/dev/null` also carries,
-  so `> /dev/null` — the usual way a CI step detaches a command — looked
-  interactive. It made `pawl agent > /dev/null` stop to ask a question nobody
-  could answer, and suppressed `check`'s `--format json` hint under the same
-  redirect.
+- **Character devices are no longer mistaken for terminals.** The check was
+  the `os.ModeCharDevice` bit, which `/dev/null`, `/dev/zero`, and other
+  non-terminal streams also carry. Redirected commands now stay non-interactive,
+  and `pawl agent 2>/dev/null` no longer waits behind an invisible prompt.
 
 ## 0.7.1
 

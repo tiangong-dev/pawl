@@ -89,6 +89,18 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 		}
 		return abortCouldNotMeasure(runScope, format, strings.TrimSuffix(msg, "\n"), nil, stdout, stderr)
 	}
+	recordedBaseline := baseline
+	comparisonBaseline, mismatches := comparableSnapshot(cfg, baseline)
+	var unselected []definitionMismatch
+	for _, mismatch := range mismatches {
+		if !onlySet[mismatch.ID] {
+			unselected = append(unselected, mismatch)
+		}
+	}
+	if len(unselected) > 0 {
+		return abortCouldNotMeasure(runScope, format, definitionMismatchMessage(unselected), nil, stdout, stderr)
+	}
+	baseline = comparisonBaseline
 
 	// Measure only the listed dimensions — an unrelated broken adapter must not
 	// block locking in the win.
@@ -108,7 +120,7 @@ func runRecordOnly(cfg *Config, onlySet map[string]bool, only []string, format s
 			merged[d.ID] = measured[d.ID]
 			continue
 		}
-		if m, ok := baseline.Metrics[d.ID]; ok {
+		if m, ok := recordedBaseline.Metrics[d.ID]; ok {
 			merged[d.ID] = m
 			preserved++
 		}

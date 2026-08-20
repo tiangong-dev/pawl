@@ -7,6 +7,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
   "metrics": {
     "file-length": {
       "direction": "lower-is-better",
+      "definition": "v1:sha256:…",
       "value": 3,
       "unit": "files > 500 lines",
       "breakdown": { "pkg/big.go": 612 },
@@ -16,10 +17,11 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 }
 ```
 
-- Field order per metric: `direction`, `value`, `unit`, `breakdown`, `tolerance`.
+- Field order per metric: `direction`, `definition`, `value`, `unit`, `breakdown`, `tolerance`.
   `breakdown` is `null` when the measurement produced none. `tolerance` is present
   only when the dimension declares it (so `guard`, which never sees the
   config, grants the same slack the gate does).
+- `definition` binds the number to the semantic parts of its validated dimension: direction, gate, tolerance, extract form, builtin measurement options, or named-analyzer decoder and selectors. Titles, timeouts, commands, report paths, verification probes and exit-code policy affect presentation/acquisition rather than the meaning of a successful number and are excluded. Config lists with set semantics are order-insensitive. Legacy snapshots without this field remain readable; the next record upgrades measured metrics.
 - Metric ids are serialized in sorted order; 2-space indent; trailing newline.
 - Numbers print in minimal decimal notation, never exponent form
   (`3613`, `72.41` — as by Go's `strconv.FormatFloat(v, 'f', -1, 64)`).
@@ -33,7 +35,9 @@ malformed snapshot. Shape errors, checked in this order per snapshot:
 2. `metrics` missing or not an object → `snapshot.metrics is missing or not an object`
 3. `metrics` empty → `snapshot.metrics is empty`
 4. per metric: not an object → `metric "<id>" is not an object`;
-   `value` missing or not a finite number → `metric "<id>" has no numeric value`
+   `value` missing or not a finite number → `metric "<id>" has no numeric value`;
+   a present `definition` that is not a valid versioned SHA-256 fingerprint →
+   `metric "<id>" has an invalid definition fingerprint`
 
 JSON.parse succeeding only proves valid JSON, not that the gate can trust the
 shape — a truncated or hand-corrupted snapshot must not read as "consistent".

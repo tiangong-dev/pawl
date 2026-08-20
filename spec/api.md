@@ -10,8 +10,9 @@ type Direction string   // "lower-is-better" | "higher-is-better"
 type GateMode string    // "total" | "per-file-count" | "per-key-value"
 
 type Metric struct {
-    Direction Direction          `json:"direction"`
-    Value     float64            `json:"value"`
+    Direction  Direction          `json:"direction"`
+    Definition string             `json:"definition,omitempty"`
+    Value      float64            `json:"value"`
     Unit      string             `json:"unit"`
     Breakdown map[string]float64 `json:"breakdown"`          // nil ⇔ JSON null
     Tolerance *float64           `json:"tolerance,omitempty"` // nil ⇔ undeclared
@@ -46,6 +47,7 @@ func OffenderCountsByFile(breakdown map[string]float64) map[string]float64
 func RegressionsOf(spec GateSpec, base, cur MetricSample) []string
 func OrphanedMetrics(dimensionIDs []string, baseline map[string]Metric) []string
 func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string)
+func RedefinedMetrics(base, current map[string]Metric) []string
 func SnapshotShapeErrors(parsed any) []string   // parsed = json.Unmarshal into any
 func ImprovementNotice(improvedIDs []string, onCI bool) string // "" when not applicable
 func FormatNumber(v float64) string             // minimal decimal notation

@@ -9,6 +9,24 @@ import { readdirSync, existsSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// npmOperation keeps dry-run validation local. npm 11 asks the registry to
+// accept a version even under `npm publish --dry-run`, so every PR after a
+// release fails merely because that released version already exists. `npm pack
+// --dry-run` exercises manifest parsing, lifecycle scripts and package contents
+// without consulting version uniqueness; the real path remains npm publish.
+export function npmOperation({ dryRun, tag, provenance }) {
+  if (dryRun) {
+    return { command: 'npm', args: ['pack', '--dry-run'] };
+  }
+  return {
+    command: 'npm',
+    args: [
+      'publish', '--access', 'public', '--tag', tag,
+      ...(provenance ? ['--provenance'] : []),
+    ],
+  };
+}
+
 // selectPackageDirs returns the publishable platform-package directories under
 // distDir, sorted — each is a subdirectory that actually holds a package.json.
 // It deliberately skips dist/archives/, the release tarballs build.js emits
@@ -31,28 +49,26 @@ function main() {
     process.exit(1);
   }
 
-  // PAWL_DRY_RUN validates the full publish path (pack every package, check
-  // the registry would accept it) without uploading — CI runs it on PRs so a
-  // publish-time break surfaces before merge, not on the release after it.
+  // PAWL_DRY_RUN validates that every package can be packed without uploading
+  // or asking the registry to accept this version. CI runs it on PRs so broken
+  // manifests, lifecycle scripts and package contents surface before release.
   const dryRun = process.env.PAWL_DRY_RUN === '1';
 
   // --provenance signs the tarball with the CI runner's OIDC identity (needs
   // `id-token: write`); it is a no-op-erroring flag off-CI, and a dry run
   // uploads nothing to attest, so only opt in for a real CI publish.
-  const provenance = process.env.GITHUB_ACTIONS === 'true' && !dryRun ? ['--provenance'] : [];
+  const provenance = process.env.GITHUB_ACTIONS === 'true' && !dryRun;
 
-  const publish = (dir) =>
-    execFileSync(
-      'npm',
-      ['publish', '--access', 'public', '--tag', tag, ...provenance, ...(dryRun ? ['--dry-run'] : [])],
-      { cwd: dir, stdio: 'inherit' }
-    );
+  const publish = (dir) => {
+    const operation = npmOperation({ dryRun, tag, provenance });
+    return execFileSync(operation.command, operation.args, { cwd: dir, stdio: 'inherit' });
+  };
 
   for (const dir of selectPackageDirs(distDir)) {
     publish(dir);
   }
   publish(join(npmDir, 'cli'));
-  const verb = dryRun ? 'dry-run: would publish' : 'published';
+  const verb = dryRun ? 'dry-run: packages validated for publish' : 'published';
   console.log(`${verb} @pawl-tools/cli + platform packages under dist-tag "${tag}"`);
 }
 
