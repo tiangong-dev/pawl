@@ -72,16 +72,28 @@ purely from `--help`), so it's worth measuring rather than assuming.
 
 Runs against this fixture then made the cost concrete: agents that finished a
 task touching a gated dimension without ever invoking pawl at all. That is
-what `pawl agent-md` exists to answer — pawl now emits the operating loop
+what `pawl agent` exists to answer — pawl now emits the operating loop
 itself, so an adopter's agent no longer has to reconstruct it (see
-[`spec/commands/agent-md.md`](../spec/commands/agent-md.md)).
+[`spec/commands/agent.md`](../spec/commands/agent.md)).
 
 Which turns "should the fixture have an AGENTS.md?" into an experiment rather
 than a judgement call. Run the same task twice:
 
 - **Control** — a plain copy of `fixture/`, exactly as it ships.
-- **Treatment** — the same copy with `pawl agent-md >> AGENTS.md` run in it once,
-  before the agent starts.
+- **Treatment** — the same copy with `pawl agent --write <target>` run in it
+  once, before the agent starts. The target must be the file the agent under
+  test actually loads: `claude` (`CLAUDE.md`) for Claude Code, `agent`
+  (`AGENTS.md`) for Codex, Antigravity and Cursor.
+
+That last point is a correction, not a detail. Every A/B quoted below installed
+the block into `AGENTS.md`, and Claude Code — whose transcript format is what
+`pawl-invocations.py` parses — does not load `AGENTS.md` at all; it reads
+`CLAUDE.md`, `.claude/CLAUDE.md` and `CLAUDE.local.md`. So the treatment arms
+below did not get the block injected into their context the way the design
+assumed. Whatever moved those numbers reached the agent some other way, most
+likely the agent opening the file itself while exploring the repo, which is
+unverified. Read the effect sizes below as a floor rather than a measurement of
+the block in context, and install into the right file when re-running any of it.
 
 Score both against `capabilities.yaml`. Tasks 5 and 6 in `fixture/TASKS.md`
 exist for this comparison — they are the only ones with enough cycles (task 5)
@@ -199,7 +211,7 @@ the gate.
 
 This is `measure` working exactly as specified, and it is still a finding: the
 command is a near-miss for the one behavior the whole gate depends on, and it
-reproduced 2/2. `agent-md`'s block now names it alongside `wc -l` in the
+reproduced 2/2. `agent`'s block now names it alongside `wc -l` in the
 opening rule. What that costs is worth stating plainly — it makes the block one
 sentence longer for a failure mode only the *unblocked* arm exhibited, so the
 change is defensive rather than evidenced. The round-3 treatment agent that ran

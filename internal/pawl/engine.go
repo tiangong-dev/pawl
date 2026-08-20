@@ -32,6 +32,8 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	dryRun := false
 	acceptWorse := false
 	currentPath := ""
+	writeTarget := ""
+	writeProvided := false
 	quiet := false
 	versionRequested := false
 	helpRequested := false
@@ -66,6 +68,19 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			i++
 			only = args[i]
 			onlyProvided = true
+		case args[i] == "--write":
+			// The value is validated here rather than in runAgent so a typo is a usage error even when it rides on the wrong command.
+			if i+1 >= len(args) {
+				fmt.Fprintf(stderr, "--write requires a target: %s\n", strings.Join(agentTargetNames(), " or "))
+				return 2
+			}
+			i++
+			writeTarget = args[i]
+			writeProvided = true
+			if _, ok := lookupAgentTarget(writeTarget); !ok {
+				fmt.Fprintf(stderr, "--write must be %s, got %q\n", strings.Join(agentTargetNames(), " or "), writeTarget)
+				return 2
+			}
 		case args[i] == "--dry-run":
 			dryRun = true
 		case args[i] == "--accept-worse":
@@ -128,9 +143,9 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "agent-md", "measure", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
+	case "init", "agent", "measure", "record", "check", "baseline-guard", "trend", "rank", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | agent-md | measure | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | baseline-guard <ref> | trend [<id>] | rank | version | help\n", command)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,
@@ -170,8 +185,12 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--current is only valid on `record` or `check`, not %q\n", command)
 		return 2
 	}
-	if command == "agent-md" && format != "text" {
-		fmt.Fprintln(stderr, "--format is not valid on `agent-md` — it emits Markdown")
+	if writeProvided && command != "agent" {
+		fmt.Fprintf(stderr, "--write is only valid on `agent`, not %q\n", command)
+		return 2
+	}
+	if command == "agent" && format != "text" {
+		fmt.Fprintln(stderr, "--format is not valid on `agent` — it emits Markdown")
 		return 2
 	}
 	if command == "measure" && format != "text" {
@@ -234,11 +253,9 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runInit(configPath, stdout, stderr)
 	}
 
-	// agent-md emits a fixed operating loop, identical in every repo — it reads
-	// no config, so it still works in a repo whose config is mid-edit or broken,
-	// which is exactly when someone reaches for the instructions.
-	if command == "agent-md" {
-		return runAgentMD(stdout, stderr)
+	// agent emits a fixed operating loop, identical in every repo — it reads no config, so it still works in a repo whose config is mid-edit or broken, which is exactly when someone reaches for the instructions.
+	if command == "agent" {
+		return runAgent(writeTarget, stdin, stdout, stderr)
 	}
 
 	cfg, err := LoadConfig(configPath)
@@ -424,14 +441,7 @@ func hintJSONIfPiped(command string, quiet bool, stdout, stderr io.Writer) {
 
 func isTerminalWriter(w io.Writer) bool {
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	return ok && isTerminalFile(f)
 }
 
 // excludedDimensionIDs lists configured dimension ids `--only` left

@@ -3,11 +3,11 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--write <target>] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
-  agent-md             print the operating loop a coding agent needs to use
-                       this gate; install it with a redirect
+  agent                install (or print) the operating loop a coding agent
+                       needs to use this gate
   measure              measure every dimension and print the measurement
                        document; no baseline read, no verdict rendered
   record               measure every dimension and (over)write the snapshot
@@ -64,9 +64,14 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
   `baseline-guard` ignores `--format` (its output is not tabular). `trend` and
-  `rank` honor `text` (default) and `json`. `agent-md` emits Markdown and
+  `rank` honor `text` (default) and `json`. `agent` emits Markdown and
   `measure` emits the measurement document by definition, so any `--format` on
   either is a usage error (exit 2).
+- `--write <target>` installs `agent`'s block into an instruction file:
+  `agent` → `./AGENTS.md` (Codex, Antigravity, Cursor), `claude` →
+  `./CLAUDE.md` (Claude Code), specified in
+  [§ agent](../commands/agent.md#agent). An unknown target, and `--write` on
+  any other command, are usage errors (exit 2).
 - `--since <ref>` scopes `check` (only) to lines changed in the **working
   tree** since `<ref>`, specified in [§ Diff-scoped checking](../commands/since.md#diff-scoped-checking).
   `--since` on any command other than `check` is a usage error (exit 2).
@@ -81,7 +86,7 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   directory with no `pawl.yaml`. A `--version` riding on a **valid,
   validly-flagged** command (`pawl check --version`) also prints the version;
   any usage error in the invocation — an unknown command, a mis-scoped flag, a
-  disallowed format (`agent-md --format json`) — outranks the version
+  disallowed format (`agent --format json`) — outranks the version
   print and exits 2. Unknown-command outranks mis-scoped-flag in diagnostics. The version string defaults to `dev` and is
   overridden at build time via
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.

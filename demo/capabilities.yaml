@@ -9,9 +9,11 @@
 # field names from the JSON shape, prior knowledge) — not on whether it read
 # a doc the repo happened to have. That is the control arm.
 #
-# `pawl agent-md --write` installs pawl's own operating loop into a repo's
-# AGENTS.md, which makes the treatment arm: same fixture, same task, block
-# present. Score both arms with this same list and compare — see
+# `pawl agent --write <target>` installs pawl's own operating loop into a repo's
+# instruction file, which makes the treatment arm: same fixture, same task, block
+# present. Install into the file the agent under test actually reads — CLAUDE.md
+# for Claude Code, AGENTS.md for Codex, Antigravity and Cursor. Score both arms
+# with this same list and compare — see
 # demo/README.md's "Why no AGENTS.md" section for the comparison's design.
 # Always note which arm a run belongs to; a treatment-arm pass on an item the
 # block spells out verbatim means something different from a cold one.
@@ -44,7 +46,7 @@ capabilities:
     note: >
       pawl cannot force this from inside a single invocation — it is agent
       behavior, and every structural answer sits outside the CLI's own output:
-      a repo-level instruction file, a pre-commit hook, CI. `pawl agent-md` is
+      a repo-level instruction file, a pre-commit hook, CI. `pawl agent` is
       pawl's attempt at the first, and its block opens with exactly this rule.
       But this item is **model-dependent**, so it cannot serve as that
       command's success metric on its own. Two four-run A/Bs on tasks 5 and 6,

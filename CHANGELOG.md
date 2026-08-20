@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- **Renamed `agent-md` to `agent`, with no alias.** `pawl agent-md` is now an
+  unknown command (exit 2) rather than something that appears to work; update
+  any script that calls it.
+
+### Changed
+
+- **`pawl agent` installs the block instead of only printing it.** The
+  documented install was `pawl agent-md >> AGENTS.md`, and Claude Code does not
+  read `AGENTS.md` — it loads `CLAUDE.md`, `.claude/CLAUDE.md` and
+  `CLAUDE.local.md` — so that install was silently a no-op for anyone working
+  there, while Codex, Antigravity and Cursor did read it. `pawl agent` now asks
+  which file to install into, or takes `--write agent` (`AGENTS.md`) or
+  `--write claude` (`CLAUDE.md`) directly.
+- An install **replaces an existing block between the `<!-- pawl:begin -->` and
+  `<!-- pawl:end -->` markers** and leaves the rest of the file untouched, so
+  re-running it after a pawl upgrade updates the loop instead of appending a
+  second, diverging copy. A file whose markers are damaged or duplicated is
+  refused (exit 2) and left exactly as found.
+- With no terminal on both stdout and stdin, `pawl agent` prints the block and
+  writes nothing, so pipes, CI steps and agents shelling out never meet a
+  prompt. The print path warns on stderr when either instruction file already
+  carries a block.
+
+### Fixed
+
+- **A stream redirected to `/dev/null` no longer reads as a terminal.** The
+  check was the `os.ModeCharDevice` bit alone, which `/dev/null` also carries,
+  so `> /dev/null` — the usual way a CI step detaches a command — looked
+  interactive. It made `pawl agent > /dev/null` stop to ask a question nobody
+  could answer, and suppressed `check`'s `--format json` hint under the same
+  redirect.
+
 ## 0.7.1
 
 ### Changed
