@@ -59,5 +59,5 @@ pawl record --only <id> --current .pawl/current.json  # lock in exactly what was
 
 `--current` trusts its input. That trust boundary is deliberate and it is the
 caller's to hold: produce the document in the same job that consumes it. It is
-not a way around [`baseline-guard`](guard.md), which compares committed
+not a way around [`guard`](guard.md), which compares committed
 snapshots and is unaffected.

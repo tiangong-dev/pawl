@@ -32,18 +32,26 @@ type GateSpec struct {              // how one dimension gates
     Tolerance float64
 }
 
+type GuardViolation struct {        // one metric that worsened between two snapshots
+    ID        string
+    Direction Direction
+    Base      float64
+    Current   float64
+    Tolerance float64
+}                                   // String() renders "<id>: <base> → <cur>"
+
 func Worse(d Direction, base, cur, tolerance float64) bool
 func Better(d Direction, base, cur float64) bool
-func OffenderCountsByFile(breakdown map[string]float64) map[string]int
+func OffenderCountsByFile(breakdown map[string]float64) map[string]float64
 func RegressionsOf(spec GateSpec, base, cur MetricSample) []string
 func OrphanedMetrics(dimensionIDs []string, baseline map[string]Metric) []string
-func BaselineGuardViolations(base, pr map[string]Metric) (violations, removed []string)
+func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string)
 func SnapshotShapeErrors(parsed any) []string   // parsed = json.Unmarshal into any
 func ImprovementNotice(improvedIDs []string, onCI bool) string // "" when not applicable
 func FormatNumber(v float64) string             // minimal decimal notation
 ```
 
-`BaselineGuardViolations` treats a metric with empty `Direction` as
+`GuardViolations` treats a metric with empty `Direction` as
 `lower-is-better` (the conservative default for hand-crafted snapshots) and honors
 the metric's own recorded `Tolerance`. Violations are reported in sorted id order;
 `removed` is sorted. `OrphanedMetrics` returns sorted ids.

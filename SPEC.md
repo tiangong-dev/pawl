@@ -24,7 +24,7 @@ change; do not read every file.
 | Accepted debt (`--dry-run`, `--accept-worse`) | [spec/commands/record.md](spec/commands/record.md#accepted-debt---dry-run---accept-worse) |
 | Snapshot — `pawl.snapshot.json` | [spec/engine/snapshot.md](spec/engine/snapshot.md) |
 | Comparison semantics | [spec/engine/comparison.md](spec/engine/comparison.md) |
-| baseline-guard | [spec/commands/guard.md](spec/commands/guard.md) |
+| guard | [spec/commands/guard.md](spec/commands/guard.md) |
 | Output | [spec/engine/verdict.md](spec/engine/verdict.md#output) |
 | Machine-readable output | [spec/engine/verdict.md](spec/engine/verdict.md#machine-readable-output) |
 | Diff-scoped checking | [spec/commands/since.md](spec/commands/since.md#diff-scoped-checking) |

@@ -7,6 +7,12 @@
 - **Renamed `agent-md` to `agent`, with no alias.** `pawl agent-md` is now an
   unknown command (exit 2) rather than something that appears to work; update
   any script that calls it.
+- **Renamed `baseline-guard` to `guard`, with no alias.** The implementation and
+  the contract already called it `guard` (`internal/pawl/guard.go`,
+  `spec/commands/guard.md`); only the CLI carried the long name.
+  `pawl baseline-guard` is now an unknown command (exit 2), so a CI step still
+  calling it fails loudly instead of quietly dropping the anti-tamper gate —
+  update it to `pawl guard <ref>`.
 
 ### Changed
 

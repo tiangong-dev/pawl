@@ -47,7 +47,7 @@ behavior described in `spec/`, not just mirror the implementation.
   on a genuine improvement, `pawl record --only <id>` to update the baseline.
   Never run a full `pawl record` to lock in a single win.
 - Generated files (e.g. `pawl.snapshot.json`, `pawl-junit.xml`) are produced by
-  tooling — don't hand-edit them. `pawl baseline-guard` catches hand-edited
+  tooling — don't hand-edit them. `pawl guard` catches hand-edited
   baselines.
 - Match existing code style; comments should explain non-obvious *why*, not
   restate *what* the code does.
@@ -55,7 +55,7 @@ behavior described in `spec/`, not just mirror the implementation.
 ## Submitting a PR
 
 CI runs `gofmt`, `go vet`, the Go and Node test suites, a self-check
-(`pawl check` on this repo), `pawl baseline-guard origin/main`, a diff-scoped
+(`pawl check` on this repo), `pawl guard origin/main`, a diff-scoped
 self-check (`pawl check --since origin/main`), and validates the npm release
 path (build + dry-run publish). All of these should pass locally before you
 open a PR — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the

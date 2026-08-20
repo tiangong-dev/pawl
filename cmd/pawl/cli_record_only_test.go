@@ -298,7 +298,7 @@ func TestRecordOnlyRejectedOnOtherCommands(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"baseline-guard", []string{"baseline-guard", "--only", "a", base}},
+		{"guard", []string{"guard", "--only", "a", base}},
 		{"trend", []string{"trend", "--only", "a"}},
 		{"status", []string{"status", "--only", "a"}},
 		{"constraints", []string{"constraints", "--only", "a"}},

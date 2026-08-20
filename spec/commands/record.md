@@ -60,9 +60,9 @@ explicit act, not a side effect of locking in a gain.
 - **`--accept-worse`:** authorizes the write. Every dimension that would have
   been refused is written as-is, and text output additionally prints one
   `Pawl-Accept: <id> <value>` line per accepted dimension (`<value>` is the
-  dimension's scalar total, matching what `baseline-guard`'s own violation
+  dimension's scalar total, matching what `guard`'s own violation
   check compares) — the trailer to add to the commit that includes the
-  snapshot change, so `baseline-guard` (see below) can recognize it as
+  snapshot change, so `guard` (see below) can recognize it as
   deliberate. `--format json` additionally sets `accepted_worse` on the
   verdict — see [§ Machine-readable output](../engine/verdict.md#machine-readable-output) — so an
   automated caller can build the same trailer without re-deriving it from
@@ -87,9 +87,9 @@ explicit act, not a side effect of locking in a gain.
   dimensions only — a preserved (unlisted) dimension is copied verbatim from
   the baseline and can never be "worse".
 
-### `Pawl-Accept` trailers and `baseline-guard`
+### `Pawl-Accept` trailers and `guard`
 
-`baseline-guard <ref>` (see [§ baseline-guard](guard.md#baseline-guard)) reads every
+`guard <ref>` (see [§ guard](guard.md#guard)) reads every
 commit message in `<ref>..HEAD` for lines of the form `Pawl-Accept: <id>
 <value>`. A metric that regressed against `<ref>` is downgraded from a
 violation to an accepted notice when:
@@ -115,8 +115,8 @@ written and when CI re-derives it (e.g. a rebase re-running the same
 has to not be worse than what was declared.
 
 The snapshot file itself is never touched by acceptance: nothing about
-`--accept-worse` is written into `pawl.snapshot.json`, so `baseline-guard`'s
+`--accept-worse` is written into `pawl.snapshot.json`, so `guard`'s
 anti-tamper comparison (`base` vs `pr`, both read straight off disk) is
 exactly as before. The trailer lives in git history, which is what
-`baseline-guard` audits.
+`guard` audits.
 

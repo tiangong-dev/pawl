@@ -231,7 +231,7 @@ func OrphanedMetrics(dimensionIDs []string, baseline map[string]Metric) []string
 
 // GuardViolation is one metric that worsened between two recorded snapshots,
 // as compared directly (not via a fresh measurement) — the shape
-// baseline-guard needs to decide whether a Pawl-Accept trailer covers it.
+// `pawl guard` needs to decide whether a Pawl-Accept trailer covers it.
 type GuardViolation struct {
 	ID        string
 	Direction Direction
@@ -244,13 +244,13 @@ func (v GuardViolation) String() string {
 	return fmt.Sprintf("%s: %s → %s", v.ID, FormatNumber(v.Base), FormatNumber(v.Current))
 }
 
-// BaselineGuardViolations compares two recorded snapshots' metrics directly:
+// GuardViolations compares two recorded snapshots' metrics directly:
 // violations are metrics that worsened per their recorded direction (empty
 // direction reads as lower-is-better, the conservative default for
 // hand-crafted snapshots) and recorded tolerance; removed are metrics present
 // in base but missing from pr. A metric only in pr has no baseline to
 // violate and is ignored. Both lists are sorted by id.
-func BaselineGuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string) {
+func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string) {
 	for _, id := range sortedMetricKeys(base) {
 		b := base[id]
 		p, ok := pr[id]

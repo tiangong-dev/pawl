@@ -145,7 +145,7 @@ func runTrend(cfg *Config, metricID string, limit int, format string, stdout, st
 }
 
 // trendSnapshotRelPath resolves the snapshot's repo-relative, slash-separated
-// path — the same two checks baseline-guard makes before touching git history.
+// path — the same two checks `pawl guard` makes before touching git history.
 func trendSnapshotRelPath(cfg *Config, stderr io.Writer) (string, int) {
 	toplevel, code, gitErr := gitOutput(cfg.Dir, "rev-parse", "--show-toplevel")
 	if code != 0 {

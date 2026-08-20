@@ -29,7 +29,7 @@ improve; the gate never slips backward.
 pawl record                     # measure everything, write the baseline
 pawl check                      # the gate: exit 1 on any regression
 pawl agent                      # tell your coding agent the gate is there
-pawl baseline-guard origin/main # anti-tamper: catch a hand-edited baseline
+pawl guard origin/main          # anti-tamper: catch a hand-edited baseline
 ```
 
 The measuring tool is an implementation detail of each dimension. Swapping ESLint
@@ -66,7 +66,7 @@ lower. You pay down debt monotonically without ever picking a magic number.
   net-zero total, and an offender that merely moves *within* a file doesn't cry
   wolf — the baseline remembers each file's count, not just the grand total.
 - **Honest by construction.** "Couldn't measure" (exit `2`) is never mistaken for
-  "measured zero", and a hand-edited baseline is caught by `baseline-guard`. The
+  "measured zero", and a hand-edited baseline is caught by `pawl guard`. The
   gate would rather stop loud than pass a lie.
 - **One static binary.** Drop it into any CI in seconds; it sits on top of the
   tools you already run, and renders natively as GitHub PR comments and
@@ -175,7 +175,7 @@ the runs where it did **not** help, is in [demo/](./demo/README.md).
 | `pawl measure` | measure every dimension and print the numbers — no baseline, no verdict; the document is the snapshot format |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
-| `pawl baseline-guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
+| `pawl guard <ref>` | compare the working-tree snapshot against the version committed at `<ref>` — the anti-tamper gate |
 | `pawl trend [<id>]` | print each metric's value across the committed snapshot's git history — a fully local trend, no cloud |
 | `pawl rank` | rank included files by line or byte size (including near-threshold files) |
 | `pawl version` | print `pawl <version>` (works with no config present) |
@@ -206,8 +206,8 @@ Omitting the command runs `check`.
 
 | code | meaning |
 |------|---------|
-| **0** | pass (including legitimate `baseline-guard` skips) |
-| **1** | `check`: a dimension regressed · `baseline-guard`: the snapshot regressed vs `<ref>` (and isn't covered by an accepted-debt trailer) · `record`: refused a worse value without `--accept-worse` |
+| **0** | pass (including legitimate `guard` skips) |
+| **1** | `check`: a dimension regressed · `guard`: the snapshot regressed vs `<ref>` (and isn't covered by an accepted-debt trailer) · `record`: refused a worse value without `--accept-worse` |
 | **2** | cannot measure/compare honestly: bad config, missing/malformed snapshot, tool crash, timeout, unknown command, … |
 
 The **1-vs-2 split is load-bearing**: `1` means "measured fine, code got worse";
@@ -408,7 +408,7 @@ re-run with --accept-worse to record this as accepted debt, or fix the regressio
 ```
 
 `--accept-worse` writes it anyway and prints the trailer to add to your commit
-message, so `baseline-guard` can tell the regression was deliberate rather than
+message, so `pawl guard` can tell the regression was deliberate rather than
 hand-edited:
 
 ```console
@@ -416,10 +416,10 @@ $ pawl record --accept-worse
 📸 snapshot written to pawl.snapshot.json
 ⚠️  recorded worse — add these trailers to the commit that includes the snapshot:
     Pawl-Accept: complexity 15
-baseline-guard treats a worsened metric without a matching trailer as unauthorized.
+`pawl guard` treats a worsened metric without a matching trailer as unauthorized.
 ```
 
-`baseline-guard <ref>` reads `Pawl-Accept: <id> <value>` trailers from every
+`pawl guard <ref>` reads `Pawl-Accept: <id> <value>` trailers from every
 commit in `<ref>..HEAD`; a regression whose current value is no worse than the
 declared one is printed as an accepted notice instead of a violation. The
 trailer lives in git history, not in the snapshot file, so the anti-tamper
@@ -489,7 +489,7 @@ The action installs the binary; on its own that is all it does:
   with:
     version: v0.7.1                # optional; defaults to the latest release
 - run: pawl check
-- run: pawl baseline-guard origin/${{ github.base_ref }}   # on PRs
+- run: pawl guard origin/${{ github.base_ref }}   # on PRs
 ```
 
 Pass `command` and the action also runs the gate and, on a pull request, upserts
@@ -524,10 +524,10 @@ pawl check  --current .pawl/current.json
 pawl record --only <id> --current .pawl/current.json
 ```
 
-### Anti-tamper: `baseline-guard`
+### Anti-tamper: `pawl guard`
 
 `pawl check` only proves the snapshot on disk matches a fresh measurement — not
-that the snapshot's history is honest. `pawl baseline-guard <base-ref>` compares
+that the snapshot's history is honest. `pawl guard <base-ref>` compares
 the committed snapshot against the PR's base branch and fails if it was
 hand-edited to a worse value. Run it on PRs alongside `check`.
 

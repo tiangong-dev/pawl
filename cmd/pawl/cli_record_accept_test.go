@@ -366,7 +366,7 @@ func TestRecordDryRunAndAcceptWorseRejectedOnOtherCommands(t *testing.T) {
 		{"check", "--dry-run"},
 		{"diff", "--dry-run"},
 		{"trend", "--accept-worse"},
-		{"baseline-guard", "--dry-run"},
+		{"guard", "--dry-run"},
 		{"version", "--accept-worse"},
 	} {
 		res := runPawl(t, dir, baseEnv(), args...)

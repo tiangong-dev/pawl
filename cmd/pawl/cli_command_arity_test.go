@@ -2,7 +2,7 @@ package main
 
 // Integration tests for the spec/engine/cli.md contract that every command rejects
 // extra positional operands: check/diff/record/init/version take none,
-// trend takes at most one (the metric id), baseline-guard takes at most
+// trend takes at most one (the metric id), guard takes at most
 // one (the ref). A stray extra operand is a usage error (exit 2, stderr
 // names the problem), not something the command silently ignores.
 
@@ -112,19 +112,19 @@ func TestTrendRejectsExtraOperand(t *testing.T) {
 	}
 }
 
-// baseline-guard takes at most one operand (the ref); a second one is
+// guard takes at most one operand (the ref); a second one is
 // rejected. The fixture commits a real baseline snapshot so a would-be
 // exit 0 (e.g. "ref predates the snapshot", a legitimate skip in the
 // no-baseline case) cannot be confused with the arity rejection this test
 // is pinning.
-func TestBaselineGuardRejectsExtraOperand(t *testing.T) {
+func TestGuardRejectsExtraOperand(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
 	base := gitCommitAll(t, dir, homeDir, "committed baseline")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base, "extra")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base, "extra")
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -144,16 +144,16 @@ func TestCheckControlNoOperandPasses(t *testing.T) {
 	}
 }
 
-// baseline-guard with exactly one operand (the ref) is not rejected for
+// guard with exactly one operand (the ref) is not rejected for
 // arity — it runs the real comparison and passes on an equal working tree.
-func TestBaselineGuardControlSingleOperandNotRejectedForArity(t *testing.T) {
+func TestGuardControlSingleOperandNotRejectedForArity(t *testing.T) {
 	dir := t.TempDir()
 	homeDir := initGitRepo(t, dir)
 	writeFile(t, dir, "pawl.yaml", guardConfig)
 	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
 	base := gitCommitAll(t, dir, homeDir, "committed baseline")
 
-	res := runPawl(t, dir, gitEnv(homeDir), "baseline-guard", base)
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
