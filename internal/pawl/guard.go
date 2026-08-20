@@ -86,6 +86,16 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 	}
 
 	violations, removed := GuardViolations(baseSnap.Metrics, currentSnap.Metrics)
+	redefined := RedefinedMetrics(baseSnap.Metrics, currentSnap.Metrics)
+
+	if len(redefined) > 0 {
+		message := fmt.Sprintf("guard: measurement definition changed for: %s — numeric comparison is skipped for those metrics; review the pawl.yaml and snapshot diff together.", strings.Join(redefined, ", "))
+		if onCI() {
+			fmt.Fprintf(stdout, "::notice::%s\n", message)
+		} else {
+			fmt.Fprintf(stdout, "ℹ️  %s\n", message)
+		}
+	}
 
 	if len(removed) > 0 {
 		message := fmt.Sprintf(
@@ -142,11 +152,9 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if len(accepted) > 0 {
-		// Not "consistent" — it isn't, some metric(s) regressed; they were
-		// just explicitly authorized. Saying so avoids printing an accepted
-		// regression immediately followed by a claim that nothing changed.
-		fmt.Fprintf(stdout, "guard: no unauthorized regression against %s.\n", ref)
+	if len(accepted) > 0 || len(redefined) > 0 {
+		// Not "consistent" — a value was accepted or a definition changed.
+		fmt.Fprintf(stdout, "guard: no unauthorized comparable regression against %s.\n", ref)
 		return 0
 	}
 

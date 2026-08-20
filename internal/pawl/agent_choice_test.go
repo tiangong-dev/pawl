@@ -87,17 +87,47 @@ func TestChooseAgentTargetGivesUpOnEndlessUnusableAnswers(t *testing.T) {
 	}
 }
 
-// /dev/null is a character device, so the mode bit alone calls it a terminal. Redirecting to it is how a CI step detaches a command, and treating that as interactive would stop the run to ask a question nobody can answer.
-func TestDevNullIsNotATerminal(t *testing.T) {
-	for _, flag := range []int{os.O_RDONLY, os.O_WRONLY} {
-		f, err := os.OpenFile(os.DevNull, flag, 0)
-		if err != nil {
-			t.Fatalf("opening %s: %v", os.DevNull, err)
+// A character device is not necessarily a terminal. Redirecting a detached
+// process through /dev/null or /dev/zero must keep agent on its print path
+// instead of stopping to ask a question nobody can answer.
+func TestCharacterDevicesThatAreNotTTY(t *testing.T) {
+	devices := []string{os.DevNull}
+	if _, err := os.Stat("/dev/zero"); err == nil {
+		devices = append(devices, "/dev/zero")
+	}
+	for _, device := range devices {
+		for _, flag := range []int{os.O_RDONLY, os.O_WRONLY} {
+			f, err := os.OpenFile(device, flag, 0)
+			if err != nil {
+				t.Fatalf("opening %s: %v", device, err)
+			}
+			if isTerminalFile(f) {
+				t.Errorf("%s (flag %d) reads as a terminal", device, flag)
+			}
+			f.Close()
 		}
-		if isTerminalFile(f) {
-			t.Errorf("%s (flag %d) reads as a terminal", os.DevNull, flag)
-		}
-		f.Close()
+	}
+}
+
+// The prompt is written to stderr, so a session is interactive only when the
+// user can see that stream as well as answer on stdin. Checking just stdin and
+// stdout makes `pawl agent 2>/dev/null` wait behind an invisible prompt.
+func TestAgentPromptsOnlyWhenEveryInteractiveStreamIsATerminal(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		stdinTTY, stdoutTTY   bool
+		stderrTTY, wantPrompt bool
+	}{
+		{name: "all terminals", stdinTTY: true, stdoutTTY: true, stderrTTY: true, wantPrompt: true},
+		{name: "stdin redirected", stdoutTTY: true, stderrTTY: true},
+		{name: "stdout redirected", stdinTTY: true, stderrTTY: true},
+		{name: "stderr redirected", stdinTTY: true, stdoutTTY: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := agentSessionIsInteractive(tc.stdinTTY, tc.stdoutTTY, tc.stderrTTY); got != tc.wantPrompt {
+				t.Errorf("agentSessionIsInteractive(%v, %v, %v) = %v, want %v", tc.stdinTTY, tc.stdoutTTY, tc.stderrTTY, got, tc.wantPrompt)
+			}
+		})
 	}
 }
 

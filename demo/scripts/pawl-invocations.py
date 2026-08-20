@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract an eval agent's pawl-invocation timeline from its session transcript.
+"""Extract an eval agent's pawl-invocation timeline from Claude or Codex JSONL.
 
 Two capability items in ../capabilities.yaml are about *when* and *how* an
 agent called pawl, not about what it said afterwards, and an agent's own
@@ -22,6 +22,7 @@ verdict block. Exit 0 if a pawl check ran after the last edit, 1 if not,
 """
 import json
 import re
+import shlex
 import sys
 
 EDIT_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
@@ -47,7 +48,7 @@ BASH_EDIT = re.compile(
 # it as a default check, so a probe that never ran the gate forged a
 # verification pass. Optional env assignments and wrappers still count.
 PAWL_CALL = re.compile(
-    r"(?:^|[;&|(])\s*"
+    r"(?:^|[;&|(\n])\s*"
     r"(?:(?:\w+=\S+|env|time|sudo|nohup|exec)\s+)*"
     r"pawl(\s+[^;&|)\n]*)?"
 )
@@ -65,6 +66,17 @@ KNOWN_COMMANDS = {
 }
 
 
+def shell_payload(command):
+    """Unwrap Codex's `/bin/zsh -lc <payload>` command envelope."""
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return command
+    if len(parts) >= 3 and parts[1] in ("-c", "-lc") and parts[0].endswith(("/sh", "/bash", "/zsh")):
+        return parts[2]
+    return command
+
+
 def events(jsonl_path):
     """Yield ("edit"|"pawl", detail) in transcript order."""
     with open(jsonl_path) as f:
@@ -76,6 +88,22 @@ def events(jsonl_path):
                 obj = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            # Codex exec --json emits one completed item per line instead of
+            # Claude's assistant/tool_use envelope. Normalize both here so the
+            # same scorer judges both agents.
+            item = obj.get("item")
+            if obj.get("type") == "item.completed" and isinstance(item, dict):
+                if item.get("type") == "file_change":
+                    for change in item.get("changes", []):
+                        yield "edit", f"Edit {change.get('path', '?')}"
+                elif item.get("type") == "command_execution":
+                    cmd = shell_payload(item.get("command", ""))
+                    for m in PAWL_CALL.finditer(cmd):
+                        yield "pawl", ("pawl" + (m.group(1) or "")).strip()
+                    if BASH_EDIT.search(cmd) and not PAWL_CALL.search(cmd):
+                        yield "edit", f"shell write: {cmd.splitlines()[0][:70]}"
+                continue
+
             msg = obj.get("message")
             if not msg or msg.get("role") != "assistant":
                 continue
@@ -104,10 +132,26 @@ def describe(call):
     as one would let a trailing version probe forge a
     verifies-against-the-gate-before-finishing pass.
     """
-    parts = call.split()[1:]
+    try:
+        parts = shlex.split(call)[1:]
+    except ValueError:
+        parts = call.split()[1:]
     flags = [p for p in parts if p.startswith("-")]
-    if parts and parts[0] in KNOWN_COMMANDS:
-        return parts[0], flags
+    value_flags = {"-c", "--config", "--format", "--since", "--only", "--current", "--write", "--limit"}
+    command = None
+    i = 0
+    while i < len(parts):
+        part = parts[i]
+        if part in value_flags:
+            i += 2
+            continue
+        if part.startswith("-"):
+            i += 1
+            continue
+        command = part
+        break
+    if command in KNOWN_COMMANDS:
+        return command, flags
     if "--version" in flags:
         return "version", flags
     if "--help" in flags or "-h" in flags:

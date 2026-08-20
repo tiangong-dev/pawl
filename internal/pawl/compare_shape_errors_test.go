@@ -87,6 +87,21 @@ func TestSnapshotShapeErrors(t *testing.T) {
 			want: []string{`metric "a" has no numeric value`},
 		},
 		{
+			name: "a non-string definition is invalid",
+			json: `{"metrics": {"a": {"value": 5, "definition": 7}}}`,
+			want: []string{`metric "a" has an invalid definition fingerprint`},
+		},
+		{
+			name: "an unversioned definition is invalid",
+			json: `{"metrics": {"a": {"value": 5, "definition": "abc"}}}`,
+			want: []string{`metric "a" has an invalid definition fingerprint`},
+		},
+		{
+			name: "a valid definition is accepted",
+			json: `{"metrics": {"a": {"value": 5, "definition": "v1:sha256:0000000000000000000000000000000000000000000000000000000000000000"}}}`,
+			want: nil,
+		},
+		{
 			name: "a valid metric produces no errors",
 			json: `{"metrics": {"a": {"value": 5}}}`,
 			want: nil,

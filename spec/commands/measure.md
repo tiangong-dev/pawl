@@ -11,6 +11,7 @@ and writes no file.
   snapshot *is* a measurement someone decided to keep, so
   `pawl measure > pawl.snapshot.json` means exactly what it looks like.
 - `--only <id>[,<id>…]` scopes the document to those dimensions.
+- Every metric carries its current measurement-definition fingerprint. A supplied `--current` metric with a different non-legacy fingerprint is a measurement failure; numbers measured under another config are not accepted as current evidence. A legacy supplied metric with no fingerprint remains accepted, and `record` binds each selected supplied metric to the current definition before writing it. With `record --only`, preserved unselected legacy metrics remain untouched.
 - `--format` is a usage error (exit 2): the document is the output.
 - Exit 0 when every dimension in scope measured. Exit 2 on any measurement
   failure, with the usual `measuring <id> failed: …` diagnostic on stderr and

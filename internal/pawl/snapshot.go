@@ -46,8 +46,8 @@ func ReadSnapshotFile(path string) (*Snapshot, any, error) {
 }
 
 // WriteSnapshotFile serializes with a pinned byte shape — 2-space indent,
-// sorted metric ids, per-metric field order direction/value/unit/breakdown/
-// tolerance, minimal decimal numbers, trailing newline — so the snapshot
+// sorted metric ids, per-metric field order direction/definition/value/unit/
+// breakdown/tolerance, minimal decimal numbers, trailing newline — so the snapshot
 // diffs cleanly in review and byte-identical measurements produce
 // byte-identical files.
 func WriteSnapshotFile(path string, metrics map[string]Metric) error {
@@ -72,6 +72,9 @@ func MarshalSnapshot(metrics map[string]Metric) []byte {
 		}
 		fmt.Fprintf(&b, "\n    %s: {\n", jsonString(id))
 		fmt.Fprintf(&b, "      \"direction\": %s,\n", jsonString(string(m.Direction)))
+		if m.Definition != "" {
+			fmt.Fprintf(&b, "      \"definition\": %s,\n", jsonString(m.Definition))
+		}
 		fmt.Fprintf(&b, "      \"value\": %s,\n", FormatNumber(m.Value))
 		fmt.Fprintf(&b, "      \"unit\": %s,\n", jsonString(m.Unit))
 		b.WriteString("      \"breakdown\": ")

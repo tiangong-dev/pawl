@@ -99,6 +99,17 @@ Score both against `capabilities.yaml`. Tasks 5 and 6 in `fixture/TASKS.md`
 exist for this comparison — they are the only ones with enough cycles (task 5)
 and enough scope pressure (task 6) for a difference to show up at all.
 
+For Codex, `run-agent-ab.py` builds both isolated Git fixtures, strips `TASKS.md`, installs the treatment block into `AGENTS.md`, copies an explicit pawl binary onto each arm's PATH, preflights it, isolates Codex user config while retaining authentication, captures JSONL, and runs both the invocation scorer and contamination audit:
+
+```sh
+python3 demo/scripts/run-agent-ab.py \
+  --pawl /absolute/path/to/pawl --task 5 --output /tmp/pawl-ab-task5
+```
+
+The output directory must be outside this repository. A run whose preflight, agent process, or contamination audit fails is not scoreable; do not fill the missing cell with a prose estimate. Run both tasks for a four-cell comparison, and repeat cells before quoting a magnitude.
+
+A clean Codex smoke rerun on 2026-08-20 exercised those four cells with the block installed into the correct file and every audit clean. Verification was at ceiling (4/4), so it did not distinguish the arms. Both treatment cells used scoped JSON checks from their first substantive gate loop and then `record --only todo-markers`; controls eventually checked but never recorded, and reached JSON later (task 5) or spent several attempts on `measure`/invalid forms first (task 6). This is one run per cell: it validates the harness and the behavioral direction, not an effect size.
+
 This A/B was run twice: once before the fixture's own spoiler comments were
 removed (see "Known gaps" below) and once after. Only the second is quoted
 here; the first is kept only as the reason the spoilers were found. Sonnet,

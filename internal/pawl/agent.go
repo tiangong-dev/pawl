@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // agentBlock is the operating loop pawl hands an adopter's coding agent. It lives as an embedded Markdown asset rather than a Go string literal for the same reason starter.yaml does: its own prose would otherwise be scanned by pawl's `**/*.go` dimensions.
@@ -56,10 +58,10 @@ func lookupAgentTarget(name string) (agentTarget, bool) {
 
 // runAgent installs the operating block, or prints it. See spec/commands/agent.md.
 //
-// An explicit --write is obeyed as given. Without one the choice is interactive, but only when there is a human on both ends of the pipe: a prompt written into a pipeline would hang a script, and `pawl agent >> AGENTS.md` has to keep working.
+// An explicit --write is obeyed as given. Without one the choice is interactive only when stdin, stdout, and the stderr prompt are all attached to a terminal: a hidden or unanswered prompt would hang a script, and `pawl agent >> AGENTS.md` has to keep working.
 func runAgent(target string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if target == "" {
-		if !isTerminalWriter(stdout) || !isTerminalReader(stdin) {
+		if !agentSessionIsInteractive(isTerminalReader(stdin), isTerminalWriter(stdout), isTerminalWriter(stderr)) {
 			return printAgentBlock(stdout, stderr)
 		}
 		chosen, ok := chooseAgentTarget(stdin, stderr)
@@ -113,7 +115,7 @@ func installedAgentBlockPaths() []string {
 // The prompt goes to stderr so that choosing "print" still leaves stdout carrying nothing but the block.
 func chooseAgentTarget(stdin io.Reader, stderr io.Writer) (string, bool) {
 	scanner := bufio.NewScanner(stdin)
-	// Bounded, because a stream that looks like a terminal and is not one (a character device that is neither a tty nor /dev/null) would otherwise keep answering unusably forever.
+	// Bounded so an input source that keeps producing unusable answers cannot make the command loop forever.
 	for attempt := 0; attempt < 5; attempt++ {
 		fmt.Fprintln(stderr, "Where should the pawl block go?")
 		for i, t := range agentTargets {
@@ -199,24 +201,17 @@ func mergeAgentBlock(existing string) (string, string, error) {
 	return strings.TrimRight(existing, "\n") + "\n\n" + agentBlock, "appended to", nil
 }
 
+func agentSessionIsInteractive(stdinTTY, stdoutTTY, stderrTTY bool) bool {
+	return stdinTTY && stdoutTTY && stderrTTY
+}
+
 func isTerminalReader(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	return ok && isTerminalFile(f)
 }
 
-// isTerminalFile reports whether a stream is plausibly a human's terminal.
-// `os.ModeCharDevice` alone says "character device", which /dev/null also is — and `> /dev/null` or `< /dev/null`, the usual way a CI step detaches a command, would then read as interactive and stop to ask a question nobody is there to answer.
-// The redirect target is identified by inode rather than by name: an os.File's name is whatever it was opened as, so a redirected os.Stdout still calls itself /dev/stdout.
+// isTerminalFile reports whether a stream is attached to an actual terminal,
+// not merely a character device such as /dev/null or /dev/zero.
 func isTerminalFile(f *os.File) bool {
-	if f == nil {
-		return false
-	}
-	fi, err := f.Stat()
-	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-		return false
-	}
-	if null, err := os.Stat(os.DevNull); err == nil && os.SameFile(fi, null) {
-		return false
-	}
-	return true
+	return f != nil && term.IsTerminal(int(f.Fd()))
 }

@@ -21,14 +21,16 @@ const (
 	GatePerKeyValue  GateMode = "per-key-value"
 )
 
-// Metric is one dimension's measurement as stored in the snapshot. Breakdown
-// nil maps to JSON null; Tolerance nil means the dimension declared none.
+// Metric is one dimension's measurement as stored in the snapshot. Definition
+// binds the number to its measurement semantics; empty reads a legacy snapshot.
+// Breakdown nil maps to JSON null; Tolerance nil means the dimension declared none.
 type Metric struct {
-	Direction Direction          `json:"direction"`
-	Value     float64            `json:"value"`
-	Unit      string             `json:"unit"`
-	Breakdown map[string]float64 `json:"breakdown"`
-	Tolerance *float64           `json:"tolerance,omitempty"`
+	Direction  Direction          `json:"direction"`
+	Definition string             `json:"definition,omitempty"`
+	Value      float64            `json:"value"`
+	Unit       string             `json:"unit"`
+	Breakdown  map[string]float64 `json:"breakdown"`
+	Tolerance  *float64           `json:"tolerance,omitempty"`
 }
 
 type Snapshot struct {

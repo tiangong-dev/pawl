@@ -258,6 +258,9 @@ func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, r
 			removed = append(removed, id)
 			continue
 		}
+		if !definitionsCompatible(b.Definition, p.Definition) {
+			continue
+		}
 		direction := b.Direction
 		if direction == "" {
 			direction = LowerIsBetter
@@ -273,6 +276,21 @@ func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, r
 		}
 	}
 	return violations, removed
+}
+
+// RedefinedMetrics lists metric ids whose recorded measurement definition
+// changed between snapshots. Their numbers are intentionally excluded from
+// guard comparison because they are not values on the same scale.
+func RedefinedMetrics(base, current map[string]Metric) []string {
+	var out []string
+	for _, id := range sortedMetricKeys(base) {
+		before := base[id]
+		after, ok := current[id]
+		if ok && !definitionsCompatible(before.Definition, after.Definition) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // WorseDimension is one configured dimension whose fresh measurement
@@ -334,6 +352,12 @@ func SnapshotShapeErrors(parsed any) []string {
 		}
 		if _, ok := metric["value"].(float64); !ok {
 			errs = append(errs, fmt.Sprintf("metric %q has no numeric value", id))
+		}
+		if raw, exists := metric["definition"]; exists {
+			definition, ok := raw.(string)
+			if !ok || !validDefinitionFingerprint(definition) {
+				errs = append(errs, fmt.Sprintf("metric %q has an invalid definition fingerprint", id))
+			}
 		}
 	}
 	return errs

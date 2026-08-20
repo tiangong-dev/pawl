@@ -24,6 +24,7 @@ Then:
 - A metric present at `<ref>` but missing from the working tree snapshot →
   warning (`::warning::…` under `GITHUB_ACTIONS`, `⚠️  …` otherwise), not a
   failure — deleting a dimension is legitimate; the orphan check covers honesty.
+- A metric whose `definition` changed is reported as redefined and skipped for numeric comparison: values from different measurement semantics are not ordered. Review the config and snapshot changes together. Legacy metrics with no definition compare as before.
 - A metric that worsened (per its recorded `direction`, default
   `lower-is-better` if missing; slack = its recorded `tolerance`) is a
   violation **unless** a `Pawl-Accept` trailer in `<ref>..HEAD` covers it (see

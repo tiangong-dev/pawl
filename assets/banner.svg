@@ -137,7 +137,7 @@
   <text class="subtag"   x="43" y="275">numbers can only hold or improve</text>
 
   <g class="tick"><path d="M44 320 l7 7 l13 -14"/></g>
-  <text class="badgem" x="74" y="327">pawl agent-md &gt;&gt; AGENTS.md</text>
+  <text class="badgem" x="74" y="327">pawl agent</text>
   <g class="tick"><path d="M44 358 l7 7 l13 -14"/></g>
   <text class="badge" x="74" y="365">JSON verdict with next_action</text>
   <g class="tick"><path d="M44 396 l7 7 l13 -14"/></g>

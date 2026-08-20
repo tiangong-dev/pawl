@@ -20,17 +20,18 @@ import (
 // BEFORE any stdout so a write failure exits 2 without having already
 // emitted an `exit_code: 0` verdict it can't take back.
 func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[string]Metric, artifacts map[string]*ArtifactInfo, dryRun, acceptWorse bool, stdout, stderr io.Writer) int {
+	comparisonBaseline, _ := comparableSnapshot(cfg, baseline)
 	baselineMetrics := map[string]Metric{}
-	if baseline != nil {
-		baselineMetrics = baseline.Metrics
+	if comparisonBaseline != nil {
+		baselineMetrics = comparisonBaseline.Metrics
 	}
 	worse := WorseDimensions(cfg.Dimensions, baselineMetrics, current)
 
 	if len(worse) > 0 && !acceptWorse {
-		return refuseRecord(cfg, format, baseline, baselineMetrics, current, artifacts, worse, dryRun, stdout, stderr)
+		return refuseRecord(cfg, format, comparisonBaseline, baselineMetrics, current, artifacts, worse, dryRun, stdout, stderr)
 	}
 	if dryRun {
-		return previewRecord(cfg, format, baseline, baselineMetrics, current, artifacts, worse, stdout, stderr)
+		return previewRecord(cfg, format, comparisonBaseline, baselineMetrics, current, artifacts, worse, stdout, stderr)
 	}
 
 	if err := WriteSnapshotFile(cfg.SnapshotPath, current); err != nil {
@@ -40,7 +41,7 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 		return abortCouldNotMeasure(reportScope{command: "record"}, format, err.Error(), nil, stdout, stderr)
 	}
 	if format == "json" {
-		rep := buildReport("record", cfg, baseline, current, artifacts)
+		rep := buildReport("record", cfg, comparisonBaseline, current, artifacts)
 		rep.AcceptedWorse = acceptedWorseEntries(worse)
 		rep.ExitCode = 0
 		if err := renderReportJSON(stdout, rep); err != nil {
@@ -49,7 +50,7 @@ func finishRecord(cfg *Config, format string, baseline *Snapshot, current map[st
 		}
 		return 0
 	}
-	printTable(stdout, cfg, baseline, current, nil)
+	printTable(stdout, cfg, comparisonBaseline, current, nil)
 	fmt.Fprintf(stdout, "📸 snapshot written to %s\n", displayPath(cfg.SnapshotPath))
 	printAcceptedWorseTrailers(stdout, worse)
 	return 0

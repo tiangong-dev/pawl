@@ -201,6 +201,20 @@ func nonBlank(lines []string) []string {
 // image claims to be captured output, so the output is captured again here and
 // compared. A failure means either the banner drifted or `check`'s table did —
 // both are worth stopping for, and the diff says which.
+func TestBannerDoesNotAdvertiseRetiredCommands(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "assets", "banner.svg"))
+	if err != nil {
+		t.Fatalf("read banner: %v", err)
+	}
+	text := string(raw)
+	if strings.Contains(text, "agent-md") {
+		t.Fatal("README banner still advertises the retired `pawl agent-md` command")
+	}
+	if !strings.Contains(text, `>pawl agent</text>`) {
+		t.Fatal("README banner does not advertise the current `pawl agent` command")
+	}
+}
+
 func TestBannerShowsWhatCheckPrints(t *testing.T) {
 	dir := t.TempDir()
 	bannerFixture(t, dir)

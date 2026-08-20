@@ -2,6 +2,7 @@
   "metrics": {
     "file-length": {
       "direction": "lower-is-better",
+      "definition": "v1:sha256:557ca0cdebb83ec3a50cd975e4267d308ac71e96d312f59eb16b55fc4a2c31a0",
       "value": 1,
       "unit": "files \u003e 40 lines",
       "breakdown": {
@@ -10,6 +11,7 @@
     },
     "file-length-growth": {
       "direction": "lower-is-better",
+      "definition": "v1:sha256:4b9269246a5b6e947bf2f77f9ee8edf452cec457a2d3e6bb9385815d660216b6",
       "value": 1,
       "unit": "files \u003e 40 lines",
       "breakdown": {
@@ -18,12 +20,14 @@
     },
     "passing-tests": {
       "direction": "higher-is-better",
+      "definition": "v1:sha256:f8ff86f8a8faa6ac0accfc2692496c5b99aaf9ec7b2e2f77275f7baa910fc112",
       "value": 4,
       "unit": "passing",
       "breakdown": null
     },
     "todo-markers": {
       "direction": "lower-is-better",
+      "definition": "v1:sha256:d491c69e567c6a24706ee3d61887569ed9cca6ddeda128f6215fc8c7b6ef989c",
       "value": 2,
       "unit": "matches",
       "breakdown": {

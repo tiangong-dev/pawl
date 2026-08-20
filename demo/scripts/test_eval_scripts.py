@@ -33,6 +33,7 @@ def load(filename, name):
 
 invocations = load("pawl-invocations.py", "invocations")
 audit = load("audit-eval-transcript.py", "audit")
+ab_runner = load("run-agent-ab.py", "ab_runner")
 
 
 def transcript(*tool_uses):
@@ -42,6 +43,14 @@ def transcript(*tool_uses):
     fd, path = tempfile.mkstemp(suffix=".jsonl")
     with os.fdopen(fd, "w") as f:
         f.write(line + "\n")
+    return path
+
+
+def codex_transcript(*items):
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    with os.fdopen(fd, "w") as f:
+        for item in items:
+            f.write(json.dumps({"type": "item.completed", "item": item}) + "\n")
     return path
 
 
@@ -96,6 +105,10 @@ class TestWhatCountsAsVerification(unittest.TestCase):
         # than the baseline. Crediting it here is what hid exactly that run.
         self.assertEqual(subcommands(bash("cd /tmp/eval && pawl measure")), ["measure"])
 
+    def test_global_flags_before_command_do_not_hide_measure(self):
+        self.assertEqual(invocations.describe("pawl --format json measure --only m")[0], "measure")
+        self.assertEqual(invocations.describe("pawl -c custom.yaml check --format json")[0], "check")
+
     def test_version_and_help_are_not_a_check(self):
         self.assertEqual(subcommands(bash("pawl --version")), ["version"])
         self.assertEqual(subcommands(bash("pawl --help")), ["help"])
@@ -129,6 +142,69 @@ class TestEditDetection(unittest.TestCase):
         self.assertEqual(kinds, ["pawl"])
 
 
+class TestAgentABHarness(unittest.TestCase):
+    def test_task_prompt_is_read_from_authoritative_task_file(self):
+        self.assertIn("Add a `median` helper", ab_runner.task_prompt(5))
+        self.assertIn("passing-tests", ab_runner.task_prompt(6))
+        self.assertNotIn("##", ab_runner.task_prompt(6))
+
+    def test_treatment_setup_preflights_pawl_and_strips_spoilers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = os.path.join(tmp, "fake-pawl")
+            with open(fake, "w") as f:
+                f.write("#!/bin/sh\n"
+                        "case \"$1\" in\n"
+                        "  version) echo 'pawl eval';;\n"
+                        "  agent) printf '<!-- pawl:begin -->\\nblock\\n<!-- pawl:end -->\\n' > AGENTS.md;;\n"
+                        "  *) exit 2;;\n"
+                        "esac\n")
+            os.chmod(fake, 0o755)
+            root = os.path.join(tmp, "runs")
+            os.mkdir(root)
+            work, _ = ab_runner.prepare_arm(ab_runner.Path(root), "treatment", ab_runner.Path(fake))
+            self.assertFalse((work / "TASKS.md").exists())
+            self.assertTrue((work / "AGENTS.md").exists())
+            self.assertTrue((work / ".eval-bin" / "pawl").exists())
+
+
+class TestCodexTranscriptSupport(unittest.TestCase):
+    def test_command_and_file_change_feed_the_same_timeline(self):
+        path = codex_transcript(
+            {"type": "file_change", "changes": [{"path": "/tmp/eval/src/a.js"}]},
+            {"type": "command_execution", "command": "/bin/zsh -lc 'pawl check --format json'"},
+        )
+        try:
+            self.assertEqual(list(invocations.events(path)), [
+                ("edit", "Edit /tmp/eval/src/a.js"),
+                ("pawl", "pawl check --format json"),
+            ])
+        finally:
+            os.unlink(path)
+
+    def test_multiline_shell_payload_counts_later_invocations(self):
+        path = codex_transcript({
+            "type": "command_execution",
+            "command": "/bin/zsh -lc 'status=0\npawl check --only m || status=$?\npawl record --only m\nexit $status'",
+        })
+        try:
+            self.assertEqual([invocations.describe(d)[0] for k, d in invocations.events(path) if k == "pawl"],
+                             ["check", "record"])
+        finally:
+            os.unlink(path)
+
+    def test_auditor_reads_codex_command_items(self):
+        path = codex_transcript({
+            "type": "command_execution",
+            "command": "cat /Volumes/jdisk/code/pawl/demo/capabilities.yaml",
+        })
+        try:
+            self.assertEqual(list(audit.bash_commands(path)), [
+                "cat /Volumes/jdisk/code/pawl/demo/capabilities.yaml",
+            ])
+        finally:
+            os.unlink(path)
+
+
 class TestContaminationAudit(unittest.TestCase):
     EVAL = "/private/tmp/scratch/eval/t5"
     REPO = "/Volumes/jdisk/code/pawl"
@@ -142,6 +218,11 @@ class TestContaminationAudit(unittest.TestCase):
             "cd /tmp/scratch/eval/t5 && cat capabilities.yaml", self.EVAL, self.REPO))
         self.assertFalse(audit.is_violation(
             "cd /private/tmp/scratch/eval/t5 && cat capabilities.yaml", self.EVAL, self.REPO))
+
+    def test_sibling_directory_with_repo_name_prefix_is_not_an_escape(self):
+        eval_dir = "/Volumes/jdisk/code/pawl-ab/control"
+        self.assertFalse(audit.is_violation(
+            f"cd {eval_dir} && pawl check --format json", eval_dir, self.REPO))
 
     def test_touching_the_real_repo_is_an_escape(self):
         self.assertTrue(audit.is_violation(

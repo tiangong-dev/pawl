@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flag eval-agent shell commands that leaked into the real pawl repo instead
+"""Flag Claude/Codex eval commands that leaked into the real pawl repo instead
 of staying inside the assigned eval directory.
 
 A spawned subagent's default Bash cwd is the OUTER session's cwd (the real
@@ -48,6 +48,14 @@ def bash_commands(jsonl_path):
                 obj = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            item = obj.get("item")
+            if (obj.get("type") == "item.completed" and isinstance(item, dict)
+                    and item.get("type") == "command_execution"):
+                cmd = item.get("command", "")
+                if cmd:
+                    yield cmd
+                continue
+
             msg = obj.get("message")
             if not msg or msg.get("role") != "assistant":
                 continue
@@ -80,13 +88,24 @@ def spellings(path):
     return {form.rstrip("/") for form in forms if form}
 
 
+# A root reference either ends there or continues below that root. Treating a
+# root as an arbitrary substring confuses a sibling such as `pawl-ab` with the
+# `pawl` repository and discards a clean run.
+PATH_BOUNDARY = r"(?=$|[/\s'\"`;,:|&(){}\[\]<>])"
+
+
+def references_path(command, path):
+    return any(re.search(re.escape(form) + PATH_BOUNDARY, command)
+               for form in spellings(path))
+
+
 def is_violation(cmd, eval_dir, repo_root):
-    if any(form in cmd for form in spellings(repo_root)):
+    if references_path(cmd, repo_root):
         return True
     # cd into eval_dir anywhere in the command means later relative reads in
     # that same command are scoped there, not to repo_root — only check
     # commands that never scope themselves to eval_dir at all.
-    if any(form in cmd for form in spellings(eval_dir)):
+    if references_path(cmd, eval_dir):
         return False
     for pat in SPOILER_PATTERNS:
         if re.search(pat, cmd):

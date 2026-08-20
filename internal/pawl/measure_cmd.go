@@ -89,7 +89,15 @@ func acquireMeasurement(cfg *Config, supplied map[string]Metric, progress, stder
 			})
 			continue
 		}
-		current[dim.ID] = metric
+		bound, compatible := bindMetricDefinition(metric, dim.Definition)
+		if !compatible {
+			missing = append(missing, measureFailure{
+				id:      dim.ID,
+				message: "the supplied measurement uses a different measurement definition — re-run `pawl measure` with the current config",
+			})
+			continue
+		}
+		current[dim.ID] = bound
 	}
 	if len(missing) > 0 {
 		return nil, nil, &measureError{failures: missing}

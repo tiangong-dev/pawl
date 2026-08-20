@@ -4,7 +4,25 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { selectPackageDirs } from '../../publish.js';
+import { npmOperation, selectPackageDirs } from '../../publish.js';
+
+test('dry-run validates the package locally without asking the registry to accept an already-published version', () => {
+  assert.deepEqual(npmOperation({ dryRun: true, tag: 'latest', provenance: true }), {
+    command: 'npm',
+    args: ['pack', '--dry-run'],
+  });
+});
+
+test('real publish keeps tag and provenance behavior', () => {
+  assert.deepEqual(npmOperation({ dryRun: false, tag: 'dev', provenance: true }), {
+    command: 'npm',
+    args: ['publish', '--access', 'public', '--tag', 'dev', '--provenance'],
+  });
+  assert.deepEqual(npmOperation({ dryRun: false, tag: 'latest', provenance: false }), {
+    command: 'npm',
+    args: ['publish', '--access', 'public', '--tag', 'latest'],
+  });
+});
 
 test('selectPackageDirs returns only directories containing package.json, sorted, excluding archives dir and stray files', (t) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pawl-publish-select-'));

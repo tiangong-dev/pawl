@@ -97,11 +97,12 @@ func MeasureAll(cfg *Config, progress, stderr io.Writer) (map[string]Metric, map
 			unit = "count"
 		}
 		metrics[o.id] = Metric{
-			Direction: dim.Direction,
-			Value:     o.result.Value,
-			Unit:      unit,
-			Breakdown: o.result.Breakdown,
-			Tolerance: dim.Tolerance,
+			Direction:  dim.Direction,
+			Definition: dim.Definition,
+			Value:      o.result.Value,
+			Unit:       unit,
+			Breakdown:  o.result.Breakdown,
+			Tolerance:  dim.Tolerance,
 		}
 		if o.result.Artifact != nil {
 			artifacts[o.id] = o.result.Artifact

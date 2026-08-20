@@ -128,6 +128,18 @@ func TestGuardViolationAndConsistency(t *testing.T) {
 		}
 	})
 
+	t.Run("adding a fingerprint to a legacy baseline still checks the value", func(t *testing.T) {
+		definition := "v1:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","definition":"`+definition+`","value":8,"unit":"count","breakdown":null}}}`+"\n")
+		res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+		if res.exit != 1 {
+			t.Fatalf("exit = %d, want 1\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+		}
+		if !strings.Contains(res.stdout, "a: 5 → 8") || strings.Contains(res.stdout, "redefined") {
+			t.Errorf("legacy upgrade did not retain numeric comparison: %s", res.stdout)
+		}
+	})
+
 	t.Run("equal working tree passes", func(t *testing.T) {
 		writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
 		res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
