@@ -52,13 +52,13 @@ PAWL_CALL = re.compile(
     r"pawl(\s+[^;&|)\n]*)?"
 )
 
-# Includes commands pawl has since retired (diff, status, constraints), so
+# Includes commands pawl has since retired or renamed (diff, status, constraints, agent-md), so
 # transcripts recorded before their removal still classify instead of falling
 # through to "check (default)". `measure` matters most: it prints numbers with
 # no baseline and no verdict, so classifying it as a check would credit an
 # agent that measured but never asked whether anything got worse.
 KNOWN_COMMANDS = {
-    "init", "agent-md", "record", "check", "measure", "baseline-guard",
+    "init", "agent", "agent-md", "record", "check", "measure", "baseline-guard",
     "trend", "rank", "version", "help",
     "diff", "status", "constraints",
 }

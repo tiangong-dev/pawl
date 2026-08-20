@@ -134,17 +134,17 @@ func TestBareVersionFlagStillWorksInEmptyDir(t *testing.T) {
 
 // A --format that is a usage error on its own command keeps winning over a
 // --version riding alongside it: the usage error is reported (exit 2) and no
-// version text reaches stdout. agent-md emits Markdown, so any --format on it
+// version text reaches stdout. agent emits Markdown, so any --format on it
 // is that usage error.
-func TestAgentMDFormatVersionFlagStillUsageError(t *testing.T) {
+func TestAgentFormatVersionFlagStillUsageError(t *testing.T) {
 	dir := t.TempDir()
 
-	res := runPawl(t, dir, baseEnv(), "agent-md", "--format", "json", "--version")
+	res := runPawl(t, dir, baseEnv(), "agent", "--format", "json", "--version")
 	if res.exit != 2 {
-		t.Fatalf("agent-md --format json --version exit = %d, want 2 (the format usage error outranks --version)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+		t.Fatalf("agent --format json --version exit = %d, want 2 (the format usage error outranks --version)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 	if containsVersionString(res.stdout) {
-		t.Errorf("stdout = %q, must not contain the version string when --format is a usage error on agent-md", res.stdout)
+		t.Errorf("stdout = %q, must not contain the version string when --format is a usage error on agent", res.stdout)
 	}
 }
 

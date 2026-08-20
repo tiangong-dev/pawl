@@ -3,11 +3,15 @@
 </p>
 
 <p align="center">
-  English docs: <a href="./README.md">README.md</a> · 完整行为契约见 <a href="./SPEC.md">SPEC.md</a>(<a href="./spec/README.md">spec/</a>)
+  <a href="./README.md">English</a> · <a href="./SPEC.md">行为契约</a> · <a href="./RECIPES.md">配方手册</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/tiangong-dev/pawl/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/tiangong-dev/pawl/ci.yml?branch=main&amp;label=CI&amp;logo=github" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@pawl-tools/cli"><img src="https://img.shields.io/npm/v/@pawl-tools/cli?logo=npm&amp;color=cb3837" alt="npm"></a>
+  <a href="./go.mod"><img src="https://img.shields.io/github/go-mod/go-version/tiangong-dev/pawl?logo=go" alt="Go version"></a>
   <a href="https://github.com/marketplace/actions/setup-pawl"><img src="https://img.shields.io/badge/GitHub%20Marketplace-setup--pawl-2ea44f?logo=github" alt="GitHub Marketplace: setup-pawl"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/tiangong-dev/pawl?color=blue" alt="MIT license"></a>
 </p>
 
 **声称"什么都没变差"很便宜,量出来不便宜。** coding agent 会报告任务完成,PR 描述会写"无回归"。pawl 是中间那一步:把你在意的每个数字重新测一遍,只要有一个朝错误方向动了就失败。
@@ -17,7 +21,7 @@
 ```bash
 pawl record                     # 测量全部维度,写入基线
 pawl check                      # 门禁:任何维度回归即退出码 1
-pawl agent-md >> AGENTS.md      # 告诉你的 coding agent 这道门禁存在
+pawl agent                      # 告诉你的 coding agent 这道门禁存在
 pawl baseline-guard origin/main # 防篡改:抓手改过的基线
 ```
 
@@ -100,7 +104,7 @@ pawl check
 
 agent 会报告任务完成;它到底有没有测过是另一回事。在本仓库自己的 A/B 评测里([demo/](./demo/README.md)),没被告知门禁存在的那一组,在收尾前跑过门禁的是 **4 格里的 0 格**,装了说明块的那一组是 **6 格里的 4 格**。而对照组里那些确实去找裁决的 agent,找到 `pawl measure` 就停下了,然后把某个维度报成"改进"——那个差值其实是它更早一次 `grep` 得来的。
 
-`pawl agent-md >> AGENTS.md` 把下面这套闭环装到 agent 本来就会看的地方。要点:
+`pawl agent` 把下面这套闭环装到 agent 本来就会看的地方。它会问装进哪个文件,因为各家工具的答案不一样:Claude Code 读 `CLAUDE.md`,根本不读 `AGENTS.md`;Codex、Antigravity 和 Cursor 读 `AGENTS.md`。用 `--write claude` 或 `--write agent` 可以跳过询问;没有终端时(管道、CI、agent 自己 shell 调用)直接打印说明块。pawl 升级后重跑一次,已装的块会被就地替换,不会变成两份。要点:
 
 1. `pawl check --format json`(可选 `--only <id>`,提交前加 `--since HEAD`)。
 2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
@@ -118,7 +122,7 @@ agent 会报告任务完成;它到底有没有测过是另一回事。在本仓�
 | 命令 | 作用 |
 |---|---|
 | `pawl init` | 生成一份起步 `pawl.yaml`(不覆盖已有文件) |
-| `pawl agent-md` | 打印 AI 编码助手正确使用这道门禁所需的操作说明(用 `>> AGENTS.md` 安装) |
+| `pawl agent` | 把 AI 编码助手正确使用这道门禁所需的操作说明装进 `AGENTS.md` 或 `CLAUDE.md`(`--write agent\|claude`);没有终端可询问时改为打印 |
 | `pawl measure` | 只测量并打印数字——不读基线、不下判决;输出就是快照格式 |
 | `pawl record` | 测量全部维度,(覆盖)写入快照 |
 | `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
@@ -142,9 +146,10 @@ agent 会报告任务完成;它到底有没有测过是另一回事。在本仓�
 | `--accept-worse` | `record` | 允许写入比已提交基线更差的值,并打印授权它的提交 trailer |
 | `--dry-run` | `record` | 只预览 record 会写入什么,不实际落盘 |
 | `--limit <n>` | `trend` | 限制历史行数(默认 20,`0` = 全部) |
+| `--write <target>` | `agent` | 不询问,直接把说明块装进 `AGENTS.md`(`agent`)或 `CLAUDE.md`(`claude`) |
 | `-q`, `--quiet` | `check`、`record`、`measure` | 静音进度和提示,只在退出码非 0 时才打印文本裁决——门禁通过时一个字都不说 |
 
-`--version` 在所有命令上都可用,输出与 `pawl version` 相同。`--format` 在 `agent-md`(输出 Markdown)和 `measure`(输出测量文档)上是用法错误。
+`--version` 在所有命令上都可用,输出与 `pawl version` 相同。`--format` 在 `agent`(输出 Markdown)和 `measure`(输出测量文档)上是用法错误。
 
 ### 退出码
 

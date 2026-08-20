@@ -3,11 +3,15 @@
 </p>
 
 <p align="center">
-  中文文档见 <a href="./README.zh-CN.md">README.zh-CN.md</a> · Full behavioral contract in <a href="./SPEC.md">SPEC.md</a> (<a href="./spec/README.md">spec/</a>)
+  <a href="./README.zh-CN.md">中文文档</a> · <a href="./SPEC.md">SPEC</a> · <a href="./RECIPES.md">Recipes</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/tiangong-dev/pawl/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/tiangong-dev/pawl/ci.yml?branch=main&amp;label=CI&amp;logo=github" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@pawl-tools/cli"><img src="https://img.shields.io/npm/v/@pawl-tools/cli?logo=npm&amp;color=cb3837" alt="npm"></a>
+  <a href="./go.mod"><img src="https://img.shields.io/github/go-mod/go-version/tiangong-dev/pawl?logo=go" alt="Go version"></a>
   <a href="https://github.com/marketplace/actions/setup-pawl"><img src="https://img.shields.io/badge/GitHub%20Marketplace-setup--pawl-2ea44f?logo=github" alt="GitHub Marketplace: setup-pawl"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/tiangong-dev/pawl?color=blue" alt="MIT license"></a>
 </p>
 
 **Asserting that nothing got worse is cheap. Measuring it is not.** A coding agent
@@ -24,7 +28,7 @@ improve; the gate never slips backward.
 ```bash
 pawl record                     # measure everything, write the baseline
 pawl check                      # the gate: exit 1 on any regression
-pawl agent-md >> AGENTS.md      # tell your coding agent the gate is there
+pawl agent                      # tell your coding agent the gate is there
 pawl baseline-guard origin/main # anti-tamper: catch a hand-edited baseline
 ```
 
@@ -140,8 +144,13 @@ never told the gate existed ran it before finishing in **0 of 4** cells, against
 looking for a verdict found `pawl measure`, stopped there, and reported a
 dimension "improved" — from a delta they had taken out of an earlier `grep`.
 
-`pawl agent-md >> AGENTS.md` installs the loop below where an agent already
-looks. The short version:
+`pawl agent` installs the loop below where an agent already looks. It asks which
+file that is, because the answer differs by tool: Claude Code reads `CLAUDE.md`
+and does not read `AGENTS.md` at all, while Codex, Antigravity and Cursor read
+`AGENTS.md`. Pick with `--write claude` or `--write agent` to skip the prompt;
+with no terminal (a pipe, CI, an agent shelling out) it just prints the block.
+Re-run it after a pawl upgrade and the installed block is replaced in place,
+never duplicated. The short version:
 
 1. `pawl check --format json` (optionally `--only <id>`, `--since HEAD` before commit).
 2. Read `failure_class`, `next_action`, and `watch`. Do not grow `near`/`over` files; `headroom` is what is left. Watch does not change the exit code.
@@ -162,7 +171,7 @@ the runs where it did **not** help, is in [demo/](./demo/README.md).
 | command | what it does |
 |---|---|
 | `pawl init` | scaffold a starter `pawl.yaml` (never overwrites) |
-| `pawl agent-md` | print the operating loop a coding agent needs to use this gate (install it with `>> AGENTS.md`) |
+| `pawl agent` | install the operating loop a coding agent needs to use this gate into `AGENTS.md` or `CLAUDE.md` (`--write agent\|claude`); prints it when there is no terminal to ask |
 | `pawl measure` | measure every dimension and print the numbers — no baseline, no verdict; the document is the snapshot format |
 | `pawl record` | measure every dimension and (over)write the snapshot |
 | `pawl check` | measure + compare; **exit 1 on any regression** — the CI gate |
@@ -186,10 +195,11 @@ Omitting the command runs `check`.
 | `--accept-worse` | `record` | write a value worse than the committed baseline, and print the commit trailer that authorizes it |
 | `--dry-run` | `record` | preview what a record would write, without writing |
 | `--limit <n>` | `trend` | cap history rows (default 20, `0` = all) |
+| `--write <target>` | `agent` | install the block into `AGENTS.md` (`agent`) or `CLAUDE.md` (`claude`) instead of asking |
 | `-q`, `--quiet` | `check`, `record`, `measure` | silence progress and advisory output; print a text verdict only when the exit code is non-zero, so a passing gate says nothing at all |
 
 `--version` is valid everywhere and prints what `pawl version` prints.
-`--format` is a usage error on `agent-md` (it emits Markdown) and on `measure`
+`--format` is a usage error on `agent` (it emits Markdown) and on `measure`
 (it emits the measurement document).
 
 ### Exit codes

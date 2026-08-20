@@ -7,7 +7,7 @@ import (
 
 func validHelpTopic(topic string) bool {
 	switch topic {
-	case "", "init", "agent-md", "measure", "record", "check", "baseline-guard", "trend", "rank", "version":
+	case "", "init", "agent", "measure", "record", "check", "baseline-guard", "trend", "rank", "version":
 		return true
 	default:
 		return false
@@ -25,7 +25,7 @@ Usage:
 
 Commands:
   init                    write a starter pawl.yaml
-  agent-md                print the agent operating loop for this gate
+  agent                   install (or print) the agent operating loop for this gate
   measure                 measure every dimension and print the numbers, no verdict
   record                  measure and write the snapshot
   check                   fail when a metric regresses (default)
@@ -50,12 +50,13 @@ Command flags:
   record --dry-run        preview what record would write, without writing
   record --accept-worse   record a dimension even if it comes back worse
   check --since <ref>     scope located findings to the working tree since <ref>
-  trend --limit <n>       limit history entries`)
+  trend --limit <n>       limit history entries
+  agent --write <target>  install the block into AGENTS.md (agent) or CLAUDE.md (claude)`)
 		return
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
 		"init":           "pawl init [-c pawl.yaml]",
-		"agent-md":       "pawl agent-md",
+		"agent":          "pawl agent [--write agent|claude]",
 		"measure":        "pawl measure [--only <id>[,<id>…]] [-q]",
 		"record":         "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
 		"check":          "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",

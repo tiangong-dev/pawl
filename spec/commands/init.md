@@ -17,6 +17,6 @@ no existing config.
   installed. Comments in the file point at the recipe cookbook for more.
 - On success it writes the file and prints next-steps lines (naming the file,
   pointing at `pawl record`, and naming
-  [`agent-md`](agent-md.md) for repositories worked on by a coding agent),
+  [`agent`](agent.md) for repositories worked on by a coding agent),
   exit 0.
 

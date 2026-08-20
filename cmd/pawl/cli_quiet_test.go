@@ -177,7 +177,7 @@ func TestQuietRecordIsSilentWhenItWrites(t *testing.T) {
 func TestQuietRejectedOnCommandsWithNoChatter(t *testing.T) {
 	dir := t.TempDir()
 	quietConfig(t, dir, 3)
-	for _, command := range []string{"rank", "trend", "init", "agent-md", "version"} {
+	for _, command := range []string{"rank", "trend", "init", "agent", "version"} {
 		res := runPawl(t, dir, baseEnv(), command, "-q")
 		if res.exit != 2 {
 			t.Errorf("%s -q exit = %d, want 2\nstdout=%s", command, res.exit, res.stdout)
