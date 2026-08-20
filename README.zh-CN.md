@@ -355,7 +355,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 ```yaml
 - uses: tiangong-dev/pawl@v0       # 把 pawl 二进制放进 PATH——无需 Go/Node
   with:
-    version: v0.7.1                # 可选;默认取最新 release
+    version: v0.8.0                # 可选;默认取最新 release
 - run: pawl check
 - run: pawl guard origin/${{ github.base_ref }}   # PR 上跑
 ```
@@ -375,7 +375,7 @@ action 负责安装二进制;不传 `command` 时它只做这件事:
 
 ### 其他 CI
 
-任何 CI 里跑 `npx -y @pawl-tools/cli@0.7.1 check`(或下载 release 二进制)即可。一次测量可以同时驱动裁决和随后的记录——当某个维度是从磁盘读报告时这尤其重要,两次独立测量可能读到两个不同的构建:
+任何 CI 里跑 `npx -y @pawl-tools/cli@0.8.0 check`(或下载 release 二进制)即可。一次测量可以同时驱动裁决和随后的记录——当某个维度是从磁盘读报告时这尤其重要,两次独立测量可能读到两个不同的构建:
 
 ```bash
 pawl measure > .pawl/current.json
