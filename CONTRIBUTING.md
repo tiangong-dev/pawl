@@ -1,32 +1,24 @@
 # Contributing to pawl
 
-pawl is a language-agnostic anti-regression quality gate. This repo also
-dogfoods itself: pawl gates its own Go source (`pawl.yaml`), so `pawl check`
-must pass on every PR just like it does for any other user of the tool.
+pawl is a language-agnostic anti-regression quality gate. This repository uses pawl on its own Go source, so `pawl check` must pass on every pull request.
 
 ## Before you start
 
-- The behavioral contract lives in [`spec/`](spec/README.md) (start at
-  `spec/README.md`, indexed by root [`SPEC.md`](SPEC.md)). For any change that
-  touches CLI behavior, snapshot format, comparison semantics, or output, read
-  the relevant spec file first and update it alongside the code — the spec is
-  authoritative, not a description of what the Go implementation happens to do.
-- [`AGENTS.md`](AGENTS.md) documents the operator loop for running pawl against
-  itself while iterating (`pawl check --format json`, `--only <id>`, etc.).
+- The behavioral contract lives in [`spec/`](spec/README.md); root [`SPEC.md`](SPEC.md) is its index. Read the relevant section before changing CLI behavior, snapshot format, comparison semantics, or output, and update the contract with the implementation. The contract is authoritative.
+- [`AGENTS.md`](AGENTS.md) describes the local pawl workflow, including scoped checks and baseline updates.
 
 ## Development setup
 
-Requires Go (see `go.mod` for the version) and Node.js 22+ (for the npm
-distribution and the PR-comment rendering scripts).
+You need Go (see `go.mod` for the version) and Node.js 22+ for the npm package and repository scripts.
 
 ```bash
 go build -o /tmp/pawl ./cmd/pawl
-/tmp/pawl check   # dogfood: gate this repo's own Go source
+/tmp/pawl check   # gate this repo's own Go source
 ```
 
 ## Testing
 
-Run the same checks CI runs before opening a PR:
+Run the same checks as CI before opening a pull request:
 
 ```bash
 gofmt -l .                          # must print nothing
@@ -36,32 +28,21 @@ node --test npm/cli/test/*.test.js  # npm distribution tests
 node --test scripts/*.test.mjs      # PR-comment rendering tests
 ```
 
-Any confirmed bug fix should come with a regression test. Tests should verify
-behavior described in `spec/`, not just mirror the implementation.
+A confirmed bug fix should include a regression test. Tests should verify the behavior described in `spec/`, not mirror implementation details.
 
 ## Making changes
 
 - Keep each PR scoped to one independently verifiable change.
-- If you add or change a dimension in `pawl.yaml`, or the change moves a
-  number pawl measures about this repo, run `pawl check --format json` and,
-  on a genuine improvement, `pawl record --only <id>` to update the baseline.
-  Never run a full `pawl record` to lock in a single win.
-- Generated files (e.g. `pawl.snapshot.json`, `pawl-junit.xml`) are produced by
-  tooling — don't hand-edit them. `pawl guard` catches hand-edited
-  baselines.
-- Match existing code style; comments should explain non-obvious *why*, not
-  restate *what* the code does.
+- If a change moves a dimension in `pawl.yaml`, run `pawl check --format json`. For a genuine improvement, use `pawl record --only <id>`; do not run a full record to update one metric.
+- Do not hand-edit generated files such as `pawl.snapshot.json` and `pawl-junit.xml`.
+- Match the existing style. Comments should explain non-obvious decisions.
 
 ## Submitting a PR
 
-CI runs `gofmt`, `go vet`, the Go and Node test suites, a self-check
-(`pawl check` on this repo), `pawl guard origin/main`, a diff-scoped
-self-check (`pawl check --since origin/main`), and validates the npm release
-path (build + dry-run publish). All of these should pass locally before you
-open a PR — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the
-exact steps.
+CI runs formatting, vetting, Go and Node tests, pawl's self-check and guard, a diff-scoped check, and npm package validation. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the exact commands.
+
+The pull request description should explain what changed and why. If pawl's own metrics moved, include that result as well.
 
 ## Reporting issues
 
-Please open a GitHub issue with a minimal reproduction — ideally a `pawl.yaml`
-plus the command and output you expected versus what you got.
+Open a GitHub issue with a minimal reproduction: ideally `pawl.yaml`, the command, the JSON verdict, and the expected behavior.

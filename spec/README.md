@@ -1,21 +1,28 @@
 # pawl engine contract
 
 `pawl` is a language-agnostic anti-regression quality gate. Each **dimension**
-measures one number (plus an optional per-file breakdown). `record` snapshots the
-numbers; `check` re-measures and fails when any dimension regresses against the
-snapshot. The measuring tool is an implementation detail of each dimension —
-swapping tools means rewriting one adapter command while the baseline and the CI
-gate stay put.
+measures one number (plus an optional per-file breakdown). `record` snapshots
+the numbers; `check` re-measures and fails when any dimension regresses
+against the snapshot. Which tool produced the number is the dimension's own
+business. Swapping tools means rewriting one adapter command; the baseline
+and the CI gate don't move.
 
 This tree is the authoritative behavioral contract. The Go implementation and
-its tests are both written against it. Root [SPEC.md](../SPEC.md) is the short
-index of the same contract (kept so existing `SPEC.md` links still resolve).
+its tests are both written against it, so if code and contract ever disagree,
+the contract wins and the code is a bug. Root [SPEC.md](../SPEC.md) is the
+short index of the same contract, kept so existing `SPEC.md` links still
+resolve.
 
 ## How to read
 
-Do not read every file. Open the slice that matches the change. Heading text is
-unchanged from the former monolithic SPEC, so GitHub-style `#slug` fragments
-still work on the file that now owns that heading.
+Don't read every file. Open the slice that matches the change you're making.
+Heading text is unchanged from the former monolithic SPEC, so GitHub-style
+`#slug` fragments still work on whichever file now owns that heading.
+
+One tip: when pawl does something you didn't expect — refuses a record, exits
+2 on a config you thought was fine — the explanation is almost always in the
+file below whose name matches the command you ran. Start there before
+assuming a bug.
 
 ## Files
 

@@ -1,120 +1,51 @@
 # Changelog
 
+Release notes and upgrade instructions. Review the breaking changes before updating an existing installation.
+
 ## 0.8.0
 
 ### Breaking
 
-- **Renamed `agent-md` to `agent`, with no alias.** `pawl agent-md` is now an
-  unknown command (exit 2) rather than something that appears to work; update
-  any script that calls it.
-- **Renamed `baseline-guard` to `guard`, with no alias.** The implementation and
-  the contract already called it `guard` (`internal/pawl/guard.go`,
-  `spec/commands/guard.md`); only the CLI carried the long name.
-  `pawl baseline-guard` is now an unknown command (exit 2), so a CI step still
-  calling it fails loudly instead of quietly dropping the anti-tamper gate —
-  update it to `pawl guard <ref>`.
+- **`pawl agent-md` was renamed to `pawl agent`, with no alias.** Update any scripts that call the old command; it now exits 2 as an unknown command.
+- **`pawl baseline-guard` was renamed to `pawl guard`, with no alias.** Update CI to call `pawl guard <ref>`.
 
 ### Changed
 
-- **`pawl agent` installs the block instead of only printing it.** The
-  documented install was `pawl agent-md >> AGENTS.md`, and Claude Code does not
-  read `AGENTS.md` — it loads `CLAUDE.md`, `.claude/CLAUDE.md` and
-  `CLAUDE.local.md` — so that install was silently a no-op for anyone working
-  there, while Codex, Antigravity and Cursor did read it. `pawl agent` now asks
-  which file to install into, or takes `--write agent` (`AGENTS.md`) or
-  `--write claude` (`CLAUDE.md`) directly.
-- An install **replaces an existing block between the `<!-- pawl:begin -->` and
-  `<!-- pawl:end -->` markers** and leaves the rest of the file untouched, so
-  re-running it after a pawl upgrade updates the loop instead of appending a
-  second, diverging copy. A file whose markers are damaged or duplicated is
-  refused (exit 2) and left exactly as found.
-- Unless stdin, stdout and the stderr prompt are all attached to terminals,
-  `pawl agent` prints the block and writes nothing, so pipes, hidden prompts,
-  CI steps and agents shelling out never block for a choice. The print path
-  warns on stderr when either instruction file already carries a block.
-- Snapshots and measurement documents now carry a versioned definition
-  fingerprint per metric. `check` refuses to compare a recorded number after
-  its threshold, pattern, gate, tolerance, extract semantics or analyzer
-  selectors change; adapter commands, paths and timeouts remain replaceable
-  implementation details. Full `record` explicitly establishes changed
-  definitions, `record --only` can redefine selected metrics, `guard` reports
-  the boundary, and trend no longer calculates a delta across it. A
-  missing fingerprint is one consistent legacy compatibility state across all
-  comparison paths; recording a selected legacy `--current` metric upgrades it
-  without rewriting preserved unselected metrics.
-- Publish-path dry runs use local `npm pack --dry-run` validation. npm 11 makes
-  `npm publish --dry-run` consult registry version uniqueness, which caused
-  every PR after a release to fail solely because that version already exists.
+- **`pawl agent` can install its instruction block.** It asks for the target file, or accepts `--write agent` for `AGENTS.md` and `--write claude` for `CLAUDE.md`. This replaces the previous redirect-only workflow.
+- Re-running the install replaces the block between `<!-- pawl:begin -->` and `<!-- pawl:end -->` without changing the surrounding file. Damaged or duplicate markers are rejected with exit 2.
+- Without an interactive terminal, `pawl agent` prints the block and does not prompt or write a file. It warns on stderr if an instruction file already contains the block.
+- Snapshots now include a versioned definition fingerprint for each metric. `check` refuses incompatible comparisons after measurement semantics change; `record`, `record --only`, `guard`, and `trend` handle the definition boundary explicitly. Legacy snapshots remain readable and are upgraded when recorded.
+- Release CI now validates the local package with `npm pack --dry-run`. This avoids npm 11 registry version checks during pull-request validation.
 
 ### Fixed
 
-- **Character devices are no longer mistaken for terminals.** The check was
-  the `os.ModeCharDevice` bit, which `/dev/null`, `/dev/zero`, and other
-  non-terminal streams also carry. Redirected commands now stay non-interactive,
-  and `pawl agent 2>/dev/null` no longer waits behind an invisible prompt.
+- Character devices such as `/dev/null` and `/dev/zero` are no longer treated as terminals. Redirected commands now remain non-interactive.
 
 ## 0.7.1
 
 ### Changed
 
-- Marketplace badge color from green to black, matching the `Pawl` wordmark. The
-  badge is snapshotted from `action.yml` when a release is published, so it takes
-  a release to change. The binary is byte-for-byte what 0.7.0 shipped.
+- Changed the Marketplace badge from green to black to match the wordmark. The binary is unchanged from 0.7.0.
 
 ## 0.7.0
 
 ### Breaking
 
-- **Removed `pawl diff`.** It was `check` with the exit code forced to zero.
-  Use `pawl check || true`; `exit_code` is a field in `--format json`, so a step
-  that must not fail CI needs no second command.
-- **Removed `--format codeclimate`.** A third serialization of what
-  `--format json` already carries, and a usage error in combination with
-  `--only`. Use `--format json`. GitLab Code Quality integration goes with it;
-  GitHub PR comments and annotations are unaffected.
-- **Removed `pawl status` and `pawl constraints`.** They were second doors to
-  reading `pawl.snapshot.json` and `pawl.yaml`; read the files, or use
-  `pawl measure` for the current numbers. Neither command was ever in a
-  release.
-- **Removed `agent-md --write`.** `pawl agent-md >> AGENTS.md` does the same
-  thing and lets you pick the file. When `./AGENTS.md` already carries a pawl
-  block, a `note:` on stderr says so. `agent-md` was never in a release.
+- **Removed `pawl diff`.** Use `pawl check || true` for a non-blocking step; `--format json` includes the real `exit_code`.
+- **Removed `--format codeclimate`.** Use `--format json`. GitLab Code Quality integration is no longer included; GitHub comments and annotations are unaffected.
+- **Removed `pawl status` and `pawl constraints`.** Read `pawl.snapshot.json` and `pawl.yaml` directly, or use `pawl measure` for current values. Neither command appeared in a release.
+- **Removed `agent-md --write`.** Use output redirection to choose the target file. This command did not appear in a release.
 
 ### Added
 
-- **`pawl measure`** runs every dimension and prints the measurement document —
-  no baseline read, no verdict. The document is the snapshot format byte for
-  byte, so `pawl measure > pawl.snapshot.json` means what it looks like.
-- **`check --current <path|->` and `record --current <path|->`** judge or record
-  a measurement document instead of running the dimensions, from a file or
-  stdin. One `measure` can now drive the check and the record that follows it,
-  which previously were two separate passes over a tree that may have moved —
-  and, when a dimension reads a report off disk, could read two different
-  builds. A document missing a dimension in scope is a measurement failure
-  naming it, never a quietly narrower run.
-- **`valid_exit_codes` on any `command` dimension.** Previously a named SARIF
-  analyzer's option only. It declares which exit codes count as a successful
-  run, for tools that report findings through a non-zero exit. Prefer it to
-  `|| true`, which accepts *every* exit code and turns a crashed tool into a
-  clean zero.
-- **`builtin: lines` named analyzer.** One regex with optional named groups
-  (`path`, `line`, `rule`, `level`) turns any tool's line output into findings,
-  so a tool pawl has no built-in support for still gets one scan feeding several
-  rule- or level-scoped dimensions. It refuses `min_files` and `verify` rather
-  than approximating them — line output reveals the files that had findings, not
-  the files scanned, and carries no rule catalog.
-- **`-q` / `--quiet`** on `measure`, `record` and `check`: silences progress and
-  advisory output, and releases a text verdict only when the exit code is
-  non-zero. An adapter's own stderr and the `--format json` verdict are never
-  suppressed.
-- **`check --only` reports what it skipped.** The JSON verdict carries an
-  `excluded` array naming every configured dimension the scope left out, and the
-  text output prints the same list — so a scoped exit 0 cannot be mistaken for a
-  green full gate.
-- **`pawl agent-md`** prints the operating loop a coding agent needs to use the
-  gate correctly. Install it with `pawl agent-md >> AGENTS.md`.
+- **`pawl measure`** runs every dimension and prints a measurement document without reading a baseline or giving a verdict. Its output uses the snapshot format.
+- **`check --current <path|->` and `record --current <path|->`** use a supplied measurement document instead of measuring again. A missing in-scope dimension is a measurement failure.
+- **`valid_exit_codes` on command dimensions** declares which process exits produced a valid measurement. This is safer than `|| true`, which also hides crashes and invocation errors.
+- **The `lines` named analyzer** turns line-oriented tool output into findings with a regular expression. Several rule- or level-filtered dimensions can share the same run.
+- **`-q` / `--quiet`** on `measure`, `record`, and `check` suppresses progress and advisory output. Adapter stderr and JSON verdicts are not suppressed.
+- **`check --only` reports excluded dimensions** in both text and JSON, so a scoped pass is distinguishable from a full pass.
+- **`pawl agent-md`** prints the operating instructions for a coding agent. See 0.8.0 for its replacement.
 
 ### Changed
 
-- `check`'s text output prints a one-line hint about `--format json` to stderr
-  when stdout is not a terminal.
+- When stdout is not a terminal, `check` prints a short `--format json` hint to stderr.

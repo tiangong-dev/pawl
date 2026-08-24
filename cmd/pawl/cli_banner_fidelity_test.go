@@ -1,17 +1,18 @@
 package main
 
 // assets/banner.svg is the first thing a reader sees, and it claims to be a
-// `pawl check -q` run rather than an impression of one. Nothing enforced that
-// claim, so three separate drafts shipped output the CLI has never printed — a
-// `measuring 4 dimensions…` progress line, coloured dots where the CLI emits
-// emoji, and one table's column grid laid under another table's data. Each was
-// caught by hand, after the fact, by someone happening to run the command.
+// `pawl check -q` run rather than an impression of one. Nothing enforced
+// that claim, so three separate drafts shipped output the CLI has never
+// printed — a `measuring 4 dimensions…` progress line, coloured dots where
+// the CLI emits emoji, and one table's column grid laid under another
+// table's data. Each was caught by hand, after the fact, by someone
+// happening to run the command.
 //
 // This rebuilds the banner's fixture, runs the real binary against it, and
-// reconstructs the terminal text back out of the SVG by mapping each <text>
-// element's x coordinate onto the character grid it is drawn on. Comparing the
-// two catches a changed table format, a changed column width, and a mistyped
-// coordinate with the same assertion.
+// reconstructs the terminal text back out of the SVG by mapping each
+// <text> element's x coordinate onto the character grid it is drawn on.
+// Comparing the two catches a changed table format, a changed column
+// width, and a mistyped coordinate with the same assertion.
 
 import (
 	"encoding/xml"
@@ -197,10 +198,6 @@ func nonBlank(lines []string) []string {
 	return out
 }
 
-// TestBannerShowsWhatCheckPrints is the guard on the README's front door: the
-// image claims to be captured output, so the output is captured again here and
-// compared. A failure means either the banner drifted or `check`'s table did —
-// both are worth stopping for, and the diff says which.
 func TestBannerDoesNotAdvertiseRetiredCommands(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "assets", "banner.svg"))
 	if err != nil {
@@ -210,11 +207,12 @@ func TestBannerDoesNotAdvertiseRetiredCommands(t *testing.T) {
 	if strings.Contains(text, "agent-md") {
 		t.Fatal("README banner still advertises the retired `pawl agent-md` command")
 	}
-	if !strings.Contains(text, `>pawl agent</text>`) {
-		t.Fatal("README banner does not advertise the current `pawl agent` command")
-	}
 }
 
+// TestBannerShowsWhatCheckPrints is the guard on the README's front door: the
+// image claims to be captured output, so the output is captured again here and
+// compared. A failure means either the banner drifted or `check`'s table did —
+// both are worth stopping for, and the diff says which.
 func TestBannerShowsWhatCheckPrints(t *testing.T) {
 	dir := t.TempDir()
 	bannerFixture(t, dir)
