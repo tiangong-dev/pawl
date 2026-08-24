@@ -1,23 +1,22 @@
 # pawl recipes
 
-Copy-paste dimensions for `pawl.yaml`. Each measures one number; `pawl record`
-snapshots it and `pawl check` fails a PR when it regresses. Mix and match — a
-real config is a handful of these.
+Keep this file open in a second tab while you write your `pawl.yaml`.
 
-New to pawl? Run `pawl init` for a working starter config, then paste the
-dimensions you want from here. Full behavioral contract: [SPEC.md](./SPEC.md) ([spec/](./spec/README.md)).
+Every recipe below measures exactly one number. `pawl record` snapshots it, `pawl check` fails the PR when that number moves the wrong way. Nobody needs all of these. A real config is five or six of them pasted together and edited until the paths match your repo.
 
-**Picking a gate** (the `gate:` field):
+New to pawl? Run `pawl init` first. It gives you a starter config that already works, and then this file becomes a parts catalog. If pawl ever refuses something and you want to know *why*, the answer is in [SPEC.md](./SPEC.md) ([spec/](./spec/README.md)) — but you won't need it while writing a config.
+
+Two decisions come up in almost every dimension, so let's get them out of the way.
+
+**Which gate?** (the `gate:` field)
 
 | your metric looks like… | use | why |
 |---|---|---|
 | one scalar (a %, a total, a size) | `total` (default) | there's nothing per-file to attribute |
-| a list of findings that come and go (lint issues, TODOs) | `per-file-count` | a fix in file A can't be traded for a new offender in file B |
+| findings that come and go (lint issues, TODOs) | `per-file-count` | fixing file A must not pay for a new offender in file B |
 | a fixed set of named values (per-package coverage) | `per-key-value` | each key is guarded against dropping |
 
-**Picking a direction:** `lower-is-better` for counts of bad things (issues,
-duplication, long files); `higher-is-better` for good things that must not drop
-(coverage, passing tests).
+**Which direction?** `lower-is-better` for counts of bad things (issues, duplication, long files); `higher-is-better` for good things that must not drop (coverage, passing tests). Get this backwards and pawl will obediently let your codebase rot. It trusts you on this one.
 
 ---
 
@@ -36,10 +35,7 @@ duplication, long files); `higher-is-better` for good things that must not drop
     exclude: ["**/*.snap", "**/*.min.*"]
 ```
 
-Pair a second dimension on the same builtin with `per-key-value` so already-long
-files cannot keep growing (the usual AI failure mode). `total` still catches a
-*new* file crossing the limit; `per-key-value` ignores new keys, so the two are
-complements, not duplicates.
+One dimension is not enough here. `total` catches a *new* file crossing the limit, but an already-long file can keep growing forever without moving the total. Pair a second dimension on the same builtin with `per-key-value` to stop that growth. `per-key-value` ignores new keys, so the two dimensions are complements, not duplicates.
 
 ```yaml
 - id: "file-length-growth"
@@ -55,7 +51,7 @@ complements, not duplicates.
 
 ### Large files by bytes
 
-Closer proxy for token cost than line count. Same pairing as `file-length`.
+A useful companion to line count for generated files, bundled assets, and other dense content. Use the same pairing as `file-length`.
 
 ```yaml
 - id: "file-bytes"
@@ -83,14 +79,11 @@ The generic "count the debt marker" dimension. Swap `pattern` for your stack:
     include: ["src/**/*.ts", "src/**/*.tsx"]
 ```
 
-Other patterns worth gating: `//nolint` (Go), `# type: ignore` (Python),
-`eslint-disable`, `try!` / `as!` (Swift), `!important` (CSS), `console\.log`.
+Other patterns worth gating: `//nolint` (Go), `# type: ignore` (Python), `eslint-disable`, `try!` / `as!` (Swift), `!important` (CSS), `console\.log`.
 
-### AI-generated debt
+### Common debt markers
 
-These are the markers agent-written code tends to introduce. They are all
-`pattern-count` — no language parser. Use them on the inner loop
-(`pawl check --only …`); keep ESLint / coverage on CI.
+TODOs, lint suppressions, and skipped tests are easy to add and easy to miss in review. Each is one `pattern-count` away from becoming a gate; no language parser is needed.
 
 ```yaml
 - id: "todos"
@@ -121,8 +114,7 @@ These are the markers agent-written code tends to introduce. They are all
     include: ["**/*.{test,spec}.*", "**/test/**", "**/tests/**"]
 ```
 
-Swap `include` / `pattern` for the stack. Combine with the `file-length` +
-`file-length-growth` pair above so new code cannot hide in already-long files.
+Swap `include` / `pattern` for your stack. Run these while you're iterating locally (`pawl check --only …`) and keep the heavier stuff (ESLint, coverage) in CI. Combine with the `file-length` + `file-length-growth` pair above so new code can't hide inside already-long files.
 
 ---
 
@@ -158,16 +150,11 @@ dimensions:
       rules: ["@typescript-eslint/no-explicit-any"]
 ```
 
-The analyzer runs once; each dimension filters the decoded findings. `verify`
-commands are representative ESLint `--print-config` probes. They turn a missing,
-misspelled, or disabled filtered rule into exit 2 without treating a legitimate
-clean zero as suspicious.
+The analyzer runs once; each dimension filters the decoded findings. The `verify` probes exist because of a real failure mode: a missing, misspelled, or disabled rule produces zero findings, and zero findings looks exactly like a passing result. `--print-config` turns that false pass into exit 2 while still accepting a legitimate clean zero.
 
 ### Oxlint (Oxc)
 
-Oxlint has a first-class native JSON analyzer. It reports the number of scanned
-files directly, preserves multiple diagnostics on the same line, and runs only
-once when several dimensions select different rules or severities:
+Oxlint has a first-class native JSON analyzer. It reports the number of scanned files directly, preserves multiple diagnostics on the same line, and runs only once when several dimensions select different rules or severities:
 
 ```yaml
 analyzers:
@@ -202,22 +189,13 @@ dimensions:
       levels: ["error", "warning"]
 ```
 
-Oxlint exit 0 (no error-level diagnostics) and exit 1 (errors found) are valid
-only when stdout is a complete native JSON report. A fatal invocation that also
-uses exit 1 emits no valid report and therefore fails measurement instead of
-becoming zero; every exit other than 0/1 is fatal. `verify` is optional, but
-recommended whenever `rules` selectors are used: every selected diagnostic code
-must map to an enabled rule in at least one `--print-config` result.
+Worth knowing: Oxlint exit 0 (no error-level diagnostics) and exit 1 (errors found) are only trusted when stdout is a complete native JSON report. A fatal invocation that also exits 1 emits no valid report, so it fails the measurement instead of quietly becoming zero; any other exit code is fatal outright. `verify` is optional, but reach for it whenever you use `rules` selectors: every selected diagnostic code must map to an enabled rule in at least one `--print-config` result.
 
-Pin Oxlint in the project rather than invoking `@latest`; rules and defaults may
-grow in non-breaking Oxlint releases, and Pawl should record such changes as an
-intentional baseline update.
+Pin Oxlint in the project rather than invoking `@latest`. Rules and defaults grow in non-breaking Oxlint releases, and when they do you want pawl to record that as an intentional baseline update, not a surprise.
 
 ### golangci-lint via SARIF
 
-golangci-lint can feed several dimensions from one named SARIF analyzer.
-Disable its default truncation and per-line deduplication or Pawl cannot recover
-findings the producer omitted:
+golangci-lint can feed several dimensions from one named SARIF analyzer. Disable its default truncation and per-line deduplication first — if the producer omits findings, pawl cannot recover them, and "fewer findings than reality" is the one direction this gate cannot tolerate:
 
 ```yaml
 analyzers:
@@ -240,10 +218,7 @@ dimensions:
     source: "go-lint"
 ```
 
-`min_files` is also available as an opt-in completeness floor, but it counts
-SARIF `artifacts`. Enable it only after confirming the pinned producer emits
-that optional catalog; locations inside `results` alone cannot prove how many
-files were scanned.
+`min_files` is optional and exists to catch an incomplete scan, but it counts SARIF `artifacts`. Enable it only after confirming your pinned producer actually emits that optional catalog; locations inside `results` alone can't prove how many files were scanned.
 
 ### Code duplication (jscpd)
 
@@ -284,18 +259,11 @@ files were scanned.
     regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
 ```
 
-`valid_exit_codes` is the complete set of exit codes that count as a successful
-run; leave it out and the contract is the default `[0]`. Reach for it instead of
-appending `|| true`, which accepts *every* exit code — a crashed linter, a typo
-in a flag, or a missing binary would then measure a clean zero.
+`valid_exit_codes` is the complete set of exit codes that count as a successful run; leave it out and the contract is the default `[0]`. Reach for it instead of appending `|| true`. That shell trick accepts *every* exit code, which means a crashed linter, a typo'd flag, or a missing binary all measure as a clean zero. We've watched exactly that happen; it's why this paragraph exists.
 
 ### Any linter, several rules, one run (`lines`)
 
-The recipe above runs the tool once per dimension. When you want three
-rule-scoped dimensions out of one scan — the thing the ESLint and Oxlint
-analyzers do — use a `lines` analyzer. It works with any tool that prints one
-finding per line, and pawl needs to know nothing about that tool beyond the
-pattern you give it. Ruff, as an example:
+The recipe above runs the tool once per dimension. When you want three rule-scoped dimensions out of one scan (the thing the ESLint and Oxlint analyzers do), use a `lines` analyzer. It works with any tool that prints one finding per line, and pawl needs to know nothing about the tool beyond the pattern you give it. Ruff, as an example:
 
 ```yaml
 analyzers:
@@ -326,26 +294,15 @@ dimensions:
       rules: ["E501"]
 ```
 
-Every non-empty line must match the pattern. A tool that prints a trailing
-`Found 3 errors.` summary will fail the measurement until you either filter it
-out in the command or widen the pattern — deliberately, because the alternative
-is that a tool changing its output format silently drops every dimension
-sourcing it to zero. That strictness is also the closest a line-oriented tool
-gets to rule verification: there is no rule catalog in line output, so `lines`
-does not accept `verify`. It also does not accept `min_files`, since the paths
-it sees are the files that had findings, not the files that were scanned.
+Every non-empty line must match the pattern. A tool that prints a trailing `Found 3 errors.` summary will fail the measurement until you filter it out in the command or widen the pattern. That strictness is deliberate: the alternative is a tool changing its output format and silently dropping every dimension that sources it to zero. It's also the closest a line-oriented tool gets to rule verification — there's no rule catalog in line output, so `lines` doesn't accept `verify`. Same reason it doesn't accept `min_files`: the paths it sees are the files that *had findings*, not the files that were scanned.
 
-Omit the selectors entirely and the dimension counts every finding — the "one
-number for the whole tool" case.
+Omit the selectors entirely and the dimension counts every finding. That's the "one number for the whole tool" case.
 
 ---
 
-## Report-format ingest (sit on top of the ecosystem)
+## Report-format ingest (reuse the formats tools already produce)
 
-These read the ecosystem's standard machine formats — a scanner's SARIF, a
-runner's JUnit XML, a coverage report — so the tool needs no wrapper. They gate
-on a **parseable report**, not the exit code (these producers exit non-zero to
-signal findings/failures).
+These read the ecosystem's standard machine formats — a scanner's SARIF, a runner's JUnit XML, a coverage report — so the tool needs no wrapper. They gate on a **parseable report**, not the exit code, because these producers exit non-zero precisely when they found something. Treating exit 1 as failure would invert the gate.
 
 ### SARIF scanners (Semgrep, CodeQL, Trivy, …)
 
@@ -408,8 +365,7 @@ A `coverage-summary.json` (Istanbul/nyc) is a one-number read — use `json-valu
 
 ## Read one number out of any JSON (`json-value`)
 
-The generic reader behind coverage, passing-test counts, `type-coverage`, and
-anything else that prints a JSON number.
+The generic reader behind coverage, passing-test counts, `type-coverage`, and anything else that prints a JSON number.
 
 ```yaml
 - id: "type-coverage"
@@ -423,16 +379,13 @@ anything else that prints a JSON number.
     unit: "%"
 ```
 
-Per-package values with `per-key-value` gating — a command that prints
-`{ "pkg-a": 91.2, "pkg-b": 88.0 }` and a matching custom adapter (see below)
-guards each key from dropping.
+Per-package values work too: a command that prints `{ "pkg-a": 91.2, "pkg-b": 88.0 }`, a custom adapter (see below) to parse it, and `per-key-value` gating guards each package against dropping.
 
 ---
 
 ## Anything else (custom command)
 
-pawl is language-agnostic: a dimension's `command` runs via `sh -c` and just
-has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: … }`.
+pawl is language-agnostic: a dimension's `command` runs via `sh -c` and just has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: … }`.
 
 ```yaml
 # Bundle size ceiling — the command prints a single number, extract reads it.
@@ -450,10 +403,7 @@ has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: �
   extract: number
 ```
 
-For the full raw-JSON contract, the four `extract` forms, and the exec adapter
-environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see
-[SPEC.md § Exec adapter contract](./spec/adapters/exec.md) and
-[§ Declarative extract layer](./spec/adapters/extract.md).
+For the full raw-JSON contract, the four `extract` forms, and the exec adapter environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see [SPEC.md § Exec adapter contract](./spec/adapters/exec.md) and [§ Declarative extract layer](./spec/adapters/extract.md).
 
 ---
 
@@ -466,8 +416,7 @@ pawl measure       # just the numbers — no baseline read, no verdict
 pawl trend         # each metric's value over the committed snapshot's git history
 ```
 
-- **Lock in a win on one dimension** without re-blessing the rest:
-  `pawl record --only <id>`.
-- **Only fail on new code** (grandfather existing debt): `pawl check --since origin/main`.
+- **Lock in a win on one dimension** without resetting the baseline for everything else: `pawl record --only <id>`.
+- **Only fail on new code** (existing debt stays exempt): `pawl check --since origin/main`.
 - **Stop hand-edited baselines**: `pawl guard origin/main` in CI.
 - **Give a noisy metric slack**: set `tolerance` (absolute, in the worse direction).

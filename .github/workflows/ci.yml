@@ -42,6 +42,11 @@ jobs:
       # verdict via scripts/render-comment.mjs; unit-test that rendering here.
       - name: node action-script tests
         run: node --test scripts/*.test.mjs
+      # The READMEs show a `pawl check` console block; that block is a claim.
+      # Rebuild the binary, reproduce the documented scenario for real, and
+      # byte-compare — docs that print what pawl never printed fail here.
+      - name: doc output reproduction check
+        run: node scripts/demo-repro-check.mjs
       # demo/scripts/ scores the agent evaluations that justify `agent`, and
       # both scripts have silently mis-scored a real run — one of them because a
       # new pawl subcommand was not in its command list. Adding a subcommand

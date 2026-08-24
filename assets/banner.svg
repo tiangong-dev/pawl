@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 590" width="1200" height="590" role="img" aria-labelledby="t d">
-  <title id="t">pawl — the regression gate a coding agent runs on itself</title>
-  <desc id="d">A coding agent reports a refactor complete, then runs `pawl check -q`. Four dimensions report against the recorded baseline: eslint-warnings 342 to 338 better, todo-markers unchanged, line-coverage unchanged, complexity 15 to 18 worse. The gate lists the regression down to src/parser.ts, names the dimension that improved and the scoped record that would lock it in, and exits 1 — so the agent withdraws the claim and goes back to the file.</desc>
+  <title id="t">pawl — anti-regression quality gate</title>
+  <desc id="d">pawl compares four quality dimensions with a recorded baseline. ESLint warnings improve, TODO markers and line coverage remain unchanged, and complexity regresses from 15 to 18. The gate identifies src/parser.ts, suggests the scoped record that would preserve the improvement, and exits 1.</desc>
 
   <style>
     :root {
@@ -14,7 +14,7 @@
       --dim: #8b949e;
       --good: #3fb950;
       --bad: #f85149;
-      --agent: #a371f7;
+      --accent: #a371f7;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -57,9 +57,9 @@
     .num    { fill: var(--term-fg); }
     .good   { fill: var(--good); }
     .bad    { fill: var(--bad); }
-    /* The agent's two turns are the only text here that is not captured CLI
-       output, so they are coloured as speech and never sit on the table grid. */
-    .agent  { fill: var(--agent); }
+    /* Context around the captured CLI output uses one accent colour and stays
+       outside the table grid. */
+    .accent { fill: var(--accent); }
     .say    { fill: var(--term-fg); }
 
     /* One 14s take. Each line is held from the moment it lands until the whole
@@ -128,22 +128,20 @@
 
   <rect class="bg" width="1200" height="590"/>
 
-  <!-- Identity. The four claims are the ones the session on the right cannot
-       make for itself: it shows one run, not how an agent comes to run it,
-       what it reads back, or what stops it moving the bar instead. -->
+  <!-- Identity and the properties that make the gate useful in a real repo. -->
   <rect class="logomark" x="40" y="85" width="120" height="120" rx="26"/>
   <text class="logotype" x="98.8" y="161.8" text-anchor="middle">Pawl</text>
-  <text class="tagline"  x="43" y="247">agents assert — pawl measures</text>
-  <text class="subtag"   x="43" y="275">numbers can only hold or improve</text>
+  <text class="tagline"  x="43" y="247">quality can move forward, never back</text>
+  <text class="subtag"   x="43" y="275">ratchet any metric your project can measure</text>
 
   <g class="tick"><path d="M44 320 l7 7 l13 -14"/></g>
-  <text class="badgem" x="74" y="327">pawl agent</text>
+  <text class="badge" x="74" y="327">any language, any metric</text>
   <g class="tick"><path d="M44 358 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="365">JSON verdict with next_action</text>
+  <text class="badge" x="74" y="365">local, Git-backed baseline</text>
   <g class="tick"><path d="M44 396 l7 7 l13 -14"/></g>
   <text class="badge" x="74" y="403">can't measure ≠ measured zero</text>
   <g class="tick"><path d="M44 434 l7 7 l13 -14"/></g>
-  <text class="badge" x="74" y="441">it can't lower its own bar</text>
+  <text class="badge" x="74" y="441">guard blocks a weaker baseline</text>
 
   <!-- The session -->
   <rect class="term-bg"  x="445" y="30" width="719" height="526" rx="10"/>
@@ -160,8 +158,8 @@
     <text class="title" x="1094" y="51" text-anchor="middle" fill="var(--bad)" font-weight="600">exit 1</text>
   </g>
 
-  <!-- The claim. -->
-  <text class="mono a1" x="473" y="100"><tspan class="agent">●</tspan> <tspan class="say">Split the long functions in src/parser.ts. Task complete.</tspan></text>
+  <!-- The committed snapshot is the source of the comparison below. -->
+  <text class="mono a1" x="473" y="100"><tspan class="accent">●</tspan> <tspan class="say">baseline: pawl.snapshot.json</tspan></text>
 
   <!-- The command, typed. -->
   <clipPath id="typewriter">
@@ -218,6 +216,6 @@
   <text class="mono good l9"   x="473" y="460">🎉 improved: eslint-warnings</text>
   <text class="mono dimtxt l10" x="504" y="484">run `pawl record --only eslint-warnings` to lock in the gains.</text>
 
-  <!-- The claim, withdrawn. -->
-  <text class="mono a2" x="473" y="532"><tspan class="agent">●</tspan> <tspan class="say">Not complete — complexity 15 → 18 in src/parser.ts. Fixing.</tspan></text>
+  <!-- A regression is a normal gate failure, with an actionable location. -->
+  <text class="mono a2" x="473" y="532"><tspan class="accent">●</tspan> <tspan class="say">gate failed — fix the regression or accept it explicitly</tspan></text>
 </svg>

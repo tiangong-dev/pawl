@@ -1,12 +1,13 @@
 # pawl — engine contract (frozen)
 
-This file is still the authoritative contract **index**. The contract body now
-lives under [`spec/`](spec/README.md), split so a change can be read without
-swallowing a 66KB file. The Go implementation and its tests are written against
-that tree.
+The contract body lives under [`spec/`](spec/README.md). It used to be one 66KB
+file; nobody could review a diff that size, so it's split by topic. This page
+stays as the index, mostly so the old `SPEC.md#…` links scattered across
+issues and PRs still land somewhere sensible. The Go implementation and its
+tests are written against that tree.
 
-Start at [spec/README.md](spec/README.md). Pick the file that matches the
-change; do not read every file.
+Start at [spec/README.md](spec/README.md). Open the file that matches your
+change. Don't read the rest.
 
 ## Former `##` sections
 
@@ -41,4 +42,4 @@ Former fragment links on this path now resolve as:
 - Built-in adapters → [spec/adapters/builtins.md](spec/adapters/builtins.md)
 - Report-format ingest → [spec/adapters/ingest.md](spec/adapters/ingest.md)
 - Declarative extract → [spec/adapters/extract.md](spec/adapters/extract.md)
-- Machine-readable output → [spec/engine/verdict.md](spec/engine/verdict.md#machine-readable-output)
+- Machine-readable output → [spec/engine/verdict.md#machine-readable-output](spec/engine/verdict.md#machine-readable-output)

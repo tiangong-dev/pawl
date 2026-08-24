@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="pawl — coding agent 自己会跑的防劣化门禁" width="820">
+  <img src="assets/banner.svg" alt="pawl — 防劣化质量门禁" width="820">
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="./SPEC.md">行为契约</a> · <a href="./RECIPES.md">配方手册</a>
+  <a href="./README.md">English</a> · <a href="./SPEC.md">行为契约</a> · <a href="./RECIPES.md">配置示例</a>
 </p>
 
 <p align="center">
@@ -15,56 +15,81 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/tiangong-dev/pawl?color=blue" alt="MIT license"></a>
 </p>
 
-**声称"什么都没变差"很便宜,量出来不便宜。** coding agent 会报告任务完成,PR 描述会写"无回归"。pawl 是中间那一步:把你在意的每个数字重新测一遍,只要有一个朝错误方向动了就失败。
+**pawl 是一道防止代码质量倒退的门禁。** 它先记录仓库当前的质量数据，之后用同样的方法重新测量；任何指标变差，门禁就失败。
 
-每个**维度(dimension)** 就是一个数字:超长文件数、超过复杂度阈值的函数、覆盖率、`as any` 个数……任何能用一条命令算出一个数的东西都行。`pawl record` 把这些数字拍成基线快照;`pawl check` 重新测量,**只要有任何维度变差就退出码 1**。数字只能持平或变好,门禁永不倒退。
-
-```bash
-pawl record                     # 测量全部维度,写入基线
-pawl check                      # 门禁:任何维度回归即退出码 1
-pawl agent                      # 告诉你的 coding agent 这道门禁存在
-pawl guard origin/main          # 防篡改:抓手改过的基线
-```
-
-用什么工具测量是每个维度自己的实现细节。把 ESLint 换成别的 linter、或把整个项目迁移到 pawl,只需改写**一条 adapter 命令**——基线和门禁原封不动。
-
-## 目录
-
-[为什么选 pawl](#为什么选-pawl) · [安装](#安装) · [快速上手](#快速上手) ·
-[给 coding agent 用 pawl](#给-coding-agent-用-pawl) ·
-[命令](#命令) · [配置维度](#配置维度) · [日常使用](#日常使用) ·
-[CI 集成](#ci-集成) · [pawl 不做什么](#pawl-不做什么)
-
-## 为什么选 pawl
-
-一刀切的阈值("覆盖率必须 ≥ 80%")要么第一天就把团队卡死,要么松到永远不触发。防劣化门禁换个思路:锁定**你今天所在的位置**,只允许变好——加了 600 行的文件、多了一个 `as any`、覆盖率下降的 PR 会失败;删掉它们的 PR 则把基线重新压低。你单调地偿还技术债,却从不用去拍一个魔法数字。
-
-- **任何语言、任何东西都能测。** 一个维度就是"一条打印出数字的命令"——覆盖率、测试通过数、包体积、`as any` 个数、依赖图里的环数、只有你代码库才有的指标。pawl **不解析代码、不带任何要维护的插件生态**,你喂它什么数字,它就 ratchet 什么数字。
-- **基线就在你自己的仓库里。** 快照是一份提交进 git 的 JSON——"你今天所在位置"的单一真相源。**全本地、离线**:无账号、无服务器、无面板,你的代码一个字节都不出 CI。
-- **是棘轮,不是阈值。** 锁定你此刻所在,只放行变好。存量债按文件被 grandfather,你**永远不必一次性全修**——而数字永远回不去。
-- **按文件 / 按 key 的精度。** 局部劣化藏不进"净零总量",offender 在文件**内部**挪位也不会误报——基线记的是**每个文件各自的计数**,不只是总数。
-- **诚实是结构性保证。** "没测出来"(退出码 `2`)绝不与"测得零"混淆;手改基线会被 `pawl guard` 抓出。门禁宁可大声中止,也不放过一个谎。
-- **一个静态二进制。** 几秒钟丢进任何 CI;它坐在你**已在用的工具之上**,并能原生渲染成 GitHub PR 评论与注解。
-
-## 安装
+固定阈值往往要求老项目先还清技术债，门禁才能启用。pawl 不需要。第一次测量就是基线：存量问题可以暂时保留，但新的改动不能让它们继续增加；某项指标一旦改善，新基线就会把成果锁住。
 
 ```bash
-npm install -D @pawl-tools/cli                          # 经 npm 装预编译二进制
-go install github.com/tiangong-dev/pawl/cmd/pawl@latest # 或从源码构建
-curl -fsSL https://raw.githubusercontent.com/tiangong-dev/pawl/main/install.sh | sh
+pawl record                     # 记录当前基线
+pawl check                      # 有指标退化时退出 1
+pawl record --only line-coverage # 只锁定一项改进
+pawl guard origin/main          # 检查基线有没有被调低
 ```
 
-`install.sh` 用机器上已有的工具链——有 Go 用 Go、有 npm 用 npm、都没有就直接下二进制。预编译二进制覆盖 darwin / linux / win32 的 x64 / arm64,且完全静态(不含 CGO),同一个 Linux 二进制在 glibc 和 musl 上都能跑。
-
-pawl 本身是个零依赖的小 Go 二进制。adapter 自带各自的运行时(ESLint 维度需要 Node 等)——见[自定义命令](#自定义命令)。
+一个**维度（dimension）**就是一项可量化的数据：覆盖率、通过的测试数、 lint 问题、超长文件、产物体积、循环依赖，或者项目自己的指标。pawl 既提供常用适配器，也接受自定义命令，因此不限定语言，也不要求替换现有工具链。
 
 ## 快速上手
 
-`pawl init` 生成一份可用的起步配置(再从[配方手册](./RECIPES.md)里挑更多粘进去);也可以手写 `pawl.yaml`:
+通过 npm、Go 或安装脚本获取静态二进制：
 
-**1. 在仓库根写 `pawl.yaml`:**
+```bash
+npm install -D @pawl-tools/cli
+# 或：go install github.com/tiangong-dev/pawl/cmd/pawl@latest
+# 或：curl -fsSL https://raw.githubusercontent.com/tiangong-dev/pawl/main/install.sh | sh
+```
+
+生成配置并记录第一份基线：
+
+```bash
+pawl init
+pawl record
+git add pawl.yaml pawl.snapshot.json
+git commit -m "chore: 接入 pawl 质量门禁"
+```
+
+以后在本地和 CI 中运行 `pawl check`。发生退化时，pawl 会明确指出哪项指标发生了变化：
+
+```console
+$ pawl check
+
+metric         baseline    current       Δ  status
+------------------------------------------------
+file-length           3          4      +1  ❌ worse
+panics                1          1      ±0  ✅ same
+todo-markers         12         12      ±0  ✅ same
+
+❌ regressions:
+  • file-length (超过 500 行的文件)
+      total 3 → 4
+```
+
+日常流程就这几步：测量、比较、修复退化、记录真正的改进。
+
+## 为什么用棘轮，而不是固定阈值
+
+棘轮只能往一个方向转动，pawl 也是一样：质量只能变好，基线不会被悄悄调差。
+
+固定阈值只有项目已经达标时才好用。覆盖率只有 62%、还留着几个 700 行文件、又赶着上线的老仓库用不上它——阈值定在理想状态，所有 PR 都会失败；定在现状，规则就形同虚设。
+
+pawl 从项目的真实现状出发：第一份快照如实记录现有技术债，不需要提前整改；但从这一刻起新增的退化会立即失败，覆盖率下降或新增一个超长文件都会让 `check` 退出 1。改进也会被留住——某个维度改善后重新记录，后续改动就不能让它退回原值。按文件、按 key 比较时，A 文件的修复也不能抵消 B 文件新增的问题。
+
+基线本身只是提交到 Git 的一个 JSON 文件。不需要账号，不需要服务端，也不收集遥测；`pawl trend` 直接从已有的 Git 历史读取指标走势。
+
+## pawl 如何测量仓库
+
+`pawl.yaml` 中的每个维度都有 id、好坏方向和一个测量来源：
+
+- `file-length`、`pattern-count` 等零依赖原语；
+- ESLint、Oxlint、SARIF、JUnit、lcov、cobertura 等工具或报告适配器；
+- 输出数字或测量对象的自定义命令。
+
+测量工具与最终裁决彼此分离。即使团队替换了 linter，也只需修改该维度的适配方式，不必重做基线流程和 CI 门禁。
+
+### 一份小而实用的配置
 
 ```yaml
+snapshot: "pawl.snapshot.json"
+
 dimensions:
   - id: "file-length"
     title: "超过 500 行的文件"
@@ -72,328 +97,223 @@ dimensions:
     builtin: "file-length"
     options:
       threshold: 500
-      include: ["src/**/*.ts"]
-      exclude: ["**/*.d.ts"]
+      include: ["src/**/*.ts", "src/**/*.go"]
 
-  - id: "todos"
-    title: "TODO / FIXME 标记"
+  - id: "type-escapes"
+    title: "TypeScript 类型逃生舱"
     direction: "lower-is-better"
+    gate: "per-file-count"
     builtin: "pattern-count"
     options:
-      pattern: "TODO|FIXME"
-      include: ["src/**/*.ts"]
-```
+      pattern: 'as\s+any|@ts-(ignore|nocheck)'
+      include: ["src/**/*.ts", "src/**/*.tsx"]
 
-**2. 记录基线**——提交生成的 `pawl.snapshot.json`:
-
-```bash
-pawl record
-git add pawl.yaml pawl.snapshot.json && git commit -m "chore: 接入 pawl 门禁"
-```
-
-**3. 门禁每个 PR**——有维度回归时 `pawl check` 退出码 `1`:
-
-```bash
-pawl check
-```
-
-**4. 锁定改进。** 当某个 PR 把数字改好了,`check` 会提示你重新记录;`pawl record --only <id>` 写入更低的新基线,从此它再也回不去。
-
-**5. 告诉你的 coding agent 这道门禁的存在。** 否则它只能从一次红色 CI 里知道,或者根本不知道——见[给 coding agent 用 pawl](#给-coding-agent-用-pawl)。
-
-## 给 coding agent 用 pawl
-
-agent 会报告任务完成;它到底有没有测过是另一回事。在本仓库自己的 A/B 评测里([demo/](./demo/README.md)),没被告知门禁存在的那一组,在收尾前跑过门禁的是 **4 格里的 0 格**,装了说明块的那一组是 **6 格里的 4 格**。而对照组里那些确实去找裁决的 agent,找到 `pawl measure` 就停下了,然后把某个维度报成"改进"——那个差值其实是它更早一次 `grep` 得来的。
-
-`pawl agent` 把下面这套闭环装到 agent 本来就会看的地方。它会问装进哪个文件,因为各家工具的答案不一样:Claude Code 读 `CLAUDE.md`,根本不读 `AGENTS.md`;Codex、Antigravity 和 Cursor 读 `AGENTS.md`。用 `--write claude` 或 `--write agent` 可以跳过询问;没有终端时(管道、CI、agent 自己 shell 调用)直接打印说明块。pawl 升级后重跑一次,已装的块会被就地替换,不会变成两份。要点:
-
-1. `pawl check --format json`(可选 `--only <id>`,提交前加 `--since HEAD`)。
-2. 读 `failure_class`、`next_action`、`watch`。不要往 `near`/`over` 的文件里加代码;`headroom` 是剩余量。`watch` 不改变退出码。
-3. 指标 `status: better` 时跑该 metric 的 `next_action`(`pawl record --only <id>`),不要全量 `record`。
-4. Exit 1 / `failure_class: regression` → 改代码。Exit 2 / `could-not-measure` → 修环境(`error`、`failed_metrics`),不要伪造数字。CI:全量 `pawl check`(不要 `--only`)。
-5. 裁决里带顶层 `only` 数组时,本次只测了这些维度——它的 exit 0 不等于全量门禁通过。
-6. 指标带 `artifact` 块时,这个数字是从那个文件读出来的。`generated: false` 且 `age_seconds` 很大,说明它描述的是一份旧报告而不是当前代码——先重新生成再信任或记录这个值。工件年龄不改变退出码。
-
-`pawl measure` 不能替代第 1 步:它只打印当前数字、不读基线,所以它能说出某个维度**是多少**,永远说不出它有没有变好。
-
-针对 AI 生成债务的现成配方见 [RECIPES.md](./RECIPES.md#ai-generated-debt);这套说明是怎么评测的、以及它在哪些运行里**没有**起作用,见 [demo/](./demo/README.md)。
-
-## 命令
-
-| 命令 | 作用 |
-|---|---|
-| `pawl init` | 生成一份起步 `pawl.yaml`(不覆盖已有文件) |
-| `pawl agent` | 把 AI 编码助手正确使用这道门禁所需的操作说明装进 `AGENTS.md` 或 `CLAUDE.md`(`--write agent\|claude`);没有终端可询问时改为打印 |
-| `pawl measure` | 只测量并打印数字——不读基线、不下判决;输出就是快照格式 |
-| `pawl record` | 测量全部维度,(覆盖)写入快照 |
-| `pawl check` | 测量 + 对比;**任何回归退出码 1**——CI 门禁 |
-| `pawl guard <ref>` | 把工作区快照与 `<ref>` 处提交的版本对比——防篡改门禁 |
-| `pawl trend [<id>]` | 打印各维度在已提交快照 git 历史里的取值走势——全本地,不出云 |
-| `pawl rank` | 按行数/字节给 include 文件排序(含近阈值文件) |
-| `pawl version` | 打印 `pawl <version>`(无配置也能跑) |
-| `pawl help [<命令>]` | 打印全局或子命令帮助(也支持 `-h` / `--help`) |
-
-不带命令时默认执行 `check`。
-
-### 旗标
-
-| 旗标 | 可用于 | 作用 |
-|---|---|---|
-| `-c`, `--config <path>` | 全部 | 指定配置文件(默认 `./pawl.yaml`) |
-| `--format json` | `check`、`record`、`trend`、`rank` | 输出稳定的机器可读裁决而非表格([schema](./spec/engine/verdict.md#machine-readable-output))——pawl 只当门禁,任何 reporter 去消费这份 JSON |
-| `--only <id>[,<id>…]` | `check`、`record`、`measure` | 收窄到这些维度。`record` 上其余已提交基线逐字保留;`check` 上这是 agent 内环——**CI 仍应跑全量 `check`** |
-| `--since <ref>` | `check` | 只对相对 `<ref>` 改动的行门禁([clean-as-you-code](#diff-收窄检查--since)) |
-| `--current <path\|->` | `check`、`record` | 用一份 `pawl measure` 产出的测量文档来判定或落盘,而不是重新测量,让一次测量驱动它之后的每个决定([measure](./spec/commands/measure.md)) |
-| `--accept-worse` | `record` | 允许写入比已提交基线更差的值,并打印授权它的提交 trailer |
-| `--dry-run` | `record` | 只预览 record 会写入什么,不实际落盘 |
-| `--limit <n>` | `trend` | 限制历史行数(默认 20,`0` = 全部) |
-| `--write <target>` | `agent` | 不询问,直接把说明块装进 `AGENTS.md`(`agent`)或 `CLAUDE.md`(`claude`) |
-| `-q`, `--quiet` | `check`、`record`、`measure` | 静音进度和提示,只在退出码非 0 时才打印文本裁决——门禁通过时一个字都不说 |
-
-`--version` 在所有命令上都可用,输出与 `pawl version` 相同。`--format` 在 `agent`(输出 Markdown)和 `measure`(输出测量文档)上是用法错误。
-
-### 退出码
-
-| 码 | 含义 |
-|------|---------|
-| **0** | 通过(包括 `guard` 的合理跳过) |
-| **1** | `check`:某维度回归 · `guard`:快照相对 `<ref>` 变差(且未被 accepted-debt trailer 覆盖) · `record`:未传 `--accept-worse` 时拒绝写入更差的值 |
-| **2** | 无法诚实测量/对比:配置错误、快照缺失/损坏、工具崩溃、超时、未知命令…… |
-
-**1 与 2 的区分是承重的**:`1` 表示"测量正常,代码变差了";`2` 表示"没能诚实测量",绝不能被当成通过。
-
-## 配置维度
-
-`pawl.yaml` 列出各维度;每个维度恰好使用 **内置(`builtin`)**、**自定义命令(`command`)** 或命名分析源(`source`)之一。命名分析源每次调用只扫描、解析一次,多个维度再各自过滤 findings。
-
-```yaml
-snapshot: "pawl.snapshot.json"   # 可选,相对本文件所在目录
-
-analyzers:
-  - id: "frontend-eslint"
-    builtin: "eslint"
-    verify:                       # 可选的 --print-config 探针
-      - "npx eslint --print-config src/probe.ts"
-    options:
-      command: "npx eslint src --format json --no-inline-config"
-      min_files: 1
-
-dimensions:
-  - id: "cognitive-complexity"   # 必填,唯一
-    title: "认知复杂度 > 15 的函数" # 必填,给人看的标题
-    direction: "lower-is-better" # 必填:lower-is-better | higher-is-better
-    gate: "per-file-count"       # 可选:total(默认) | per-file-count | per-key-value
-    tolerance: 0                 # 可选,向变差方向的绝对容差
-    timeout: "10m"               # 可选 Go duration,默认 10m
-    source: "frontend-eslint"    # 复用上面的完整报告……
-    options:
-      rules: ["sonarjs/cognitive-complexity"]
-
-  - id: "coverage"
-    title: "行覆盖率"
-    direction: "higher-is-better"
-    gate: "per-key-value"
-    tolerance: 1
-    command: "./scripts/coverage.sh"   # ……或一条自定义命令
-```
-
-`verify` 会证明过滤的 ESLint/Oxlint rule 在至少一个代表文件上已启用,拼错/禁用 rule 会 exit 2,而真正的干净零仍合法。Oxlint 有一等的命名 `oxlint` analyzer,直接解析原生 JSON 并让多个维度共享一次扫描;golangci-lint 等仍可通过命名 `sarif` analyzer 共享报告;没有内建支持、也不产 SARIF 的工具用 `lines` analyzer,一条正则就能得到同样的共享扫描。完整配置见[配方手册](./RECIPES.md)。
-
-### 内置 adapter
-
-分三层。**原语(primitives)** 是 Go 原生实现(零依赖)。**工具 adapter** 运行**你**提供的分析器命令、解析它的机器输出。**报告格式摄取(ingest)** 读取生态里的标准机器格式,任何能吐这种格式的工具都能免包装成为一个维度——pawl 掌握格式知识,你掌握工具配置。
-
-| builtin | 层 | 测量什么 | 常用 gate |
-|---|---|---|---|
-| `file-length` | 原语 | 行数超过 `threshold` 的文件数 | `total`(再挂一个 `per-key-value` 可拦住已超限文件继续变长) |
-| `file-bytes` | 原语 | 字节数超过 `threshold` 的文件数 | `total`(配对方式同 `file-length`) |
-| `pattern-count` | 原语 | 正则匹配数(各种抑制/逃生舱:`as any`、`//nolint`、`try!`) | `per-file-count` |
-| `eslint` | adapter | ESLint 消息计数(可用 `rules` 过滤) | `per-file-count` |
-| `oxlint` | adapter | Oxlint 原生 JSON diagnostics(可按 rule/severity 过滤并跨维度共享) | `per-file-count` |
-| `jscpd` | adapter | 从 jscpd JSON 报告读重复行数 | `total` |
-| `swift-complexity` | adapter | Swift **认知**复杂度超标函数(SwiftLint 测不了的) | `per-file-count` |
-| `json-value` | adapter | 从任意工具 JSON 里读一个数(覆盖率 %、通过用例数、type-coverage)——`higher-is-better` 的家 | `per-key-value` |
-| `lines` | adapter | 用一条正则把任何工具的 `path:line: message` 输出变成 findings,一次扫描供多个维度按 rule/level 过滤(仅命名 analyzer 可用) | `per-file-count` |
-| `sarif` | ingest | SARIF 日志里的 findings(CodeQL、Semgrep……),可按 rule/level 过滤 | `per-file-count` |
-| `junit` | ingest | 从 JUnit XML 报告读失败/通过/总用例数 | `total` |
-| `coverage` | ingest | 从 lcov 或 cobertura 读行/分支/函数覆盖率 % | `total` |
-
-报告格式的生产工具常用非零退出码表示"有 findings/失败",所以直接使用的 ingest builtin 默认以**能否解析出合法报告**为准。CI 已经在产 lcov 报告的话,一个覆盖率地板只差一个维度:
-
-```yaml
   - id: "line-coverage"
     title: "行覆盖率 %"
     direction: "higher-is-better"
+    tolerance: 0.5
     builtin: "coverage"
-    options: { file: "coverage/lcov.info", format: "lcov" }
+    options:
+      file: "coverage/lcov.info"
+      format: "lcov"
 ```
 
-每个 builtin 的确切选项、退出码处理、breakdown 形状见 [SPEC.md § Built-in adapters](./spec/adapters/builtins.md) 与 [§ Report-format ingest](./spec/adapters/ingest.md)。全部 builtin 的可直接粘贴配置——外加 SARIF/JUnit/覆盖率/复杂度/重复率——都在[配方手册](./RECIPES.md)里。
+[配置示例](./RECIPES.md)收录了 Go、TypeScript、Python、Rust、Swift、常见 lint 工具、报告格式和自定义命令，可以直接复制后调整路径。
 
-### 自定义命令
+### Gate 模式
 
-**pawl 不限制编程语言。** 维度的 `command` 经 `sh -c` 执行——可以是 shell 脚本、Node、Python、Go、编译好的二进制、`curl | jq`,什么都行。它只需遵守契约:
+总数始终会参与比较，`gate` 可以在此基础上增加更精确的检查：
 
-- 往 stdout 打印**恰好一个 JSON 对象**:
-  ```json
-  { "value": 42, "unit": "things", "breakdown": { "src/a.ts:17": 2 } }
-  ```
-  `value` 必填且为有限数。`unit` 默认 `"count"`。`breakdown` 可选(`null` 与省略等价)。
-- **退出码 0 = 一次测量;非 0 / 超时 / 非 JSON 的 stdout = 测量失败** → pawl 以退出码 2 中止整轮。工具用非零退出码表示"发现了问题"时,声明 `valid_exit_codes: [0, 1]`;它严格优于 `tool || true`——后者接受**每一个**退出码,把崩溃的工具变成一个干净的零。
-- 工作目录 = 配置文件所在目录;`PAWL_ROOT` 设为其绝对路径;stderr 透传给人看诊断。
+| gate | 适用指标 | 行为 |
+|---|---|---|
+| `total` | 覆盖率、产物体积、问题总数 | 比较单个数值 |
+| `per-file-count` | lint 问题、抑制标记、TODO | 一个文件的修复不能抵消另一个文件的新问题 |
+| `per-key-value` | 分包覆盖率、各产物体积 | 分别保护基线中已有的每个 key |
 
-`breakdown` 的 key 决定 [gate 模式](#gate-模式):`per-file-count` 用 `"<path>:<line>"` 形式的 key,`per-key-value` 用具名 key(如 `"pkg-a": 91.2`)。
+技术债数量和体积通常使用 `lower-is-better`；覆盖率、通过测试数等地板指标使用 `higher-is-better`。对于存在小幅波动的指标，可用 `tolerance` 设置向变差方向的绝对容差。
 
-> 任何项目迁移到 pawl 都靠这个——不需要 pawl 理解它的工具:把现有测量包成一条打印上述 JSON 的命令即可。
+### 内置集成
 
-### 免写 wrapper:`extract`
+| builtin | 测量来源 | 常用 gate |
+|---|---|---|
+| `file-length`、`file-bytes` | 仓库文件 | `total` + `per-key-value` |
+| `pattern-count` | 正则匹配 | `per-file-count` |
+| `eslint`、`oxlint` | linter 原生输出 | `per-file-count` |
+| `jscpd`、`swift-complexity` | 工具专用 JSON | `total` / `per-file-count` |
+| `json-value` | JSON 中的一个数值 | `total` / `per-key-value` |
+| `lines` | 按行输出的分析结果 | `per-file-count` |
+| `sarif` | SARIF findings | `per-file-count` |
+| `junit` | 通过、失败、跳过或全部测试数 | `total` |
+| `coverage` | lcov 或 cobertura 覆盖率 | `total` |
 
-当工具本身就打印数字(或一列可 grep 的发现)时,在 `command` 维度上声明 `extract`,pawl 直接派生测量——不用再写只为拼 JSON 的 wrapper 脚本。四种形态:
+命名 analyzer 可以让多个维度共用一次扫描。所有选项和输出语义以 [引擎契约](./spec/README.md)为准。
+
+### 自定义命令与 `extract`
+
+遇到 pawl 不认识的工具，可以定义命令维度。完整适配器接受一个 JSON 对象：
+
+```json
+{ "value": 42, "unit": "findings", "breakdown": { "src/a.ts:17": 2 } }
+```
+
+如果命令本来就会打印数字或逐行输出问题，`extract` 可以省掉包装脚本：
 
 ```yaml
-- id: todos
-  command: "grep -rn TODO src"
+- id: "circular-deps"
+  title: "循环依赖"
   direction: "lower-is-better"
-  valid_exit_codes: [0, 1]   # grep 没匹配到任何东西时退出 1
-  extract: lines             # value = 非空行数
+  command: "npx madge --circular --json src | jq 'length'"
+  extract: number
 
-- id: legacy-lint
-  command: "my-linter --format concise"
+- id: "todos"
+  title: "TODO 标记"
   direction: "lower-is-better"
   gate: "per-file-count"
+  command: "grep -rn TODO src"
+  valid_exit_codes: [0, 1]
   extract:
-    regex: '^(?P<path>[^:]+):(?P<line>\d+):'   # value = 匹配数;path/line → breakdown
+    regex: '^(?P<path>[^:]+):(?P<line>\d+):'
 ```
 
-另有 `extract: number`(stdout 就是一个数)和 `extract: { json_path: "a.b.c" }`(从命令 stdout 的 JSON 里读一个数)。诚实性规则不变:退出码不在 `valid_exit_codes` 之内、或输出无法按声明抽取,都是测量失败(退出码 2)——用 `regex` 时每个非空行都必须匹配,写错的正则不会静默报零。细节见 [SPEC.md § Declarative extract layer](./spec/adapters/extract.md)。
+测量失败不等于结果为零。命令崩溃、报告损坏、超时或抽取失败时，pawl 会退出 2，不会把“没测出来”伪装成“测得零”。对于用非零退出码表示“发现问题”的工具，应声明 `valid_exit_codes`，而不是用 `|| true` 吞掉所有错误。
 
-### gate 模式
+## 命令
 
-标量总数**始终**会被检查(带 `tolerance`)。在其之上再叠一层 per-breakdown 检查,防止局部回归躲在净零总数背后(文件 A 变好、文件 B 变差、总数不变):
+| 命令 | 用途 |
+|---|---|
+| `pawl init` | 写入起步 `pawl.yaml`，已有文件不会被覆盖 |
+| `pawl record` | 测量并写入快照 |
+| `pawl check` | 对比当前测量与基线；也是默认命令 |
+| `pawl measure` | 只输出当前测量，不读基线、不下裁决 |
+| `pawl guard <ref>` | 与 `<ref>` 中的快照比较，防止基线被调低 |
+| `pawl trend [<id>]` | 查看已提交快照的历史 |
+| `pawl rank` | 按行数或字节数排列纳入检查的文件 |
+| `pawl agent` | 安装或打印供编码 Agent 使用的操作说明 |
+| `pawl version` | 输出当前版本 |
 
-- **`total`**——只看标量。(把本已很长的文件改得更长不该失败;只有新文件越过限制、从而推动总数,才该失败。)
-- **`per-file-count`**——每个文件的**违规计数总和**不得上升。breakdown value 表示同一 `path:line` 的 finding 数,因此同一行两个规则/匹配仍算两个;同文件内只移动相同数量的 finding 仍不会触发。
-- **`per-key-value`**——基线里每个 key 的**值**不得变差(带容差)。新增的 key、删除的 key 都忽略。适合按包统计的覆盖率 / type-coverage。
+三个退出码的区别很重要：
 
-`tolerance` 是向变差方向的绝对容差;正好卡在边界上算通过。`higher-is-better` 与 `lower-is-better` 会把比较方向反过来。
+| 退出码 | 含义 |
+|---|---|
+| `0` | 测量完成，门禁通过 |
+| `1` | 测量完成，但有指标退化 |
+| `2` | pawl 无法给出可信裁决 |
 
-按维度形态选 gate:`per-file-count` 是 *issue 计数*类维度(违规来来去去)最强的净零防护;`per-key-value` 适合 *key 稳定的数值*类维度(固定 key 集、值在动),且只守护基线里已有的 key。两者都不是万能的净零证明——[SPEC](./spec/engine/comparison.md#gate-modes) 写清了各自的边界。
+完整参数见 `pawl help [command]`。需要稳定的机器可读结果时，使用 `--format json`。
 
-## 日常使用
+## 日常工作流
 
-### 单独锁定一个胜利(`record --only`)
-
-全量 `pawl record` 会一次性重测并重新"祝福"**所有**维度——想锁定某一项的改进,就会顺带把其他维度此刻的读数照单全收,包括你并不想接受的别处回归。改好了哪一项,就只锁哪一项:
-
-```console
-$ pawl record --only line-coverage
-📸 re-recorded line-coverage; preserved 4 other metric(s) → pawl.snapshot.json
-```
-
-只有列出的维度会被重测;其余每个指标都逐字保留已提交的值。无关维度的 adapter 坏了也不挡路——它根本不会被运行。
-
-保留行会显示 `current —` / `preserved`;JSON 使用 `measurement_state:"preserved"`、`current:null` 和 `snapshot_value`。
-
-### 接受技术债(`--accept-worse`、`--dry-run`)
-
-`record`(无论带不带 `--only`)默认拒绝把某个维度写成比已提交基线更差的值——一次全量 record 不该在没人盯着的维度上,悄悄放行一次回归:
-
-```console
-$ pawl record
-❌ record refused — 1 dimension(s) would be recorded worse than the committed baseline:
-  • complexity  12 → 15
-re-run with --accept-worse to record this as accepted debt, or fix the regression first.
-```
-
-`--accept-worse` 会照样写入,并打印一行 trailer(提交信息末尾的 `Key: value` 元数据)供你贴进提交信息,好让 `pawl guard` 分辨这次回归是故意接受的,而不是手改基线:
-
-```console
-$ pawl record --accept-worse
-📸 snapshot written to pawl.snapshot.json
-⚠️  recorded worse — add these trailers to the commit that includes the snapshot:
-    Pawl-Accept: complexity 15
-`pawl guard` treats a worsened metric without a matching trailer as unauthorized.
-```
-
-`pawl guard <ref>` 会读取 `<ref>..HEAD` 之间每个提交里的 `Pawl-Accept: <id> <value>` trailer;只要某个回归维度的当前值不比 trailer 里声明的值更差,就把它打印成"已接受"提示而非违规。trailer 存在 git 历史里,不进快照文件,防篡改对比本身(基线 vs 当前)因此完全不受影响。
-
-`--dry-run` 只预览表格(叠加 `--accept-worse` 时还会预览 trailer 那几行)、不写入任何东西;它的退出码和一次真实 record 会给出的一致。
-
-### diff 收窄检查(`--since`)
-
-`pawl check --since <ref>` 保留完整门禁,但**只对工作区相对 `<ref>` 改动的行上引入的回归失败**——未触碰行上的存量债务被豁免,于是庞大的历史基线不会卡住每个 PR,而新代码依然不能回归。未提交、未跟踪的改动也计入(本地 agent 循环尚未 commit 时仍能拦住新债)。它仍然需要快照(是"收窄到新代码的门禁",不是独立的新代码扫描器)。
+### 只锁定一项改进
 
 ```bash
-pawl check --since origin/main        # PR 上:只对改动行门禁
+pawl record --only line-coverage
 ```
 
-`per-file-count` 维度(breakdown key 是 `"path:line"`、标量=offender 计数)会被收窄到新增行;`total` 与 `per-key-value` 维度无法忠实按行归属,**按全量强制**(会被显式标注,绝不静默跳过)——这样 `--since` 恰好是"full-mode 裁决收窄到改动行",不多不少。输出会报告 merge-base、哪些维度被全量强制、以及有多少条存量回归被豁免;加 `--format json` 得到机器可读形式(`mode: "since"`,每条被豁免的回归标 `suppressed`)。
+只有指定维度会重新测量和更新，其余值从已有快照原样复制。这样既不会被无关适配器的故障挡住，也不会在记录一项改进时顺手放过另一项退化。
 
-作用域按**行号**(与 reviewdog / Sonar clean-as-you-code 同):内容未变、只是位置移动的存量 offender 不会被 flag,但落在**内容真正改动的行**上的 offender 即使"是移过来的"也会计入——它从不漏报改动行。细节见 [SPEC.md](./spec/commands/since.md#diff-scoped-checking)。
+### 只检查改动行
 
-### 看质量走势(`pawl trend`)
+历史债较多的仓库可以运行：
 
-快照是一个已提交的文件,它的 git 历史**就是**指标历史。`pawl trend [<id>]` 直接渲染出来——全本地,零云,零账号:
-
-```console
-$ pawl trend line-coverage
-line-coverage  (higher-is-better, %)
-  6952777  2026-07-13  71.2  —
-  165cabc  2026-07-14  72.4  +1.2
-  0142640  2026-07-16  74.0  +1.6
+```bash
+pawl check --since origin/main
 ```
 
-不带 id 看全部维度。`--limit <n>` 限制行数(默认 20,`0` = 全部);`--format json` 输出机器可读的数据点,方便自己画图。
+能定位到行的 `per-file-count` 问题只检查改动行；覆盖率总数等无法可靠归属到某一行的指标仍会全量执行，并在结果中明确标注。未提交和未跟踪的改动也会纳入检查。
 
-## CI 集成
+### 明确接受技术债
 
-pawl 是单个二进制——任何 CI 都能跑。pawl 自己的 CI 就在 dogfood 这整条链路:把 `go test` 经 go-junit-report 生成真实 JUnit 报告,再用 `junit` builtin 给通过用例数设地板,让 ingest 路径每次提交都跑在真实工具产物上([pawl.yaml](./pawl.yaml))。
+`pawl record` 默认拒绝写入更差的值。确实需要接受一次退化时，先预览，再显式记录：
 
-### GitHub Actions
-
-action 负责安装二进制;不传 `command` 时它只做这件事:
-
-```yaml
-- uses: tiangong-dev/pawl@v0       # 把 pawl 二进制放进 PATH——无需 Go/Node
-  with:
-    version: v0.8.0                # 可选;默认取最新 release
-- run: pawl check
-- run: pawl guard origin/${{ github.base_ref }}   # PR 上跑
+```bash
+pawl record --dry-run --accept-worse
+pawl record --accept-worse
 ```
 
-传 `command` 时,action 还会跑门禁,并在 pull_request 上把结果渲染成一条 sticky 评论(取自 `--format json` 裁决)回写——不用再手写 `github-script`:
+pawl 会输出一条 `Pawl-Accept: <id> <value>` 提交 trailer。`pawl guard` 借此区分评审过的技术债和未经授权的基线下调。
 
-```yaml
-# ... 门禁需要的前置步骤,如构建 exec adapter ...
-- uses: tiangong-dev/pawl@v0
-  with:
-    command: check
-    args: --since origin/${{ github.base_ref }}   # 可选的附加参数
-    # comment: 'false'   # 默认 true;设 false 关掉 PR 评论
-```
+### 复用同一次测量
 
-评论步骤需要 `permissions: pull-requests: write`。门禁退出码在评论之后强制执行,所以回归照样让 job 失败,同时评论仍会发出。在 `GITHUB_ACTIONS` 下,`check` 还会对每个回归在 PR diff 上发内联 `::error::` 注解,并在某维度变好但基线没重记时发 `::notice::`。
-
-### 其他 CI
-
-任何 CI 里跑 `npx -y @pawl-tools/cli@0.8.0 check`(或下载 release 二进制)即可。一次测量可以同时驱动裁决和随后的记录——当某个维度是从磁盘读报告时这尤其重要,两次独立测量可能读到两个不同的构建:
+如果维度读取构建产物，最好只测一次，确保 `check` 和后续 `record` 看到的是同一份结果：
 
 ```bash
 pawl measure > .pawl/current.json
-pawl check  --current .pawl/current.json
-pawl record --only <id> --current .pawl/current.json
+pawl check --current .pawl/current.json
+pawl record --only line-coverage --current .pawl/current.json
 ```
 
-### 防篡改:`pawl guard`
+### 查看走势
 
-`pawl check` 只证明磁盘上的快照与一次新鲜测量一致——不证明快照的历史是诚实的。`pawl guard <base-ref>` 把已提交的快照与 PR 目标分支对比,若被手改成更差的值就失败。在 PR 上与 `check` 一起跑。
+```bash
+pawl trend
+pawl trend line-coverage --limit 50
+```
 
-## pawl 不做什么
+历史直接来自 Git 中的 `pawl.snapshot.json`，不需要额外数据库。
 
-pawl 是**质量门禁 + 诚实守卫,不是代码分析器**——它从不解析任何语言。数行数、跑正则是 Go 原生的,因为它们不需要语法;所有需要真正语言语义的东西(复杂度、类型逃逸)都通过 adapter 委托给该语言自己最好的分析器,这样门禁给出的数字和开发者在 IDE 里看到的一致。理由见 [SPEC.md § Scope boundary](./spec/engine/scope.md)。
+## CI 集成
 
-pawl 只拥有 verdict,不拥有工具链:分析器仍由项目安装、锁版本、配置和调用。自动安装工具/运行时、语言探测、格式化、自动修复、插件市场和跨次运行缓存都是明确的非目标。只有标准报告无法维持诚实测量时,才增加工具专用 adapter。
+任何 CI 都可以安装二进制并运行 `pawl check`。在 PR 上应额外运行 `pawl guard`，避免有人通过修改快照悄悄降低门槛。
+
+### GitHub Actions
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 先运行会生成报告的测试或分析器。
+      - run: npm test -- --coverage
+
+      - uses: tiangong-dev/pawl@v0
+        with:
+          command: check
+          args: --since origin/${{ github.base_ref || 'main' }}
+
+      - if: github.event_name == 'pull_request'
+        run: pawl guard origin/${{ github.base_ref }}
+```
+
+传入 `command: check` 后，Action 会执行门禁，并可根据 JSON 裁决维护一条 PR 评论；不需要评论时设置 `comment: 'false'`。如果不传 `command`，Action 只负责把 pawl 安装到 `PATH`。
+
+### 其他 CI
+
+可以下载 release 二进制、使用 npm 包，或直接运行：
+
+```bash
+npx -y @pawl-tools/cli@0.8.0 check
+```
+
+整个过程不依赖服务端组件。
+
+## 可选：给编码 Agent 安装操作说明
+
+无论代码来自开发者、生成器还是 Agent，pawl 的门禁逻辑都完全相同。如果仓库中会使用编码 Agent，`pawl agent` 可以把操作说明写入 `AGENTS.md` 或 `CLAUDE.md`，提醒它运行门禁、读取 JSON 裁决，并只更新真正改善的维度：
+
+```bash
+pawl agent --write agent      # 写入 AGENTS.md
+pawl agent --write claude     # 写入 CLAUDE.md
+```
+
+这只是一个可选集成，不是 pawl 的另一种工作模式；最终裁决仍由 CI 负责。该命令的评测与 fixture 在 [demo/](./demo/README.md) 中。
+
+## 能力边界
+
+pawl 负责的是**组织测量、比较基线、给出裁决**。它不是新的 linter、托管面板、包管理器或自动修复器。项目仍然自行安装和配置分析工具；pawl 把这些不同来源的数字纳入同一套基线和同一道可执行门禁。
+
+- [配置示例](./RECIPES.md)：可复制调整的常见维度
+- [引擎契约](./spec/README.md)：精确行为和文件格式
+- [参与贡献](./CONTRIBUTING.md)：开发与测试流程
+- [变更记录](./CHANGELOG.md)：版本升级说明
 
 ## 许可证
 
-MIT——见 [LICENSE](./LICENSE)。
+MIT，见 [LICENSE](./LICENSE)。
