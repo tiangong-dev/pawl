@@ -23,6 +23,7 @@ dimensions:
     gate: "per-file-count"       # optional: total (default) | per-file-count | per-key-value
     tolerance: 0.0               # optional, absolute slack in the worse direction, default 0
     timeout: "10m"               # optional Go duration, default "10m"
+    artifact_max_age: "24h"      # optional freshness bound for file-backed reports
     command: "./scripts/count-nolint.sh"  # exactly one of command | builtin | source
     valid_exit_codes: [0, 1]     # optional, command dimensions only; default [0]
 
@@ -51,7 +52,7 @@ invalid `direction`, invalid `gate`, not exactly one of `command`/`builtin`/`sou
 unknown `extract` form, an `extract` object with neither/both of `regex`/`json_path`,
 an uncompilable `extract.regex`, an empty `extract.json_path`,
 an unknown named-analyzer acquisition option or dimension selector,
-`valid_exit_codes` on a `builtin`/`source` dimension or holding a non-integer or
+invalid `artifact_max_age` (it must be a positive duration and the dimension must read a configured report file), `valid_exit_codes` on a `builtin`/`source` dimension or holding a non-integer or
 out-of-range entry, zero dimensions, unparseable YAML, config file not found.
 
 ### `valid_exit_codes`
@@ -126,4 +127,3 @@ the source identity.
   silently ignored.
 - `record --only` executes only analyzers needed by the selected dimensions. If
   several selected dimensions share one analyzer, it still executes once.
-

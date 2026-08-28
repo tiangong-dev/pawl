@@ -119,10 +119,6 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			positional = append(positional, args[i])
 		}
 	}
-	if format != "text" && format != "json" {
-		fmt.Fprintf(stderr, "--format must be text or json, got %q\n", format)
-		return 2
-	}
 	if len(positional) > 0 {
 		// An explicit positional is taken verbatim — an empty string is an
 		// unknown command, not "no command", so a wrapper running
@@ -146,6 +142,14 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "version", "help":
 	default:
 		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | guard <ref> | trend [<id>] | rank | version | help\n", command)
+		return 2
+	}
+	if format != "text" && format != "json" {
+		if format == "codeclimate" {
+			fmt.Fprintln(stderr, "--format codeclimate was removed in pawl 0.7; use --format json and consume the stable verdict schema")
+			return 2
+		}
+		fmt.Fprintf(stderr, "--format must be text or json, got %q\n", format)
 		return 2
 	}
 	// Commands have a fixed operand arity; an extra operand is a usage error,

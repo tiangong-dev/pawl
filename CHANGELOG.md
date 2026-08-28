@@ -2,6 +2,17 @@
 
 Release notes and upgrade instructions. Review the breaking changes before updating an existing installation.
 
+## Unreleased
+
+### Added
+
+- File-backed report dimensions can set `artifact_max_age` to fail closed when
+  evidence is older than the configured duration.
+- The GitHub Action accepts `guard-ref` to run `pawl guard` as part of the same
+  standard check step.
+- `--format codeclimate` now explains its removal and points consumers to the
+  stable JSON verdict instead of emitting a generic format error.
+
 ## 0.8.0
 
 ### Breaking

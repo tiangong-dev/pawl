@@ -89,6 +89,23 @@ func TestCheckOnlyCodeclimateExitsTwo(t *testing.T) {
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstderr=%s", res.exit, res.stderr)
 	}
+	if !strings.Contains(res.stderr, "removed") || !strings.Contains(res.stderr, "format json") {
+		t.Errorf("stderr should explain the migration from codeclimate: %s", res.stderr)
+	}
+}
+
+func TestUnknownCommandWinsOverCodeclimateMigration(t *testing.T) {
+
+	res := runPawl(t, t.TempDir(), baseEnv(), "not-a-command", "--format", "codeclimate")
+	if res.exit != 2 {
+		t.Fatalf("exit = %d, want 2\nstderr=%s", res.exit, res.stderr)
+	}
+	if !strings.Contains(res.stderr, `unknown command "not-a-command"`) {
+		t.Fatalf("stderr should report the unknown command first: %s", res.stderr)
+	}
+	if strings.Contains(res.stderr, "codeclimate was removed") {
+		t.Fatalf("unknown command should not be rewritten as a format migration: %s", res.stderr)
+	}
 }
 
 // A --only verdict must say so in the JSON itself. Without it, `check --only a`

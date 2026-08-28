@@ -172,8 +172,10 @@ when nothing was accepted as worse.
   `{path, modified, age_seconds, generated}`: the path as configured (relative
   to the config dir), the file's mtime as an RFC 3339 timestamp, its age in
   whole seconds at measurement time, and whether this invocation's own
-  `command` produced it. It is provenance, never a gate: it cannot change
-  `exit_code`, and no age is an error.
+  `command` produced it. It is normally provenance only. A dimension may set
+  `artifact_max_age` to make an old, non-generated artifact a measurement
+  failure (exit 2); generated artifacts are fresh by construction. Without
+  that option, age cannot change `exit_code` and no age is an error.
   A dimension configured with `file:` and no `command:` measures whatever is on
   disk. A report written last week parses exactly like one written a second ago
   and yields a number the verdict presents like any other — so the gate can be

@@ -15,9 +15,9 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/tiangong-dev/pawl?color=blue" alt="MIT license"></a>
 </p>
 
-**pawl is a quality gate that stops measurable code quality from moving backwards.** It records the state of a repository, runs the same measurements again, and fails when any of them regress.
+Coding agents are fast. They're also good at making a repo slightly worse in ways a diff review misses: coverage down a point, a new 800-line file, a lint you already banned. The PR looks fine. The floor moved.
 
-Unlike a fixed threshold, pawl does not require a legacy codebase to become clean before the gate becomes useful. Today's numbers are the baseline. Existing debt may remain, but a pull request cannot add to it; when a number improves, the new baseline locks that improvement in.
+pawl is the CI gate for that. It records the numbers you already have, then fails any change that makes them worse. Old mess can stay. New mess cannot.
 
 ```bash
 pawl record                     # record the current baseline
@@ -65,15 +65,13 @@ todo-markers         12         12      ±0  ✅ same
 
 That is the whole loop: measure, compare, fix regressions, and record genuine improvements.
 
-## Why a ratchet?
+## Why not just set coverage to 80%?
 
-A ratchet only turns one way. pawl works the same way: quality can move forward, but a baseline can't quietly slip back.
+Because the repo isn't at 80%. It's at 62%, with three 700-line files, and a deadline. A fixed bar either fails every PR or protects nothing.
 
-Fixed thresholds work once a project already meets them. They're much less useful on a mature repository with 62% coverage, a few 700-line files, and a deadline — set the bar at the goal and every change fails; set it at the status quo and it protects nothing.
+pawl starts at whatever you have today. The first snapshot is the floor. After that, worse is a red CI. When you actually fix something, re-record that one metric so the new floor sticks. Per-file and per-key comparisons mean fixing file A does not pay for a new mess in file B.
 
-pawl starts from wherever the repository already is. The first snapshot records existing debt as-is, no cleanup campaign required, but a regression from there fails immediately: a lower coverage number or a new oversized file exits 1. Improvements stick — re-record a dimension after fixing it, and the gate won't let it drift back. Per-file and per-key comparisons mean one file's fix can't quietly pay for another file's new problem.
-
-The baseline itself is just a JSON file committed to Git. No account, no hosted service, no telemetry — `pawl trend` reads its history straight from commits you already have.
+The baseline is a JSON file in Git. No account, no hosted service, no telemetry. `pawl trend` reads history from commits you already have.
 
 ## How pawl measures a repository
 
@@ -177,6 +175,10 @@ If the command already prints a number or one finding per line, `extract` avoids
 
 Measurement failures are not clean results. A crashed command, malformed report, timeout, or extraction error makes pawl exit 2; it never turns “could not measure” into “measured zero.” Use `valid_exit_codes` for tools that legitimately report findings with a non-zero exit instead of hiding every failure behind `|| true`.
 
+File-backed report dimensions may set `artifact_max_age: "24h"` to turn an old
+artifact into exit 2; command-produced reports are considered fresh by
+construction. Without that option pawl reports age as provenance only.
+
 ## Commands
 
 | command | purpose |
@@ -275,16 +277,14 @@ jobs:
       # Run tests or analyzers that produce reports before the gate.
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0
+      - uses: tiangong-dev/pawl@v0.8.0
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
-
-      - if: github.event_name == 'pull_request'
-        run: pawl guard origin/${{ github.base_ref }}
+          guard-ref: origin/${{ github.base_ref || 'main' }}
 ```
 
-With `command: check`, the action enforces the exit code and can keep updating one PR comment with the JSON verdict instead of posting a new comment every run. Set `comment: 'false'` if logs and annotations are enough. Without `command`, the action only installs pawl on `PATH`.
+With `command: check`, the action enforces the exit code and can keep updating one PR comment with the JSON verdict instead of posting a new comment every run. Set `guard-ref` after fetching the base ref to make baseline protection part of the same action; if `args` contains `-c/--config`, the same config is used for the guard. The guard runs before the optional comment. Set `comment: 'false'` if logs and annotations are enough. Without `command`, the action only installs pawl on `PATH`.
 
 ### Other CI systems
 
@@ -296,16 +296,16 @@ npx -y @pawl-tools/cli@0.8.0 check
 
 No server-side component is required.
 
-## Optional: coding-agent instructions
+## Agents
 
-The gate works the same whether code was written by a person, a generator, or an agent. If an agent contributes to the repository, `pawl agent` can place its operating instructions in `AGENTS.md` or `CLAUDE.md` so it knows to run the gate, read the JSON verdict, and record improvements narrowly:
+If an agent is writing code in this repo, tell it about the gate:
 
 ```bash
 pawl agent --write agent      # AGENTS.md
 pawl agent --write claude     # CLAUDE.md
 ```
 
-This is an integration convenience, not a different mode of pawl. CI remains the authority. The evaluation and fixtures for this command live in [demo/](./demo/README.md).
+CI is still the authority. `pawl agent` just writes the operating notes so the agent runs `pawl check`, reads the JSON verdict, and records a fix narrowly instead of rewriting the snapshot. Demo and fixtures: [demo/](./demo/README.md).
 
 ## Scope
 
