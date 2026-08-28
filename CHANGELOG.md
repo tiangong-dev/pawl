@@ -2,7 +2,7 @@
 
 Release notes and upgrade instructions. Review the breaking changes before updating an existing installation.
 
-## Unreleased
+## 0.8.1 — 2026-08-28
 
 ### Added
 
@@ -12,6 +12,16 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   standard check step.
 - `--format codeclimate` now explains its removal and points consumers to the
   stable JSON verdict instead of emitting a generic format error.
+
+### Security
+
+- GitHub Actions dependencies are pinned to immutable commits.
+- Dependabot now tracks Go modules, npm packages, and GitHub Actions.
+- CodeQL runs for Go and JavaScript/TypeScript on pull requests, pushes to
+  `main`, and the weekly schedule.
+- Added a vulnerability reporting policy and a Go fuzz target for JSON input.
+
+## Unreleased
 
 ## 0.8.0
 
