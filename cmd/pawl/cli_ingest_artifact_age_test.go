@@ -163,6 +163,36 @@ func TestArtifactAgeReportedForFileOnlyDimensions(t *testing.T) {
 	}
 }
 
+// Consumers that gate on a report produced by an earlier step can opt into a
+// hard freshness bound. A stale report must be a measurement failure, not a
+// clean comparison against yesterday's result.
+func TestArtifactMaxAgeRejectsStaleFileOnlyReport(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "junit.xml", junitMixedFixture)
+	writeFile(t, dir, "pawl.yaml", `dimensions:
+  - id: "tests"
+    title: "Failures"
+    direction: "lower-is-better"
+    artifact_max_age: "1h"
+    builtin: "junit"
+    options:
+      file: "junit.xml"
+`)
+	setMtime(t, dir, "junit.xml", time.Now().Add(-2*time.Hour))
+
+	res := runPawl(t, dir, baseEnv(), "record", "--format", "json")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 for stale artifact\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	rep := parseReport(t, res.stdout)
+	if rep.FailureClass != "could-not-measure" {
+		t.Fatalf("failure_class = %q, want could-not-measure\nreport=%s", rep.FailureClass, res.stdout)
+	}
+	if !strings.Contains(rep.Error, "artifact") || !strings.Contains(rep.Error, "1h") {
+		t.Errorf("error = %q, want artifact freshness diagnostic", rep.Error)
+	}
+}
+
 // When the dimension's own command produces the file, the artifact is this
 // invocation's own output: generated is true and the age is ~0. Reporting it
 // anyway keeps the field's meaning uniform — a consumer never has to know
@@ -180,6 +210,7 @@ func TestArtifactMarkedGeneratedWhenCommandProducesIt(t *testing.T) {
   - id: "tests"
     title: "Failures"
     direction: "lower-is-better"
+    artifact_max_age: "1s"
     builtin: "junit"
     options:
       command: 'cp "$PAWL_ROOT/src.xml" "$PAWL_ROOT/out.xml"'
@@ -192,6 +223,7 @@ func TestArtifactMarkedGeneratedWhenCommandProducesIt(t *testing.T) {
   - id: "num"
     title: "Number"
     direction: "lower-is-better"
+    artifact_max_age: "1s"
     builtin: "json-value"
     options:
       command: 'echo "{\"n\": 42}" > "$PAWL_ROOT/out.json"'

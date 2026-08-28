@@ -33,11 +33,17 @@ a report someone else produces, so there is nothing to delete and re-run. The
 guard it can offer is disclosure — every measurement that reads a file reports
 the file's mtime and age in the verdict (`artifact`, specified in
 [§ Machine-readable output](../engine/verdict.md#machine-readable-output)), and
-in text mode on stderr. That is provenance only; no age changes an exit code,
+in text mode on stderr. By default that is provenance only; setting
+`artifact_max_age` on the dimension turns an older file into a measurement
+failure (exit 2), while reports produced by the same invocation are always
+accepted. Without that opt-in, no age changes an exit code,
 because a mtime is not evidence of staleness (a checkout, a `touch`, or a
 restored cache all rewrite it) and a gate that fails on false positives gets
 switched off. A pipeline that needs the guard should give the dimension the
 `command` that produces the report.
+
+The option is rejected on dimensions that do not read a report file; for the
+`jscpd` builtin, its configured `report` path is the file being guarded.
 
 ### `sarif`
 
@@ -124,4 +130,3 @@ lcov-only, so `functions` + `cobertura` is a config error).
 - `value` = the percentage, `unit` = `"%"`, `breakdown` = null. Direction is
   `higher-is-better`; intended gate: `total` (a small `tolerance` absorbs
   rounding noise).
-

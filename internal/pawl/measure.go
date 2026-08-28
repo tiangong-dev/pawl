@@ -72,6 +72,20 @@ func MeasureAll(cfg *Config, progress, stderr io.Writer) (map[string]Metric, map
 			continue
 		}
 		dim := cfg.Dimensions[i]
+		if o.result.Artifact != nil && !o.result.Artifact.Generated && dim.ArtifactMaxAge > 0 {
+			age := o.result.Artifact.age
+			if age == 0 {
+				// Keep compatibility with ArtifactInfo values assembled by callers
+				// in-process rather than by statArtifact.
+				age = time.Duration(o.result.Artifact.AgeSeconds) * time.Second
+			}
+			if age > dim.ArtifactMaxAge {
+				failures = append(failures, measureFailure{id: o.id, message: fmt.Sprintf(
+					"artifact %s is %s old, exceeding artifact_max_age %s",
+					o.result.Artifact.Path, formatArtifactAge(o.result.Artifact.AgeSeconds), dim.ArtifactMaxAge)})
+				continue
+			}
+		}
 		if dim.Gate == GatePerFileCount {
 			sum := 0.0
 			invalid := ""

@@ -15,9 +15,9 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/tiangong-dev/pawl?color=blue" alt="MIT license"></a>
 </p>
 
-**pawl 是一道防止代码质量倒退的门禁。** 它先记录仓库当前的质量数据，之后用同样的方法重新测量；任何指标变差，门禁就失败。
+Agent 写代码很快。它也特别会把仓库弄得稍微差一点，而且 review 一时半会儿看不出来：覆盖率掉一个点、多了个 800 行的文件、以前禁掉的 lint 又回来了。PR 看起来没问题。底线已经动了。
 
-固定阈值往往要求老项目先还清技术债，门禁才能启用。pawl 不需要。第一次测量就是基线：存量问题可以暂时保留，但新的改动不能让它们继续增加；某项指标一旦改善，新基线就会把成果锁住。
+pawl 就是让这种改动在 CI 里红掉的门禁。它记下你现在的数字，谁再往差里改就失败。旧债可以先留着。新债不行。
 
 ```bash
 pawl record                     # 记录当前基线
@@ -65,15 +65,13 @@ todo-markers         12         12      ±0  ✅ same
 
 日常流程就这几步：测量、比较、修复退化、记录真正的改进。
 
-## 为什么用棘轮，而不是固定阈值
+## 为什么不直接把覆盖率卡在 80%？
 
-棘轮只能往一个方向转动，pawl 也是一样：质量只能变好，基线不会被悄悄调差。
+因为仓库现在不是 80%。是 62%，还搁着三个 700 行的文件，并且这周要上线。阈值卡在理想值，每个 PR 都红；卡在现状，等于没卡。
 
-固定阈值只有项目已经达标时才好用。覆盖率只有 62%、还留着几个 700 行文件、又赶着上线的老仓库用不上它——阈值定在理想状态，所有 PR 都会失败；定在现状，规则就形同虚设。
+pawl 从今天的数字起算。第一份快照就是底线。之后谁改差了，CI 就红。真修好一项，就只把那一项重新记进去，新底线锁住。按文件、按 key 比的时候，修 A 文件不能拿来抵 B 文件新捅的娄子。
 
-pawl 从项目的真实现状出发：第一份快照如实记录现有技术债，不需要提前整改；但从这一刻起新增的退化会立即失败，覆盖率下降或新增一个超长文件都会让 `check` 退出 1。改进也会被留住——某个维度改善后重新记录，后续改动就不能让它退回原值。按文件、按 key 比较时，A 文件的修复也不能抵消 B 文件新增的问题。
-
-基线本身只是提交到 Git 的一个 JSON 文件。不需要账号，不需要服务端，也不收集遥测；`pawl trend` 直接从已有的 Git 历史读取指标走势。
+基线就是 Git 里的一个 JSON。不用注册，没有服务端，也不上传数据。`pawl trend` 直接读你已有的提交记录。
 
 ## pawl 如何测量仓库
 
@@ -177,6 +175,8 @@ dimensions:
 
 测量失败不等于结果为零。命令崩溃、报告损坏、超时或抽取失败时，pawl 会退出 2，不会把“没测出来”伪装成“测得零”。对于用非零退出码表示“发现问题”的工具，应声明 `valid_exit_codes`，而不是用 `|| true` 吞掉所有错误。
 
+读取磁盘报告的维度可以设置 `artifact_max_age: "24h"`，让过期报告直接以退出码 2 判为无法测量；本次命令生成的报告则天然视为新鲜。未设置时，pawl 只把年龄作为证据提示。
+
 ## 命令
 
 | 命令 | 用途 |
@@ -273,16 +273,14 @@ jobs:
       # 先运行会生成报告的测试或分析器。
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0
+      - uses: tiangong-dev/pawl@v0.8.0
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
-
-      - if: github.event_name == 'pull_request'
-        run: pawl guard origin/${{ github.base_ref }}
+          guard-ref: origin/${{ github.base_ref || 'main' }}
 ```
 
-传入 `command: check` 后，Action 会执行门禁，并可根据 JSON 裁决维护一条 PR 评论；不需要评论时设置 `comment: 'false'`。如果不传 `command`，Action 只负责把 pawl 安装到 `PATH`。
+传入 `command: check` 后，Action 会执行门禁，并可根据 JSON 裁决维护一条 PR 评论；设置 `guard-ref`（使用前先 fetch 目标 ref）即可让同一个 Action 同时保护 baseline。如果 `args` 中有 `-c/--config`，guard 会复用同一份配置；guard 会先于可选的 PR 评论执行。不需要评论时设置 `comment: 'false'`。如果不传 `command`，Action 只负责把 pawl 安装到 `PATH`。
 
 ### 其他 CI
 
@@ -294,16 +292,16 @@ npx -y @pawl-tools/cli@0.8.0 check
 
 整个过程不依赖服务端组件。
 
-## 可选：给编码 Agent 安装操作说明
+## Agent
 
-无论代码来自开发者、生成器还是 Agent，pawl 的门禁逻辑都完全相同。如果仓库中会使用编码 Agent，`pawl agent` 可以把操作说明写入 `AGENTS.md` 或 `CLAUDE.md`，提醒它运行门禁、读取 JSON 裁决，并只更新真正改善的维度：
+仓库里要是有 Agent 在写代码，先让它看见这道门：
 
 ```bash
 pawl agent --write agent      # 写入 AGENTS.md
 pawl agent --write claude     # 写入 CLAUDE.md
 ```
 
-这只是一个可选集成，不是 pawl 的另一种工作模式；最终裁决仍由 CI 负责。该命令的评测与 fixture 在 [demo/](./demo/README.md) 中。
+CI 仍然说了算。`pawl agent` 只是写下操作说明：跑 `pawl check`、读 JSON 结论、修好了只记那一项，别整份快照重写。评测和夹具在 [demo/](./demo/README.md)。
 
 ## 能力边界
 

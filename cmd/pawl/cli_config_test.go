@@ -59,6 +59,24 @@ func TestConfigValidationErrorsExitTwo(t *testing.T) {
 			config: buildConfig("", dimDef{id: "a", direction: "lower-is-better", gate: "not-a-real-gate", command: validCmd}),
 		},
 		{
+			name: "invalid artifact max age",
+			config: "dimensions:\n" +
+				"  - id: \"a\"\n" +
+				"    title: \"A\"\n" +
+				"    direction: \"lower-is-better\"\n" +
+				"    artifact_max_age: \"yesterday\"\n" +
+				"    command: \"echo '{\\\"value\\\": 1}'\"\n",
+		},
+		{
+			name: "artifact max age without file",
+			config: "dimensions:\n" +
+				"  - id: \"a\"\n" +
+				"    title: \"A\"\n" +
+				"    direction: \"lower-is-better\"\n" +
+				"    artifact_max_age: \"1h\"\n" +
+				"    command: \"echo '{\\\"value\\\": 1}'\"\n",
+		},
+		{
 			name: "both command and builtin",
 			config: buildConfig("", dimDef{
 				id: "a", direction: "lower-is-better", command: validCmd, builtin: "file-length",

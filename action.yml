@@ -17,7 +17,16 @@ inputs:
     required: false
     default: ''
   args:
-    description: 'Extra arguments for the command, e.g. "--since origin/main".'
+    description: >-
+      Extra arguments for the command, e.g. "--since origin/main". If these
+      include -c/--config, the same config is used by guard-ref.
+    required: false
+    default: ''
+  guard-ref:
+    description: >-
+      Optional git ref whose snapshot must not be weaker than the working tree
+      snapshot. Fetch the ref before invoking the action (for example,
+      origin/main) to combine check and baseline guard in one standard step.
     required: false
     default: ''
   comment:
@@ -88,15 +97,50 @@ runs:
         PAWL_COMMAND: ${{ inputs.command }}
         PAWL_ARGS: ${{ inputs.args }}
       run: |
+        # GitHub runs composite bash steps with errexit enabled. Disable it
+        # while capturing pawl's verdict so a regression reaches the final
+        # enforcement step instead of aborting this setup step.
+        set +e
         set -uo pipefail
         report="${RUNNER_TEMP}/pawl-report.json"
         code=0
-        # $PAWL_ARGS is intentionally unquoted so multi-word args word-split.
-        pawl "$PAWL_COMMAND" --format json $PAWL_ARGS > "$report" || code=$?
+        # Keep the arguments as an array for the command, and remember a
+        # config path so a later guard evaluates the same snapshot/config.
+        read -r -a pawl_args <<< "$PAWL_ARGS"
+        guard_config=""
+        for ((i = 0; i < ${#pawl_args[@]}; i++)); do
+          case "${pawl_args[$i]}" in
+            -c|--config)
+              if (( i + 1 < ${#pawl_args[@]} )); then
+                guard_config="${pawl_args[$((i + 1))]}"
+                # A post-increment returns status 1 when i is initially 0,
+                # which trips the inherited errexit setting on GitHub runners.
+                i=$((i + 1))
+              fi
+              ;;
+            --config=*) guard_config="${pawl_args[$i]#--config=}" ;;
+          esac
+        done
+        pawl "$PAWL_COMMAND" --format json "${pawl_args[@]}" > "$report" || code=$?
         echo "report=$report" >> "$GITHUB_OUTPUT"
         echo "code=$code" >> "$GITHUB_OUTPUT"
+        echo "config=$guard_config" >> "$GITHUB_OUTPUT"
         # Mirror the verdict to the log so a failing run still shows it.
         cat "$report" || true
+
+    - name: Guard pawl baseline
+      if: inputs.command != '' && inputs.guard-ref != ''
+      shell: bash
+      env:
+        PAWL_GUARD_REF: ${{ inputs.guard-ref }}
+        PAWL_CONFIG: ${{ steps.gate.outputs.config }}
+      run: |
+        set -euo pipefail
+        if [ -n "$PAWL_CONFIG" ]; then
+          pawl guard --config "$PAWL_CONFIG" "$PAWL_GUARD_REF"
+        else
+          pawl guard "$PAWL_GUARD_REF"
+        fi
 
     - name: Upsert PR comment
       if: ${{ inputs.command != '' && inputs.comment == 'true' && github.event_name == 'pull_request' }}
@@ -105,7 +149,8 @@ runs:
         GITHUB_TOKEN: ${{ inputs.token || github.token }}
         PAWL_REPORT: ${{ steps.gate.outputs.report }}
       # The comment is auxiliary — a startup failure (missing node, bad script)
-      # must never fail the job and mask the gate verdict enforced next.
+      # must never fail the job and mask the gate verdict enforced next. It runs
+      # after guard so a failed baseline guard cannot leave a green-looking note.
       run: |
         node "$GITHUB_ACTION_PATH/scripts/pr-comment.mjs" || echo "::warning::pawl: PR comment step failed to run"
 

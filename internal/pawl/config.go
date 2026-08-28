@@ -18,19 +18,22 @@ const defaultTimeout = 10 * time.Minute
 // only on a Command dimension that derives its measurement from raw output
 // declaratively.
 type Dimension struct {
-	ID         string
-	Title      string
-	Direction  Direction
-	Gate       GateMode
-	Tolerance  *float64
-	Timeout    time.Duration
-	Command    string
-	OkExit     map[int]bool
-	Builtin    string
-	Options    map[string]any
-	Extract    *ExtractSpec
-	Source     string
-	Definition string
+	ID        string
+	Title     string
+	Direction Direction
+	Gate      GateMode
+	Tolerance *float64
+	Timeout   time.Duration
+	// ArtifactMaxAge is an optional freshness bound for dimensions that read a
+	// report from disk. Zero preserves the historical advisory-only behavior.
+	ArtifactMaxAge time.Duration
+	Command        string
+	OkExit         map[int]bool
+	Builtin        string
+	Options        map[string]any
+	Extract        *ExtractSpec
+	Source         string
+	Definition     string
 }
 
 // GateSpecOf is the dimension's comparison contract for RegressionsOf.
@@ -59,18 +62,19 @@ type configFile struct {
 }
 
 type dimensionConfig struct {
-	ID        string         `yaml:"id"`
-	Title     string         `yaml:"title"`
-	Direction string         `yaml:"direction"`
-	Gate      string         `yaml:"gate"`
-	Tolerance *float64       `yaml:"tolerance"`
-	Timeout   string         `yaml:"timeout"`
-	Command   string         `yaml:"command"`
-	OkExit    any            `yaml:"valid_exit_codes"`
-	Builtin   string         `yaml:"builtin"`
-	Options   map[string]any `yaml:"options"`
-	Extract   any            `yaml:"extract"`
-	Source    string         `yaml:"source"`
+	ID             string         `yaml:"id"`
+	Title          string         `yaml:"title"`
+	Direction      string         `yaml:"direction"`
+	Gate           string         `yaml:"gate"`
+	Tolerance      *float64       `yaml:"tolerance"`
+	Timeout        string         `yaml:"timeout"`
+	ArtifactMaxAge string         `yaml:"artifact_max_age"`
+	Command        string         `yaml:"command"`
+	OkExit         any            `yaml:"valid_exit_codes"`
+	Builtin        string         `yaml:"builtin"`
+	Options        map[string]any `yaml:"options"`
+	Extract        any            `yaml:"extract"`
+	Source         string         `yaml:"source"`
 }
 
 // LoadConfigLite resolves only the snapshot path (and config dir) from a
@@ -196,6 +200,10 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 		}
 		timeout = parsed
 	}
+	artifactMaxAge, err := parseArtifactMaxAge(d.ArtifactMaxAge)
+	if err != nil {
+		return fail("%s", err)
+	}
 	inputs := 0
 	if d.Command != "" {
 		inputs++
@@ -223,6 +231,9 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 			return fail("source %q: %v", d.Source, err)
 		}
 	}
+	if err := validateArtifactMaxAge(d, analyzers, artifactMaxAge); err != nil {
+		return fail("%s", err)
+	}
 	var extract *ExtractSpec
 	if d.Extract != nil {
 		if d.Builtin != "" || d.Source != "" {
@@ -246,18 +257,19 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 		okExit = parsed
 	}
 	return Dimension{
-		ID:        d.ID,
-		Title:     d.Title,
-		Direction: direction,
-		Gate:      gate,
-		Tolerance: d.Tolerance,
-		Timeout:   timeout,
-		Command:   d.Command,
-		OkExit:    okExit,
-		Builtin:   d.Builtin,
-		Options:   d.Options,
-		Extract:   extract,
-		Source:    d.Source,
+		ID:             d.ID,
+		Title:          d.Title,
+		Direction:      direction,
+		Gate:           gate,
+		Tolerance:      d.Tolerance,
+		Timeout:        timeout,
+		ArtifactMaxAge: artifactMaxAge,
+		Command:        d.Command,
+		OkExit:         okExit,
+		Builtin:        d.Builtin,
+		Options:        d.Options,
+		Extract:        extract,
+		Source:         d.Source,
 	}, nil
 }
 

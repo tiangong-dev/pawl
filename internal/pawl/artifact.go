@@ -4,8 +4,41 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
+
+func parseArtifactMaxAge(raw string) (time.Duration, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("artifact_max_age %q is not a positive duration", raw)
+	}
+	return parsed, nil
+}
+
+func validateArtifactMaxAge(d dimensionConfig, analyzers map[string]Analyzer, maxAge time.Duration) error {
+	if maxAge == 0 {
+		return nil
+	}
+	artifactPath := ""
+	if d.Builtin == builtinJscpd {
+		artifactPath, _ = d.Options["report"].(string)
+	} else if d.Builtin != "" {
+		artifactPath, _ = d.Options["file"].(string)
+	} else if d.Source != "" {
+		analyzer := analyzers[d.Source]
+		if analyzer.Builtin == builtinSarif {
+			artifactPath, _ = analyzer.Options["file"].(string)
+		}
+	}
+	if strings.TrimSpace(artifactPath) == "" {
+		return fmt.Errorf("artifact_max_age requires a file-backed dimension (set options.file or the jscpd report path)")
+	}
+	return nil
+}
 
 // ArtifactInfo describes the file one measurement read off disk.
 //
@@ -20,6 +53,7 @@ type ArtifactInfo struct {
 	Path       string    `json:"path"`
 	Modified   time.Time `json:"modified"`
 	AgeSeconds int64     `json:"age_seconds"`
+	age        time.Duration
 	// Generated is true when the dimension's own command wrote the file during
 	// this invocation (the reader deletes it first), which makes the age
 	// meaningless-by-construction rather than informative.
@@ -36,10 +70,12 @@ func statArtifact(cfg *Config, fileRel string, generated bool) *ArtifactInfo {
 		return nil
 	}
 	mod := info.ModTime()
+	age := time.Since(mod)
 	return &ArtifactInfo{
 		Path:       fileRel,
 		Modified:   mod,
-		AgeSeconds: int64(time.Since(mod).Seconds()),
+		AgeSeconds: int64(age.Seconds()),
+		age:        age,
 		Generated:  generated,
 	}
 }
