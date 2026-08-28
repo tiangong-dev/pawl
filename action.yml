@@ -97,6 +97,10 @@ runs:
         PAWL_COMMAND: ${{ inputs.command }}
         PAWL_ARGS: ${{ inputs.args }}
       run: |
+        # GitHub runs composite bash steps with errexit enabled. Disable it
+        # while capturing pawl's verdict so a regression reaches the final
+        # enforcement step instead of aborting this setup step.
+        set +e
         set -uo pipefail
         report="${RUNNER_TEMP}/pawl-report.json"
         code=0
@@ -109,7 +113,9 @@ runs:
             -c|--config)
               if (( i + 1 < ${#pawl_args[@]} )); then
                 guard_config="${pawl_args[$((i + 1))]}"
-                ((i++))
+                # A post-increment returns status 1 when i is initially 0,
+                # which trips the inherited errexit setting on GitHub runners.
+                i=$((i + 1))
               fi
               ;;
             --config=*) guard_config="${pawl_args[$i]#--config=}" ;;
