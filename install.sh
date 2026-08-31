@@ -57,13 +57,16 @@ echo "pawl: downloading ${asset} (${ver})"
 curl -fsSL "$url" -o "${tmp}/${asset}"
 
 if have cosign; then
-  echo "pawl: verifying signature with cosign"
-  curl -fsSL "${url}.sigstore.json" -o "${tmp}/${asset}.sigstore.json"
-  cosign verify-blob \
-    --bundle "${tmp}/${asset}.sigstore.json" \
-    --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
-    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-    "${tmp}/${asset}"
+  if curl -fsSL "${url}.sigstore.json" -o "${tmp}/${asset}.sigstore.json" 2>/dev/null; then
+    echo "pawl: verifying signature with cosign"
+    cosign verify-blob \
+      --bundle "${tmp}/${asset}.sigstore.json" \
+      --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      "${tmp}/${asset}"
+  else
+    echo "pawl: no .sigstore.json for ${ver} (predates signing) — skipping signature verification" >&2
+  fi
 else
   echo "pawl: cosign not found — skipping signature verification (install cosign to verify: https://github.com/sigstore/cosign)" >&2
 fi
