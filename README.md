@@ -81,18 +81,19 @@ Stopping a number from getting worse is not a new idea. What differs is where th
 |---|---|---|
 | **pawl** | locally — it is the CLI's exit code | `pawl.snapshot.json`, committed to the repository |
 | SonarQube Server / Cloud | on a server, including in the free self-hosted edition | that server |
-| Qlty (formerly Code Climate Quality) | the CLI analyzes locally; trends and gates need Qlty Cloud | Qlty Cloud |
-| Codecov / Coveralls | on the service, once the report is uploaded | the service |
+| Codecov / Coveralls | on the service, after the uploaded reports are processed | the service |
 | betterer | locally | `.betterer.results`, committed alongside the code |
 | git-ratchet | locally | git-notes |
 
-What each one protects is harder to put in a table, because it moves with the product line and the plan: Codecov added bundle-size and test analytics on top of coverage, Qlty Cloud can fail a pull request when total coverage drops, and a custom SonarQube gate can carry conditions on overall code. The difference pawl is after is not the length of that list. It is that pawl does not know what any of the numbers mean — anything a command prints can be recorded and then defended, including the number your own build already emits and no vendor ships an analyzer for. git-ratchet is the closest of these in shape and worth one caveat: it fails when a measure rises, so coverage and anything else where higher is better has to be inverted before it goes in.
+Qlty (formerly Code Climate Quality) does not fit one row. Its CLI fails locally on issue severity (`--fail-level`, default `fmt`) and compares against the ref given by `--upstream`; the stored history and the pull-request gates are in Qlty Cloud.
+
+What each one protects moves with the product line and the plan: Codecov added bundle-size and test analytics on top of coverage, Qlty Cloud can fail a pull request when total coverage drops, and a custom SonarQube gate can carry conditions on overall code. The difference pawl is after is not the length of that list. It is that pawl ships no analyzer of its own — it records whatever number it can extract from a command's output, and then defends that number. git-ratchet takes numbers the same way, reading `measure,value` pairs on stdin, with one caveat: it fails when a measure rises past the configured slack, so coverage and anything else where higher is better has to be inverted first.
 
 Two things sit close enough to this to be worth separating:
 
-**A fixed threshold is not a ratchet.** SonarQube's default gate applies fixed conditions to *new code*, where "new code" is a configurable window — the previous version, the last N days, or the diff against a reference branch — and a custom gate can add conditions on overall code as well. But a threshold is a line somebody picked: coverage must be at least 80%. A ratchet has no such line. The bar is wherever the number stood the last time it was recorded, so it rises on its own every time the number improves, and nobody has to agree on what "good enough" is first.
+**A fixed threshold is not a ratchet.** SonarQube's default gate applies fixed conditions to *new code*, where "new code" is a configurable window — the previous version, the last N days, a specific analysis, or the diff against a reference branch — and a custom gate can add conditions on overall code as well. But a threshold is a line somebody picked: coverage must be at least 80%. A ratchet has no such line. The bar is wherever the number stood when it was last recorded, so every `pawl record` that accepts an improvement moves the bar up, and nobody has to agree on what "good enough" is first.
 
-**A diff filter has no memory.** `golangci-lint --new-from-rev` and `reviewdog -filter-mode=added` narrow findings to changed lines by default, which is useful and cheap. But nothing there catches a metric that gets worse while the responsible line was never edited: a dependency that pulled in more code, a bundle that grew, a test that started being skipped.
+**A diff filter has no memory.** `golangci-lint --new-from-rev` (empty by default, so you turn it on) and `reviewdog -filter-mode=added` narrow findings to the lines a change touched — cheap, and worth having. But narrowing to changed lines cannot catch a metric that got worse while the responsible line was never edited: a dependency that pulled in more code, a bundle that grew, a test that started being skipped.
 
 ## How pawl measures a repository
 
