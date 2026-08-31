@@ -76,6 +76,26 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node npm/publish.js
 
+      - name: Install cosign
+        if: inputs.channel == 'release'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless signing: cosign trades the job's OIDC token (id-token: write,
+      # already granted above for npm provenance) for a short-lived cert from
+      # Fulcio, and records the signature in Rekor. --bundle writes the
+      # signature, certificate, and Rekor entry into one .sigstore.json file
+      # next to the archive, so whoever downloads a release can verify it with
+      # `cosign verify-blob --bundle <archive>.sigstore.json
+      # --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/.*'
+      # --certificate-oidc-issuer https://token.actions.githubusercontent.com <archive>`.
+      - name: Sign release archives
+        if: inputs.channel == 'release'
+        run: |
+          set -euo pipefail
+          for f in npm/dist/archives/*; do
+            cosign sign-blob --yes --bundle "${f}.sigstore.json" "$f"
+          done
+
       - name: Upload archives for the release job
         if: inputs.channel == 'release'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

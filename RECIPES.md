@@ -385,7 +385,7 @@ Per-package values work too: a command that prints `{ "pkg-a": 91.2, "pkg-b": 88
 
 ## Anything else (custom command)
 
-pawl is language-agnostic: a dimension's `command` runs via `sh -c` and just has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: … }`.
+Pawl is language-agnostic: a dimension's `command` runs via `sh -c` and just has to print one JSON object `{ "value": <number>, "unit"?: …, "breakdown"?: … }`.
 
 ```yaml
 # Bundle size ceiling — the command prints a single number, extract reads it.
