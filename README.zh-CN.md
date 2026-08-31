@@ -292,7 +292,7 @@ jobs:
       # 先运行会生成报告的测试或分析器。
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0.8.0
+      - uses: tiangong-dev/pawl@v0.8.2
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
@@ -327,7 +327,7 @@ pawl 报告的路径是相对配置文件所在目录的，不是相对仓库根
 Jenkins、CircleCI、Buildkite、Azure Pipelines、Woodpecker——只要能跑一个二进制就不需要插件。可以下载 release 二进制、使用 npm 包，或直接运行：
 
 ```bash
-npx -y @pawl-tools/cli@0.8.0 check
+npx -y @pawl-tools/cli@0.8.2 check
 ```
 
 整个过程不依赖服务端组件。

@@ -47,6 +47,12 @@ jobs:
       # byte-compare — docs that print what pawl never printed fail here.
       - name: doc output reproduction check
         run: node scripts/demo-repro-check.mjs
+      # The READMEs tell people to pin `pawl@vX.Y.Z` and `@pawl-tools/cli@X.Y.Z`.
+      # A release bumps npm/cli/package.json and those lines get left behind, so
+      # the copy-paste installs an old version and nothing says so. This fails
+      # the release PR instead, while the version bump is still in front of you.
+      - name: doc version pin check
+        run: node scripts/docs-version-check.mjs
       # demo/scripts/ scores the agent evaluations that justify `agent`, and
       # both scripts have silently mis-scored a real run — one of them because a
       # new pawl subcommand was not in its command list. Adding a subcommand

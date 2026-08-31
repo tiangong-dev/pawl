@@ -296,7 +296,7 @@ jobs:
       # Run tests or analyzers that produce reports before the gate.
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0.8.0
+      - uses: tiangong-dev/pawl@v0.8.2
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
@@ -331,7 +331,7 @@ pawl reports paths relative to the config file's directory, not the repository r
 Jenkins, CircleCI, Buildkite, Azure Pipelines, Woodpecker — anything that can run a binary needs no plugin. Use the release binary, the npm package, or:
 
 ```bash
-npx -y @pawl-tools/cli@0.8.0 check
+npx -y @pawl-tools/cli@0.8.2 check
 ```
 
 No server-side component is required.
