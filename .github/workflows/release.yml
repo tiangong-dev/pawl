@@ -70,12 +70,6 @@ jobs:
           PAWL_ARCHIVES: '1'
         run: node npm/build.js
 
-      - name: Publish to npm
-        env:
-          NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: node npm/publish.js
-
       - name: Install cosign
         if: inputs.channel == 'release'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -88,6 +82,12 @@ jobs:
       # `cosign verify-blob --bundle <archive>.sigstore.json
       # --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/.*'
       # --certificate-oidc-issuer https://token.actions.githubusercontent.com <archive>`.
+      #
+      # Runs before the npm publish below: npm publish is irreversible (a
+      # version can never be republished), so a transient Fulcio/Rekor/sign
+      # failure must be caught before that point — otherwise a retry of this
+      # workflow would fail immediately on the already-published version and
+      # never reach signing.
       - name: Sign release archives
         if: inputs.channel == 'release'
         run: |
@@ -95,6 +95,12 @@ jobs:
           for f in npm/dist/archives/*; do
             cosign sign-blob --yes --bundle "${f}.sigstore.json" "$f"
           done
+
+      - name: Publish to npm
+        env:
+          NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node npm/publish.js
 
       - name: Upload archives for the release job
         if: inputs.channel == 'release'
