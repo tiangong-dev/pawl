@@ -17,7 +17,7 @@
 
 Agent 写代码很快。它也特别会把仓库弄得稍微差一点，而且 review 一时半会儿看不出来：覆盖率掉一个点、多了个 800 行的文件、以前禁掉的 lint 又回来了。PR 看起来没问题。底线已经动了。
 
-pawl 就是让这种改动在 CI 里红掉的门禁。它记下你现在的数字，谁再往差里改就失败。旧债可以先留着。新债不行。
+pawl 是一个语言无关的 CI 质量门禁，用的是棘轮的办法：把仓库当前产出的数字——覆盖率、lint 问题数、失败的测试数、超长文件数、产物体积——记成一份提交进 Git 的基线，之后任何让某个数字变差的改动都会让 `pawl check` 退出 1。旧债可以先留着。新债不行。没有服务端，不用注册，也不上传任何数据。
 
 ```bash
 pawl record                     # 记录当前基线
@@ -71,7 +71,29 @@ todo-markers         12         12      ±0  ✅ same
 
 pawl 从今天的数字起算。第一份快照就是底线。之后谁改差了，CI 就红。真修好一项，就只把那一项重新记进去，新底线锁住。按文件、按 key 比的时候，修 A 文件不能拿来抵 B 文件新捅的娄子。
 
-基线就是 Git 里的一个 JSON。不用注册，没有服务端，也不上传数据。`pawl trend` 直接读你已有的提交记录。
+基线就是 Git 里的一个 JSON，所以 `pawl trend` 直接读你已有的提交记录。
+
+## 和别的做法比
+
+"不让某个数字变差"不是新想法。各家的区别在于判定在哪里算，以及拿什么和它比。
+
+| | 判定在哪里算 | 基线存在哪里 |
+|---|---|---|
+| **pawl** | 本地，就是 CLI 的退出码 | 提交进仓库的 `pawl.snapshot.json` |
+| SonarQube Server / Cloud | 服务端，免费的自托管版也一样 | 那台服务器上 |
+| Codecov / Coveralls | 服务端，上传的报告处理完之后 | 服务上 |
+| betterer | 本地 | 随代码一起提交的 `.betterer.results` |
+| git-ratchet | 本地 | git-notes |
+
+Qlty（原 Code Climate Quality）塞不进一行。它的 CLI 在本地按问题等级判失败（`--fail-level`，默认 `fmt`），比较对象是 `--upstream` 指定的 ref；存下来的历史和 PR 门禁则在 Qlty Cloud。
+
+各家能保护哪些数字，取决于产品线和套餐：Codecov 在覆盖率之外加了产物体积分析和测试分析，Qlty Cloud 能在总覆盖率下降时让 PR 失败，SonarQube 的自定义门禁也可以对整仓代码设条件。pawl 想要的区别不在于这个清单有多长，而在于 pawl 自己不带任何分析器——它把能从命令输出里提取出来的那个数记下来，然后守住它。git-ratchet 也是这样拿数字的，从 stdin 读 `measure,value`，但要补一句：它是在数值涨过配置的 slack 时判失败，所以覆盖率这类"越大越好"的指标得先转换一下再喂给它。
+
+有两样东西离得足够近，值得分清楚：
+
+**固定阈值不是棘轮。** SonarQube 默认的门禁是拿固定条件去卡*新代码*，而"新代码"本身是一个可以配置的窗口——上一个版本以来、最近 N 天、指定的某次分析、或者和参考分支的 diff；自定义门禁还可以再加上针对整仓代码的条件。但阈值是有人划的一条线，比如覆盖率不得低于 80%。棘轮没有这条线：标准就是这个数上次被记下来时的值，每跑一次 `pawl record` 接受了改进，门槛就抬到新值，也不需要谁先就"多少算够"达成一致。
+
+**diff 过滤没有记忆。** `golangci-lint --new-from-rev`（默认为空，要自己打开）和 `reviewdog -filter-mode=added` 把问题收窄到这次改动碰过的行，便宜，也值得用。但有些数字变差的时候，没有任何一行是被人改过的：依赖装进来更多代码、产物体积涨了、某个测试开始被 skip。只看改动行就看不见这些。
 
 ## pawl 如何测量仓库
 
@@ -273,7 +295,7 @@ jobs:
       # 先运行会生成报告的测试或分析器。
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0.8.0
+      - uses: tiangong-dev/pawl@v0.8.2
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
@@ -305,10 +327,10 @@ pawl 报告的路径是相对配置文件所在目录的，不是相对仓库根
 
 ### 其他 CI
 
-可以下载 release 二进制、使用 npm 包，或直接运行：
+Jenkins、CircleCI、Buildkite、Azure Pipelines、Woodpecker——只要能跑一个二进制就不需要插件。可以下载 release 二进制、使用 npm 包，或直接运行：
 
 ```bash
-npx -y @pawl-tools/cli@0.8.0 check
+npx -y @pawl-tools/cli@0.8.2 check
 ```
 
 整个过程不依赖服务端组件。

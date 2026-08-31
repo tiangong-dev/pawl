@@ -1,5 +1,5 @@
 name: 'setup-pawl'
-description: 'Install the pawl quality gate and put it on PATH (prebuilt binary, no Go or Node required).'
+description: 'Installs pawl and can run it as a CI gate: fail the build when coverage, lint counts, or any tracked number gets worse.'
 branding:
   icon: 'check-circle'
   color: 'black'

@@ -1,7 +1,24 @@
 {
   "name": "@pawl-tools/cli",
   "version": "0.8.2",
-  "description": "pawl — language-agnostic anti-regression quality gate (prebuilt binary distribution)",
+  "description": "pawl — language-agnostic quality ratchet for CI: fails the build when coverage, lint findings, file sizes, or any number you already measure gets worse than the baseline committed to the repository (prebuilt binary distribution)",
+  "keywords": [
+    "quality-gate",
+    "quality-ratchet",
+    "ratchet",
+    "baseline",
+    "code-quality",
+    "code-coverage",
+    "code-metrics",
+    "technical-debt",
+    "regression",
+    "ci",
+    "continuous-integration",
+    "github-actions",
+    "lint",
+    "coverage",
+    "cli"
+  ],
   "license": "MIT",
   "type": "module",
   "repository": {
