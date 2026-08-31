@@ -79,11 +79,11 @@ pawl 从今天的数字起算。第一份快照就是底线。之后谁改差了
 
 | | 判定在哪里算 | 基线存在哪里 |
 |---|---|---|
-| **pawl** | 本地，就是 CLI 的退出码 | 仓库里的一个 JSON 文件 |
+| **pawl** | 本地，就是 CLI 的退出码 | 仓库里的 `pawl.snapshot.json` |
 | SonarQube Server / Cloud | 服务端，免费的自托管版也一样 | 那台服务器上 |
 | Qlty（原 Code Climate Quality） | CLI 在本地做单次分析，趋势和门禁要用 Qlty Cloud | Qlty Cloud |
 | Codecov / Coveralls | 服务端，报告传上去之后 | 服务上 |
-| betterer | 本地 | 仓库里的一个结果文件 |
+| betterer | 本地 | 仓库里的 `.betterer.results` |
 | git-ratchet | 本地 | git-notes |
 
 各家能保护哪些数字，反倒不适合塞进表格，因为它随产品线和套餐一直在变：Codecov 在覆盖率之外加了产物体积分析和测试分析，Qlty Cloud 能在总覆盖率下降时让 PR 失败，SonarQube 的自定义门禁也可以对整仓代码设条件。pawl 想要的区别不在于这个清单有多长，而在于 pawl 根本不知道这些数字是什么意思——任何命令打印出来的数字都能被记下来、然后守住，包括你自己构建流程里那个没有哪家分析器认识的数。这里面形态最接近的是 git-ratchet，它值得补一句：它只在数值上升时判失败，所以覆盖率这类"越大越好"的指标得先转换一下再喂给它。

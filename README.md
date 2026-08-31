@@ -79,11 +79,11 @@ Stopping a number from getting worse is not a new idea. What differs is where th
 
 | | where the verdict is computed | where the baseline lives |
 |---|---|---|
-| **pawl** | locally — it is the CLI's exit code | a JSON file in the repository |
+| **pawl** | locally — it is the CLI's exit code | `pawl.snapshot.json`, committed to the repository |
 | SonarQube Server / Cloud | on a server, including in the free self-hosted edition | that server |
 | Qlty (formerly Code Climate Quality) | the CLI analyzes locally; trends and gates need Qlty Cloud | Qlty Cloud |
 | Codecov / Coveralls | on the service, once the report is uploaded | the service |
-| betterer | locally | a results file in the repository |
+| betterer | locally | `.betterer.results`, committed alongside the code |
 | git-ratchet | locally | git-notes |
 
 What each one protects is harder to put in a table, because it moves with the product line and the plan: Codecov added bundle-size and test analytics on top of coverage, Qlty Cloud can fail a pull request when total coverage drops, and a custom SonarQube gate can carry conditions on overall code. The difference pawl is after is not the length of that list. It is that pawl does not know what any of the numbers mean — anything a command prints can be recorded and then defended, including the number your own build already emits and no vendor ships an analyzer for. git-ratchet is the closest of these in shape and worth one caveat: it fails when a measure rises, so coverage and anything else where higher is better has to be inverted before it goes in.
