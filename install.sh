@@ -55,6 +55,19 @@ url="https://github.com/${REPO}/releases/download/${ver}/${asset}"
 tmp="$(mktemp -d)"
 echo "pawl: downloading ${asset} (${ver})"
 curl -fsSL "$url" -o "${tmp}/${asset}"
+
+if have cosign; then
+  echo "pawl: verifying signature with cosign"
+  curl -fsSL "${url}.sigstore.json" -o "${tmp}/${asset}.sigstore.json"
+  cosign verify-blob \
+    --bundle "${tmp}/${asset}.sigstore.json" \
+    --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    "${tmp}/${asset}"
+else
+  echo "pawl: cosign not found — skipping signature verification (install cosign to verify: https://github.com/sigstore/cosign)" >&2
+fi
+
 tar -xzf "${tmp}/${asset}" -C "$tmp"
 
 dir="${PAWL_INSTALL_DIR:-/usr/local/bin}"

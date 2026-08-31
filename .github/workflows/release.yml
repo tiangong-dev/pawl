@@ -80,8 +80,11 @@ jobs:
       # signature, certificate, and Rekor entry into one .sigstore.json file
       # next to the archive, so whoever downloads a release can verify it with
       # `cosign verify-blob --bundle <archive>.sigstore.json
-      # --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/.*'
+      # --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*'
       # --certificate-oidc-issuer https://token.actions.githubusercontent.com <archive>`.
+      # The identity is scoped to this workflow file, not the whole repo — other
+      # workflows here also hold id-token: write, and a bare repo-prefix regex
+      # would accept a blob signed by any of them.
       #
       # Runs before the npm publish below: npm publish is irreversible (a
       # version can never be republished), so a transient Fulcio/Rekor/sign

@@ -38,11 +38,11 @@ npm install -D @pawl-tools/cli
 # or: curl -fsSL https://raw.githubusercontent.com/tiangong-dev/pawl/main/install.sh | sh
 ```
 
-The release workflow signs each archive it publishes keylessly with [cosign](https://github.com/sigstore/cosign). If you download one by hand from the [Releases page](https://github.com/tiangong-dev/pawl/releases) instead of through npm, Go, or `install.sh`, verify it against the matching `.sigstore.json` next to it (releases before this signing was added have no `.sigstore.json` and can't be verified this way):
+The release workflow signs each archive it publishes keylessly with [cosign](https://github.com/sigstore/cosign) (`install.sh` verifies it automatically when cosign is on the machine). If you download an archive by hand from the [Releases page](https://github.com/tiangong-dev/pawl/releases) instead, verify it against the matching `.sigstore.json` next to it (releases before this signing was added have no `.sigstore.json` and can't be verified this way):
 
 ```bash
 cosign verify-blob --bundle <archive>.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/.*' \
+  --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   <archive>
 # <archive> is the file you downloaded, e.g. pawl-<version>-linux-x64.tar.gz or pawl-<version>-win32-x64.zip
