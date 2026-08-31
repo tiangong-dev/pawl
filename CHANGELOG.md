@@ -2,6 +2,29 @@
 
 Release notes and upgrade instructions. Review the breaking changes before updating an existing installation.
 
+## Unreleased
+
+## 0.8.2 — 2026-08-31
+
+### Added
+
+- `scripts/gitlab-codequality.mjs` converts a `pawl check --format json`
+  verdict into a GitLab Code Quality report for the merge request widget.
+  GitLab is not a first-class pawl target, so this ships as a converter
+  script rather than a CLI output format.
+
+### Fixed
+
+- `json-value`'s missing-file error now explains a file-only dimension the
+  same way the ingest builtins already do: no `command` means an earlier
+  step must produce the file before pawl runs.
+
+### Documentation
+
+- The GitHub Action's `comment: 'false'` note now says `pull-requests: write`
+  can be dropped from the job's permissions when the sticky comment is
+  disabled.
+
 ## 0.8.1 — 2026-08-28
 
 ### Added
@@ -20,8 +43,6 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 - CodeQL runs for Go and JavaScript/TypeScript on pull requests, pushes to
   `main`, and the weekly schedule.
 - Added a vulnerability reporting policy and a Go fuzz target for JSON input.
-
-## Unreleased
 
 ## 0.8.0
 
