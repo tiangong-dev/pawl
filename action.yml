@@ -1,5 +1,5 @@
 name: 'setup-pawl'
-description: 'Run pawl as a CI quality gate, or just put it on PATH: fails the build when coverage, lint findings, or any tracked number gets worse than the baseline committed to the repository. Prebuilt binary, no Go or Node required.'
+description: 'Quality gate for CI: fail the build when coverage, lint findings, or any tracked number gets worse than the baseline in Git.'
 branding:
   icon: 'check-circle'
   color: 'black'
