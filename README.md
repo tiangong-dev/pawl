@@ -17,7 +17,7 @@
 
 Coding agents are fast. They're also good at making a repo slightly worse in ways a diff review misses: coverage down a point, a new 800-line file, a lint you already banned. The PR looks fine. The floor moved.
 
-pawl is the CI gate for that. It records the numbers you already have, then fails any change that makes them worse. Old mess can stay. New mess cannot.
+pawl is a language-agnostic quality ratchet for CI. It records the numbers a repository already produces — coverage, lint findings, failing tests, file sizes, bundle size — as a baseline committed to Git, then exits 1 when a change makes one of them worse. Old mess can stay. New mess cannot. There is no server, no account, and no telemetry.
 
 ```bash
 pawl record                     # record the current baseline
@@ -71,7 +71,26 @@ Because the repo isn't at 80%. It's at 62%, with three 700-line files, and a dea
 
 pawl starts at whatever you have today. The first snapshot is the floor. After that, worse is a red CI. When you actually fix something, re-record that one metric so the new floor sticks. Per-file and per-key comparisons mean fixing file A does not pay for a new mess in file B.
 
-The baseline is a JSON file in Git. No account, no hosted service, no telemetry. `pawl trend` reads history from commits you already have.
+The baseline is a JSON file in Git, so `pawl trend` reads history from commits you already have.
+
+## How pawl compares
+
+Stopping a number from getting worse is not a new idea. The implementations differ in where the verdict is computed, and in how wide the set of protected numbers is.
+
+| | server or account | languages | what it protects |
+|---|---|---|---|
+| **pawl** | none — the baseline is a JSON file in the repository | any, via adapters and custom commands | any number a command can print |
+| SonarQube Server / Cloud | required — the gate is evaluated by a server, including in the free self-hosted edition | 35+, via its own analyzers | what its analyzers report |
+| Qlty (formerly Code Climate Quality) | not for the CLI; trend and pull-request dashboards are hosted | 40+, via 70+ bundled analyzers | what those analyzers report |
+| Codecov / Coveralls | required — reports are uploaded to the service | any, via coverage report formats | coverage only |
+| betterer | none | Node.js; the bundled tests target JS, TS, and CSS | anything its generic test API returns |
+| git-ratchet | none — the baseline lives in git-notes | any, via `measure,value` on stdin | any number piped into it |
+
+Two things are regularly mistaken for this and are worth separating:
+
+**"Clean as You Code" is not a ratchet.** SonarQube applies fixed thresholds to *new code* — the lines a change touched. That is a different question from whether the repository-wide number is worse than the one recorded last week. Both let a legacy codebase stay legacy; only the second notices when the total drifts.
+
+**A diff filter has no memory.** `golangci-lint --new-from-rev` and `reviewdog -filter-mode=added` narrow findings to changed lines, which is useful and cheap. But nothing there catches a metric that gets worse while the responsible line was never edited: a dependency that pulled in more code, a bundle that grew, a test that started being skipped.
 
 ## How pawl measures a repository
 
@@ -309,7 +328,7 @@ pawl reports paths relative to the config file's directory, not the repository r
 
 ### Other CI systems
 
-Use the release binary, the npm package, or:
+Jenkins, CircleCI, Buildkite, Azure Pipelines, Woodpecker — anything that can run a binary needs no plugin. Use the release binary, the npm package, or:
 
 ```bash
 npx -y @pawl-tools/cli@0.8.0 check
