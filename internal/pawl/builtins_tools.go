@@ -2,8 +2,10 @@ package pawl
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -53,6 +55,9 @@ func measureJSONValue(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResu
 		}
 		var err error
 		if data, err = os.ReadFile(filePath); err != nil {
+			if command == "" && errors.Is(err, fs.ErrNotExist) {
+				return MeasureResult{}, fmt.Errorf(`reading %s: file does not exist — this dimension has no "command", so an earlier step must produce this file before pawl runs (or the "file" path is wrong)`, fileRel)
+			}
 			return MeasureResult{}, fmt.Errorf("reading %s: %v", fileRel, err)
 		}
 		artifact = statArtifact(cfg, fileRel, command != "")

@@ -284,7 +284,28 @@ jobs:
           guard-ref: origin/${{ github.base_ref || 'main' }}
 ```
 
-With `command: check`, the action enforces the exit code and can keep updating one PR comment with the JSON verdict instead of posting a new comment every run. Set `guard-ref` after fetching the base ref to make baseline protection part of the same action; if `args` contains `-c/--config`, the same config is used for the guard. The guard runs before the optional comment. Set `comment: 'false'` if logs and annotations are enough. Without `command`, the action only installs pawl on `PATH`.
+With `command: check`, the action enforces the exit code and can keep updating one PR comment with the JSON verdict instead of posting a new comment every run. Set `guard-ref` after fetching the base ref to make baseline protection part of the same action; if `args` contains `-c/--config`, the same config is used for the guard. The guard runs before the optional comment. Set `comment: 'false'` if logs and annotations are enough — and drop `pull-requests: write` from the job's `permissions:` block, since the comment is the only thing that needs it. Without `command`, the action only installs pawl on `PATH`.
+
+### GitLab and other systems without a native pawl widget
+
+`pawl check --format json` is the stable contract; [scripts/gitlab-codequality.mjs](scripts/gitlab-codequality.mjs) converts one verdict into a [GitLab Code Quality](https://docs.gitlab.com/ci/testing/code_quality/) report for the merge-request widget. It is a converter script, not a pawl output format — GitLab is not a pawl target the way GitHub Actions is, so this stays outside the CLI surface.
+
+```yaml
+quality:
+  script:
+    - curl -fsSL -o gitlab-codequality.mjs https://raw.githubusercontent.com/tiangong-dev/pawl/main/scripts/gitlab-codequality.mjs
+    - pawl check --format json > pawl.json || rc=$?
+    - node gitlab-codequality.mjs pawl.json > gl-code-quality.json
+    - exit ${rc:-0}
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality.json
+```
+
+`main` above always has the current script; pin to a specific tag or commit instead once one has shipped it (the same way `guard-ref`/the Action version are pinned elsewhere in this doc) — vendoring a copy into the repo works too. Capture `rc` before converting and `exit` after — `&&` would short-circuit on the regression/could-not-measure exit codes and skip the report exactly when the widget matters most. A could-not-measure verdict (exit 2) still produces a blocker-severity issue rather than an empty report, so a broken gate cannot read as a clean one.
+
+pawl reports paths relative to the config file's directory, not the repository root. If `pawl check` above ran with `-c config/pawl.yaml`, pass that directory through so GitLab attaches issues to the right file: `node gitlab-codequality.mjs pawl.json --config-dir=config`. `--anchor` (used for the could-not-measure/total-only fallback location) is itself config-relative and defaults to `pawl.yaml`, so it already resolves under `--config-dir` correctly without repeating the directory — override it only if the config file has a different name, e.g. `--anchor=quality.yaml` for `config/quality.yaml`, not `--anchor=config/quality.yaml`.
 
 ### Other CI systems
 

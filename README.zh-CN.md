@@ -280,7 +280,28 @@ jobs:
           guard-ref: origin/${{ github.base_ref || 'main' }}
 ```
 
-传入 `command: check` 后，Action 会执行门禁，并可根据 JSON 裁决维护一条 PR 评论；设置 `guard-ref`（使用前先 fetch 目标 ref）即可让同一个 Action 同时保护 baseline。如果 `args` 中有 `-c/--config`，guard 会复用同一份配置；guard 会先于可选的 PR 评论执行。不需要评论时设置 `comment: 'false'`。如果不传 `command`，Action 只负责把 pawl 安装到 `PATH`。
+传入 `command: check` 后，Action 会执行门禁，并可根据 JSON 裁决维护一条 PR 评论；设置 `guard-ref`（使用前先 fetch 目标 ref）即可让同一个 Action 同时保护 baseline。如果 `args` 中有 `-c/--config`，guard 会复用同一份配置；guard 会先于可选的 PR 评论执行。不需要评论时设置 `comment: 'false'`——顺手把 job 的 `permissions:` 里的 `pull-requests: write` 也删掉，因为整个 Action 里只有评论这一步需要它。如果不传 `command`，Action 只负责把 pawl 安装到 `PATH`。
+
+### GitLab 等没有原生 pawl 挂件的系统
+
+`pawl check --format json` 是稳定契约；[scripts/gitlab-codequality.mjs](scripts/gitlab-codequality.mjs) 把一份裁决转换成 [GitLab Code Quality](https://docs.gitlab.com/ci/testing/code_quality/) 报告，供 MR 挂件使用。这是一个转换脚本，不是 pawl 的输出格式——GitLab 不像 GitHub Actions 那样是 pawl 的目标平台，所以它留在 CLI 表面之外。
+
+```yaml
+quality:
+  script:
+    - curl -fsSL -o gitlab-codequality.mjs https://raw.githubusercontent.com/tiangong-dev/pawl/main/scripts/gitlab-codequality.mjs
+    - pawl check --format json > pawl.json || rc=$?
+    - node gitlab-codequality.mjs pawl.json > gl-code-quality.json
+    - exit ${rc:-0}
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality.json
+```
+
+上面的 `main` 现在就能取到脚本；等脚本进了某个 release 之后，再改成固定某个 tag 或 commit（跟本文档别处固定 `guard-ref`/Action 版本一样）——也可以直接把文件 vendor 进仓库。先把 `rc` 存下来再做转换，最后再 `exit`——用 `&&` 会在回归/测不出来的退出码上短路，恰好在挂件最需要的时候不生成报告。测不出来（exit 2）时仍会产出一条 blocker 级别的 issue 而不是空数组，门禁坏掉不能在挂件上读成干净。
+
+pawl 报告的路径是相对配置文件所在目录的，不是相对仓库根目录。如果上面的 `pawl check` 是用 `-c config/pawl.yaml` 跑的，就要把这个目录传过去，GitLab 才能把 issue 挂到正确的文件上：`node gitlab-codequality.mjs pawl.json --config-dir=config`。`--anchor`（测不出来/纯 total 兜底时用的定位）本身就是相对配置目录的，默认值 `pawl.yaml`，配合 `--config-dir` 已经能解析对，不需要再叠一层目录——只有配置文件不叫 `pawl.yaml` 时才需要覆盖它，比如 `config/quality.yaml` 对应 `--anchor=quality.yaml`，而不是 `--anchor=config/quality.yaml`。
 
 ### 其他 CI
 
