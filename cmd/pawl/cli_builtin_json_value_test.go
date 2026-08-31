@@ -207,6 +207,28 @@ func TestBuiltinJsonValueMissingFileIsMeasurementFailure(t *testing.T) {
 	}
 }
 
+// A file-only json-value dimension (no `command`) whose file never
+// materialized must say so in a way that distinguishes "pawl never ran
+// anything to produce this" from a generic missing-file error, matching the
+// same guard on the ingest builtins (coverage/junit/sarif).
+func TestBuiltinJsonValueFileOnlyMissingReportHintsAtMissingUpstreamStep(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "n", direction: "lower-is-better", builtin: "json-value",
+		optionLines: jsonValueOptionLines("", "does-not-exist.json", "n", ""),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (file source does not exist)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stderr, `no "command"`) {
+		t.Errorf("stderr does not explain why pawl did not produce the file itself: %s", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "earlier step") {
+		t.Errorf("stderr does not point at the missing upstream step: %s", res.stderr)
+	}
+}
+
 // Unparseable JSON on stdout is a measurement failure.
 func TestBuiltinJsonValueUnparseableJSONStdoutIsMeasurementFailure(t *testing.T) {
 	dir := t.TempDir()

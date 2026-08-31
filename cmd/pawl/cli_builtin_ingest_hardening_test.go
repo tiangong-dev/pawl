@@ -78,6 +78,29 @@ func TestBuiltinJUnitNonJUnitRootIsMeasurementFailure(t *testing.T) {
 	}
 }
 
+// A file-only dimension (no `command`) whose report never materialized must
+// say so in a way that distinguishes "pawl never ran anything to produce
+// this" from a generic missing-file error — otherwise the fix (run whatever
+// generates the file, or fix the configured path) is not discoverable from
+// the message alone.
+func TestBuiltinFileOnlyMissingReportHintsAtMissingUpstreamStep(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "cov", direction: "higher-is-better", builtin: "coverage",
+		optionLines: coverageOptionLines("", "coverage/coverage-summary.json", "lcov", "lines"),
+	}))
+	res := runPawl(t, dir, baseEnv(), "record")
+	if res.exit != 2 {
+		t.Fatalf("record exit = %d, want 2 (report file never produced)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stderr, `no "command"`) {
+		t.Errorf("stderr does not explain why pawl did not produce the file itself: %s", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "earlier step") {
+		t.Errorf("stderr does not point at the missing upstream step: %s", res.stderr)
+	}
+}
+
 // A <testcase> that is simultaneously failed and skipped is contradictory; the
 // counts (failures/skipped/passing) can't all be honest, so it fails loud.
 func TestBuiltinJUnitContradictoryTestcaseIsMeasurementFailure(t *testing.T) {

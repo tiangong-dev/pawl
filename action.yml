@@ -33,7 +33,9 @@ inputs:
     description: >-
       On a pull_request event, upsert a sticky comment with the gate result
       (rendered from the command''s --format json verdict). Default true; set
-      "false" to disable.
+      "false" to disable. Posting the comment is the only part of this action
+      that needs the pull-requests: write permission — with "false", that
+      permission can be dropped from the job.
     required: false
     default: 'true'
   token:

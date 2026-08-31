@@ -3,8 +3,10 @@ package pawl
 import (
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -44,6 +46,9 @@ func readIngestReport(cfg *Config, dim Dimension, stderr io.Writer, command, fil
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
+			if command == "" && errors.Is(err, fs.ErrNotExist) {
+				return nil, nil, fmt.Errorf(`reading %s: file does not exist — this dimension has no "command", so an earlier step must produce this file before pawl runs (or the "file" path is wrong)`, fileRel)
+			}
 			return nil, nil, fmt.Errorf("reading %s: %v", fileRel, err)
 		}
 		return data, statArtifact(cfg, fileRel, command != ""), nil
