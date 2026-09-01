@@ -38,6 +38,16 @@ npm install -D @pawl-tools/cli
 # 或：curl -fsSL https://raw.githubusercontent.com/tiangong-dev/pawl/main/install.sh | sh
 ```
 
+发布工作流会用 [cosign](https://github.com/sigstore/cosign) 对它发布的每个压缩包做 keyless 签名（机器上装了 cosign 时，`install.sh` 会自动校验）。如果你从 [Releases 页面](https://github.com/tiangong-dev/pawl/releases)手动下载压缩包，可以用旁边的 `.sigstore.json` 校验（这次加签名之前发布的版本没有 `.sigstore.json`，没法这样校验）：
+
+```bash
+cosign verify-blob --bundle <archive>.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  <archive>
+# <archive> 是你下载的文件，例如 pawl-<version>-linux-x64.tar.gz 或 pawl-<version>-win32-x64.zip
+```
+
 生成配置并记录第一份基线：
 
 ```bash

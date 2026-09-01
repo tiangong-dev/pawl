@@ -17,7 +17,7 @@
 
 Coding agents are fast. They're also good at making a repo slightly worse in ways a diff review misses: coverage down a point, a new 800-line file, a lint you already banned. The PR looks fine. The floor moved.
 
-pawl is a language-agnostic quality ratchet for CI. It records the numbers a repository already produces — coverage, lint findings, failing tests, file sizes, bundle size — as a baseline committed to Git, then exits 1 when a change makes one of them worse. Old mess can stay. New mess cannot. There is no server, no account, and no telemetry.
+Pawl is a language-agnostic quality ratchet for CI. It records the numbers a repository already produces — coverage, lint findings, failing tests, file sizes, bundle size — as a baseline committed to Git, then exits 1 when a change makes one of them worse. Old mess can stay. New mess cannot. There is no server, no account, and no telemetry.
 
 ```bash
 pawl record                     # record the current baseline
@@ -26,7 +26,7 @@ pawl record --only line-coverage # lock in one improvement
 pawl guard origin/main          # verify that the baseline was not weakened
 ```
 
-A **dimension** can be anything that produces a number: coverage, passing tests, lint findings, long files, bundle size, dependency cycles, or a project-specific measurement. pawl supplies common adapters and accepts custom commands, so it works with the tools and languages already in the repository.
+A **dimension** can be anything that produces a number: coverage, passing tests, lint findings, long files, bundle size, dependency cycles, or a project-specific measurement. Pawl supplies common adapters and accepts custom commands, so it works with the tools and languages already in the repository.
 
 ## Quickstart
 
@@ -36,6 +36,16 @@ Install the static binary through npm, Go, or the install script:
 npm install -D @pawl-tools/cli
 # or: go install github.com/tiangong-dev/pawl/cmd/pawl@latest
 # or: curl -fsSL https://raw.githubusercontent.com/tiangong-dev/pawl/main/install.sh | sh
+```
+
+The release workflow signs each archive it publishes keylessly with [cosign](https://github.com/sigstore/cosign) (`install.sh` verifies it automatically when cosign is on the machine). If you download an archive by hand from the [Releases page](https://github.com/tiangong-dev/pawl/releases) instead, verify it against the matching `.sigstore.json` next to it (releases before this signing was added have no `.sigstore.json` and can't be verified this way):
+
+```bash
+cosign verify-blob --bundle <archive>.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  <archive>
+# <archive> is the file you downloaded, e.g. pawl-<version>-linux-x64.tar.gz or pawl-<version>-win32-x64.zip
 ```
 
 Then create a config and record the first baseline:
@@ -69,7 +79,7 @@ That is the whole loop: measure, compare, fix regressions, and record genuine im
 
 Because the repo isn't at 80%. It's at 62%, with three 700-line files, and a deadline. A fixed bar either fails every PR or protects nothing.
 
-pawl starts at whatever you have today. The first snapshot is the floor. After that, worse is a red CI. When you actually fix something, re-record that one metric so the new floor sticks. Per-file and per-key comparisons mean fixing file A does not pay for a new mess in file B.
+Pawl starts at whatever you have today. The first snapshot is the floor. After that, worse is a red CI. When you actually fix something, re-record that one metric so the new floor sticks. Per-file and per-key comparisons mean fixing file A does not pay for a new mess in file B.
 
 The baseline is a JSON file in Git, so `pawl trend` reads history from commits you already have.
 
@@ -256,7 +266,7 @@ pawl record --dry-run --accept-worse
 pawl record --accept-worse
 ```
 
-pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot.
+Pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot.
 
 ### Reuse one measurement
 
@@ -327,7 +337,7 @@ quality:
 
 `main` above always has the current script; pin to a specific tag or commit instead once one has shipped it (the same way `guard-ref`/the Action version are pinned elsewhere in this doc) — vendoring a copy into the repo works too. Capture `rc` before converting and `exit` after — `&&` would short-circuit on the regression/could-not-measure exit codes and skip the report exactly when the widget matters most. A could-not-measure verdict (exit 2) still produces a blocker-severity issue rather than an empty report, so a broken gate cannot read as a clean one.
 
-pawl reports paths relative to the config file's directory, not the repository root. If `pawl check` above ran with `-c config/pawl.yaml`, pass that directory through so GitLab attaches issues to the right file: `node gitlab-codequality.mjs pawl.json --config-dir=config`. `--anchor` (used for the could-not-measure/total-only fallback location) is itself config-relative and defaults to `pawl.yaml`, so it already resolves under `--config-dir` correctly without repeating the directory — override it only if the config file has a different name, e.g. `--anchor=quality.yaml` for `config/quality.yaml`, not `--anchor=config/quality.yaml`.
+Pawl reports paths relative to the config file's directory, not the repository root. If `pawl check` above ran with `-c config/pawl.yaml`, pass that directory through so GitLab attaches issues to the right file: `node gitlab-codequality.mjs pawl.json --config-dir=config`. `--anchor` (used for the could-not-measure/total-only fallback location) is itself config-relative and defaults to `pawl.yaml`, so it already resolves under `--config-dir` correctly without repeating the directory — override it only if the config file has a different name, e.g. `--anchor=quality.yaml` for `config/quality.yaml`, not `--anchor=config/quality.yaml`.
 
 ### Other CI systems
 
@@ -352,7 +362,7 @@ CI is still the authority. `pawl agent` just writes the operating notes so the a
 
 ## Scope
 
-pawl owns **measurement orchestration, comparison, and the verdict**. It is not a new linter, hosted dashboard, package manager, or auto-fixer. Projects continue to install and configure their own analyzers; pawl gives those measurements one consistent baseline and one enforceable answer.
+Pawl owns **measurement orchestration, comparison, and the verdict**. It is not a new linter, hosted dashboard, package manager, or auto-fixer. Projects continue to install and configure their own analyzers; pawl gives those measurements one consistent baseline and one enforceable answer.
 
 - [Recipes](./RECIPES.md) — configurations to copy and adapt
 - [Engine contract](./spec/README.md) — precise behavior and file formats

@@ -7,7 +7,9 @@
 # Go (go install), then npm (global @pawl-tools/cli), then a direct download of
 # the prebuilt binary from the GitHub Release. Override the target release with
 # PAWL_VERSION (a tag like v0.1.0, or "latest"); override the binary-download
-# location with PAWL_INSTALL_DIR (default /usr/local/bin).
+# location with PAWL_INSTALL_DIR (default /usr/local/bin). In the direct-download
+# path, a missing signature aborts the install unless PAWL_SKIP_VERIFY=1 — set
+# it only to install a release that predates cosign signing.
 set -eu
 
 REPO="tiangong-dev/pawl"
@@ -55,6 +57,25 @@ url="https://github.com/${REPO}/releases/download/${ver}/${asset}"
 tmp="$(mktemp -d)"
 echo "pawl: downloading ${asset} (${ver})"
 curl -fsSL "$url" -o "${tmp}/${asset}"
+
+if have cosign; then
+  if curl -fsSL "${url}.sigstore.json" -o "${tmp}/${asset}.sigstore.json" 2>/dev/null; then
+    echo "pawl: verifying signature with cosign"
+    cosign verify-blob \
+      --bundle "${tmp}/${asset}.sigstore.json" \
+      --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      "${tmp}/${asset}"
+  elif [ "${PAWL_SKIP_VERIFY:-}" = "1" ]; then
+    echo "pawl: no .sigstore.json for ${ver} and PAWL_SKIP_VERIFY=1 — installing unverified" >&2
+  else
+    echo "pawl: could not fetch a signature for ${ver} — refusing to install unverified. Releases before signing was added have none; set PAWL_SKIP_VERIFY=1 to install one of those anyway." >&2
+    exit 1
+  fi
+else
+  echo "pawl: cosign not found — skipping signature verification (install cosign to verify: https://github.com/sigstore/cosign)" >&2
+fi
+
 tar -xzf "${tmp}/${asset}" -C "$tmp"
 
 dir="${PAWL_INSTALL_DIR:-/usr/local/bin}"
