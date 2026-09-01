@@ -1,0 +1,18 @@
+{
+  "metrics": {
+    "codeql-go": {
+      "direction": "lower-is-better",
+      "definition": "v1:sha256:5a1b383dbd32f25f146e3bfb7858616d9c2f49fb7e56c8dcc4014c219883d75e",
+      "value": 0,
+      "unit": "findings",
+      "breakdown": {}
+    },
+    "codeql-javascript-typescript": {
+      "direction": "lower-is-better",
+      "definition": "v1:sha256:5a1b383dbd32f25f146e3bfb7858616d9c2f49fb7e56c8dcc4014c219883d75e",
+      "value": 0,
+      "unit": "findings",
+      "breakdown": {}
+    }
+  }
+}
