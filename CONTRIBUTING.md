@@ -2,6 +2,8 @@
 
 Pawl is a language-agnostic anti-regression quality gate. This repository uses pawl on its own Go source, so `pawl check` must pass on every pull request.
 
+Participation in this project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Before you start
 
 - The behavioral contract lives in [`spec/`](spec/README.md); root [`SPEC.md`](SPEC.md) is its index. Read the relevant section before changing CLI behavior, snapshot format, comparison semantics, or output, and update the contract with the implementation. The contract is authoritative.
