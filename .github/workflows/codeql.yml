@@ -39,3 +39,16 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          output: sarif-results
+
+      # Ratchets CodeQL's own finding count via pawl.codeql.yaml (kept apart
+      # from pawl.yaml/ci.yml — see that file's header). A new dimension has
+      # no baseline yet, so this reports and passes until someone runs
+      # `pawl record -c pawl.codeql.yaml` to lock in a starting point.
+      - name: pawl check — CodeQL findings ratchet (${{ matrix.language }})
+        uses: ./
+        with:
+          command: check
+          args: '-c pawl.codeql.yaml --only codeql-${{ matrix.language }}'
+          comment: 'false'
