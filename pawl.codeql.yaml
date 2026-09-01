@@ -20,4 +20,7 @@ dimensions:
     gate: "per-file-count"
     builtin: "sarif"
     options:
-      file: "sarif-results/javascript-typescript.sarif"
+      # codeql-action writes this file named after the CodeQL language id
+      # ("javascript"), not the matrix value ("javascript-typescript") —
+      # confirmed from a real run's Analyze step log.
+      file: "sarif-results/javascript.sarif"
