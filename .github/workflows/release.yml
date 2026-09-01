@@ -70,6 +70,35 @@ jobs:
           PAWL_ARCHIVES: '1'
         run: node npm/build.js
 
+      - name: Install cosign
+        if: inputs.channel == 'release'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless signing: cosign trades the job's OIDC token (id-token: write,
+      # already granted above for npm provenance) for a short-lived cert from
+      # Fulcio, and records the signature in Rekor. --bundle writes the
+      # signature, certificate, and Rekor entry into one .sigstore.json file
+      # next to the archive, so whoever downloads a release can verify it with
+      # `cosign verify-blob --bundle <archive>.sigstore.json
+      # --certificate-identity-regexp 'https://github.com/tiangong-dev/pawl/\.github/workflows/release\.yml@.*'
+      # --certificate-oidc-issuer https://token.actions.githubusercontent.com <archive>`.
+      # The identity is scoped to this workflow file, not the whole repo — other
+      # workflows here also hold id-token: write, and a bare repo-prefix regex
+      # would accept a blob signed by any of them.
+      #
+      # Runs before the npm publish below: npm publish is irreversible (a
+      # version can never be republished), so a transient Fulcio/Rekor/sign
+      # failure must be caught before that point — otherwise a retry of this
+      # workflow would fail immediately on the already-published version and
+      # never reach signing.
+      - name: Sign release archives
+        if: inputs.channel == 'release'
+        run: |
+          set -euo pipefail
+          for f in npm/dist/archives/*; do
+            cosign sign-blob --yes --bundle "${f}.sigstore.json" "$f"
+          done
+
       - name: Publish to npm
         env:
           NPM_TAG: ${{ needs.prepare.outputs.npm_tag }}

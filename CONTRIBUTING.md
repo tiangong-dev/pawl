@@ -1,6 +1,6 @@
 # Contributing to pawl
 
-pawl is a language-agnostic anti-regression quality gate. This repository uses pawl on its own Go source, so `pawl check` must pass on every pull request.
+Pawl is a language-agnostic anti-regression quality gate. This repository uses pawl on its own Go source, so `pawl check` must pass on every pull request.
 
 ## Before you start
 

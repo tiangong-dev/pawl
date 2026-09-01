@@ -1,6 +1,6 @@
 # Agent-capability demo
 
-pawl's actual audience for its JSON verdict and anti-tamper guards is a coding
+Pawl's actual audience for its JSON verdict and anti-tamper guards is a coding
 agent, not (only) a human reading a table. This directory exists to check, on
 demand and over time, whether an agent working in a pawl-gated repo actually
 uses that surface correctly — reads `failure_class`/`watch`, scopes `record`
@@ -139,7 +139,7 @@ tasks 5 and 6, one run per cell, all four transcripts clean under
 - **Both numbers above were re-derived after the scorer bug below.** The two
   control transcripts survive and re-score under the fixed script: both ran a
   real `pawl check` after their last edit, so the control half of the 4/4 is
-  sound, and the json count is 0 of **20** invocations, not 22 — the two that
+  sound, and the JSON count is 0 of **20** invocations, not 22 — the two that
   vanished were the miscounted kind. The treatment transcripts are gone, so
   `8 of 16` and the treatment half of the 4/4 could not be re-derived and rest
   on the original scoring. Nothing about the direction changes; the treatment
@@ -314,7 +314,7 @@ anyway.
 
 ## Why the fixture, not just pawl's own repo
 
-pawl already dogfoods itself (`pawl.yaml` at the repo root), and that's a
+Pawl already dogfoods itself (`pawl.yaml` at the repo root), and that's a
 valid place to watch agent behavior too. The fixture exists on top of that
 because pawl's own config measures Go source at real-project scale — a
 realistic task there takes an agent several minutes and produces a large,

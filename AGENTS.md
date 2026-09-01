@@ -1,6 +1,6 @@
 # Agent notes for this repo
 
-pawl is a quality gate. Do not treat a non-zero exit as “go rewrite the code”
+Pawl is a quality gate. Do not treat a non-zero exit as “go rewrite the code”
 until you know *why*.
 
 ## Loop
