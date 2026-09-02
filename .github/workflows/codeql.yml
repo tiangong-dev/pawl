@@ -28,6 +28,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # guard-ref compares this PR's CodeQL snapshot with the base branch.
+          fetch-depth: 0
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
@@ -51,4 +54,5 @@ jobs:
         with:
           command: check
           args: '-c pawl.codeql.yaml --only codeql-${{ matrix.language }}'
+          guard-ref: origin/${{ github.base_ref || 'main' }}
           comment: 'false'
