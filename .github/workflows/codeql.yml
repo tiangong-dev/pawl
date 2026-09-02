@@ -46,13 +46,13 @@ jobs:
           output: sarif-results
 
       # Ratchets CodeQL's own finding count via pawl.codeql.yaml (kept apart
-      # from pawl.yaml/ci.yml — see that file's header). A new dimension has
-      # no baseline yet, so this reports and passes until someone runs
-      # `pawl record -c pawl.codeql.yaml` to lock in a starting point.
+      # from pawl.yaml/ci.yml — see that file's header). On pull requests the
+      # guard also prevents a snapshot change from weakening the base branch's
+      # recorded threshold.
       - name: pawl check — CodeQL findings ratchet (${{ matrix.language }})
         uses: ./
         with:
           command: check
           args: '-c pawl.codeql.yaml --only codeql-${{ matrix.language }}'
-          guard-ref: origin/${{ github.base_ref || 'main' }}
+          guard-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
           comment: 'false'

@@ -16,13 +16,17 @@ function namedStep(name) {
   return workflow.slice(start, next === -1 ? workflow.length : next)
 }
 
-test('CodeQL ratchet compares the PR snapshot with its base branch', () => {
+test('CodeQL ratchet uses its own config and guards only pull requests', () => {
   const checkout = namedStep('Checkout code')
   assert.match(checkout, /\n\s+fetch-depth:\s*0\s*$/m)
 
   const ratchet = namedStep('pawl check — CodeQL findings ratchet (${{ matrix.language }})')
   assert.match(
     ratchet,
-    /\n\s+guard-ref:\s*origin\/\$\{\{\s*github\.base_ref\s*\|\|\s*'main'\s*\}\}\s*$/m,
+    /\n\s+args:\s*'-c pawl\.codeql\.yaml --only codeql-\$\{\{ matrix\.language \}\}'\s*$/m,
+  )
+  assert.match(
+    ratchet,
+    /\n\s+guard-ref:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*&&\s*format\('origin\/\{0\}',\s*github\.base_ref\)\s*\|\|\s*''\s*\}\}\s*$/m,
   )
 })
