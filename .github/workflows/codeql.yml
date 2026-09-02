@@ -28,6 +28,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # guard-ref compares this PR's CodeQL snapshot with the base branch.
+          fetch-depth: 0
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
@@ -39,3 +42,17 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          output: sarif-results
+
+      # Ratchets CodeQL's own finding count via pawl.codeql.yaml (kept apart
+      # from pawl.yaml/ci.yml — see that file's header). On pull requests the
+      # guard also prevents a snapshot change from weakening the base branch's
+      # recorded threshold.
+      - name: pawl check — CodeQL findings ratchet (${{ matrix.language }})
+        uses: ./
+        with:
+          command: check
+          args: '-c pawl.codeql.yaml --only codeql-${{ matrix.language }}'
+          guard-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          comment: 'false'

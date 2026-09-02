@@ -1,0 +1,26 @@
+# Independent config for the codeql.yml workflow: ratchets CodeQL's own
+# findings as a pawl dimension, read from the SARIF file codeql-action/analyze
+# writes locally before uploading. Kept separate from pawl.yaml/pawl.snapshot.json
+# so this has no effect on ci.yml's self-gate — a missing SARIF file here must
+# never make the unrelated ci.yml `pawl check` fail.
+snapshot: "pawl.codeql.snapshot.json"
+
+dimensions:
+  - id: "codeql-go"
+    title: "CodeQL findings (go)"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "sarif"
+    options:
+      file: "sarif-results/go.sarif"
+
+  - id: "codeql-javascript-typescript"
+    title: "CodeQL findings (javascript-typescript)"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "sarif"
+    options:
+      # codeql-action writes this file named after the CodeQL language id
+      # ("javascript"), not the matrix value ("javascript-typescript") —
+      # confirmed from a real run's Analyze step log.
+      file: "sarif-results/javascript.sarif"
