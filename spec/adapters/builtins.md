@@ -4,7 +4,8 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 
 ### `file-length`
 
-Counts files whose line count exceeds `threshold` (default 500). Options: `threshold` (int), `include` (glob list, required, `**` supported), `exclude` (glob list, optional). Globs are matched against paths relative to the config dir. The `.git` directory is never traversed, and a directory matching an exclude glob (or its `/**`-less prefix, e.g. `**/node_modules/**` at the `node_modules` directory) is pruned without descending — excluding a huge tree costs zero traversal. Both built-ins share these traversal semantics.
+Counts files whose line count exceeds `threshold` (default 500). Options: `threshold` (int), `include` (glob list, required, `**` supported), `exclude` (glob list, optional), `min_files` (optional non-negative integer). Globs are matched against paths relative to the config dir. The `.git` directory is never traversed, and a directory matching an exclude glob (or its `/**`-less prefix, e.g. `**/node_modules/**` at the `node_modules` directory) is pruned without descending — excluding a huge tree costs zero traversal. Both built-ins share these traversal semantics.
+- `min_files` requires at least that many included regular files to be opened after excludes apply. A short scan is a measurement failure, never a recorded zero; successful non-quiet runs print the scanned count and config root to stderr, but neither is stored in a measurement document or snapshot.
 - Line count: empty file = 0 lines; a trailing newline does not add a line (`"a\nb\n"` = 2 lines, `"a\nb"` = 2 lines).
 - Result: `value` = number of files over the threshold, `unit` = `"files > <threshold> lines"`, `breakdown` = `{ "<relative path>": <line count> }` for each offending file.
 - Intended gate: `total` — growing an already-long file must not fail CI; only a new file crossing the limit (which moves the total) should. Pair a second dimension on the same builtin with `gate: per-key-value` to also refuse growth of files already in the breakdown. See RECIPES.md.
@@ -17,7 +18,7 @@ Counts files whose byte size exceeds `threshold` (default 32768). Same options a
 
 ### `pattern-count`
 
-Counts regexp matches across files — the generic "suppression / escape-hatch counter" (`//nolint`, `@Suppress`, `!!`, `as!`, …). Options: `pattern` (Go regexp, required), `include` (glob list, required), `exclude` (glob list, optional).
+Counts regexp matches across files — the generic "suppression / escape-hatch counter" (`//nolint`, `@Suppress`, `!!`, `as!`, …). Options: `pattern` (Go regexp, required), `include` (glob list, required), `exclude` (glob list, optional), `min_files` (optional non-negative integer). Its `min_files` uses the same included-regular-file count and failure semantics as `file-length`.
 - Matching is per line; every non-overlapping match counts.
 - Result: `value` = total match count, `unit` = `"matches"`, `breakdown` = `{ "<relative path>:<1-based line>": <matches on that line> }`.
 - The `path:line` breakdown key shape is what makes `per-file-count` gating work.

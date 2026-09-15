@@ -21,6 +21,10 @@ type MeasureResult struct {
 	Value     float64
 	Unit      string
 	Breakdown map[string]float64
+	// ScannedFiles is runtime-only provenance for native filesystem scans. It
+	// deliberately stays off Metric, so snapshot and measurement documents keep
+	// only the stable value that a user chose to record.
+	ScannedFiles *int
 	// Artifact is the file this measurement read, when it read one. It is
 	// provenance for the verdict only — it is deliberately kept off Metric,
 	// which is the snapshot's value type and must move only when a number does.
@@ -127,7 +131,10 @@ func MeasureAll(cfg *Config, progress, stderr io.Writer) (map[string]Metric, map
 	}
 	// Config order, after the concurrent phase, so the notes are deterministic
 	// and never interleave with a parallel adapter's own stderr.
-	for _, dim := range cfg.Dimensions {
+	for i, dim := range cfg.Dimensions {
+		if scanned := outcomes[i].result.ScannedFiles; scanned != nil {
+			fmt.Fprintf(progress, "  %s scanned %d file(s) under %s\n", dim.ID, *scanned, cfg.Dir)
+		}
 		if art := artifacts[dim.ID]; art != nil && !art.Generated {
 			fmt.Fprintf(progress, "  %s read %s (%s old — nothing in this run produced it)\n",
 				dim.ID, art.Path, formatArtifactAge(art.AgeSeconds))

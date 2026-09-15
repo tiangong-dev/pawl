@@ -299,6 +299,9 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		if len(stringList(options["include"])) == 0 {
 			return fmt.Errorf("builtin %q requires a non-empty include glob list", builtin)
 		}
+		if err := validateMinFilesOption(options); err != nil {
+			return fmt.Errorf("builtin %q %v", builtin, err)
+		}
 	case builtinPatternCount:
 		pattern, _ := options["pattern"].(string)
 		if pattern == "" {
@@ -309,6 +312,9 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		}
 		if len(stringList(options["include"])) == 0 {
 			return fmt.Errorf("builtin %q requires a non-empty include glob list", builtin)
+		}
+		if err := validateMinFilesOption(options); err != nil {
+			return fmt.Errorf("builtin %q %v", builtin, err)
 		}
 	case builtinEslint:
 		if command, _ := options["command"].(string); command == "" {
@@ -439,18 +445,6 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
 			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,
 			builtinJscpd, builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
-	}
-	return nil
-}
-
-func validateMinFilesOption(options map[string]any) error {
-	value, exists := options["min_files"]
-	if !exists {
-		return nil
-	}
-	n, ok := numberOption(options, "min_files")
-	if !ok || n < 0 || n != float64(int(n)) {
-		return fmt.Errorf("min_files must be a non-negative integer, got %v", value)
 	}
 	return nil
 }

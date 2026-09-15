@@ -33,7 +33,7 @@
     "passing-tests": {
       "direction": "higher-is-better",
       "definition": "v1:sha256:f8ff86f8a8faa6ac0accfc2692496c5b99aaf9ec7b2e2f77275f7baa910fc112",
-      "value": 689,
+      "value": 709,
       "unit": "passing",
       "breakdown": null
     },

@@ -35,6 +35,7 @@ dimensions:
       threshold: 500
       include: ["**/*.go"]
       exclude: ["vendor/**"]
+      min_files: 1              # optional completeness floor for this native scan
 
   - id: "eslint-rule"
     title: "One ESLint rule"

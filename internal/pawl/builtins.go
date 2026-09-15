@@ -73,7 +73,9 @@ func measureFileOver(cfg *Config, dim Dimension, fallback int, unit string, size
 
 	breakdown := map[string]float64{}
 	count := 0.0
+	scanned := 0
 	err := walkIncluded(cfg.Dir, include, exclude, func(rel, abs string) error {
+		scanned++
 		data, err := os.ReadFile(abs)
 		if err != nil {
 			return err
@@ -88,10 +90,14 @@ func measureFileOver(cfg *Config, dim Dimension, fallback int, unit string, size
 	if err != nil {
 		return MeasureResult{}, err
 	}
+	if err := requireMinFiles(dim.Options, scanned, cfg.Dir); err != nil {
+		return MeasureResult{}, err
+	}
 	return MeasureResult{
-		Value:     count,
-		Unit:      fmt.Sprintf("files > %d %s", threshold, unit),
-		Breakdown: breakdown,
+		Value:        count,
+		Unit:         fmt.Sprintf("files > %d %s", threshold, unit),
+		Breakdown:    breakdown,
+		ScannedFiles: &scanned,
 	}, nil
 }
 
@@ -108,7 +114,9 @@ func measurePatternCount(cfg *Config, dim Dimension) (MeasureResult, error) {
 	exclude := stringList(dim.Options["exclude"])
 
 	findings := newFileFindings(cfg)
+	scanned := 0
 	err = walkIncluded(cfg.Dir, include, exclude, func(rel, abs string) error {
+		scanned++
 		data, err := os.ReadFile(abs)
 		if err != nil {
 			return err
@@ -124,7 +132,12 @@ func measurePatternCount(cfg *Config, dim Dimension) (MeasureResult, error) {
 	if err != nil {
 		return MeasureResult{}, err
 	}
-	return findings.result("matches"), nil
+	if err := requireMinFiles(dim.Options, scanned, cfg.Dir); err != nil {
+		return MeasureResult{}, err
+	}
+	result := findings.result("matches")
+	result.ScannedFiles = &scanned
+	return result, nil
 }
 
 // walkIncluded visits every regular file under root whose slash-relative
