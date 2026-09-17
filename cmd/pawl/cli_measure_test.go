@@ -260,16 +260,26 @@ func TestCurrentRejectedOnOtherCommands(t *testing.T) {
 	}
 }
 
-// measure emits one document; a format flag would imply there is a choice.
-func TestMeasureRejectsFormatFlag(t *testing.T) {
+// measure has one document format, and accepts the explicit JSON spelling so
+// generic automation need not special-case it.
+func TestMeasureAcceptsJSONFormatFlag(t *testing.T) {
 	dir := t.TempDir()
 	measureConfig(t, dir, 3, 5)
 	res := runPawl(t, dir, baseEnv(), "measure", "--format", "json")
-	if res.exit != 2 {
-		t.Fatalf("measure --format json exit = %d, want 2\nstderr=%s", res.exit, res.stderr)
+	if res.exit != 0 {
+		t.Fatalf("measure --format json exit = %d, want 0\nstderr=%s", res.exit, res.stderr)
 	}
-	if !strings.Contains(res.stderr, "--format is not valid on `measure`") {
-		t.Fatalf("stderr should reject --format, got:\n%s", res.stderr)
+	var document map[string]any
+	if err := json.Unmarshal([]byte(res.stdout), &document); err != nil {
+		t.Fatalf("stdout must remain the measurement JSON document: %v\nstdout=%s", err, res.stdout)
+	}
+	bare := runPawl(t, dir, baseEnv(), "measure")
+	if bare.exit != 0 || res.stdout != bare.stdout {
+		t.Fatalf("--format json must equal bare measure\nflagged=%q\nbare=%q", res.stdout, bare.stdout)
+	}
+	text := runPawl(t, dir, baseEnv(), "measure", "--format", "text")
+	if text.exit != 2 || !strings.Contains(text.stderr, "--format is not valid on `measure`") {
+		t.Fatalf("measure --format text must remain a usage error: exit=%d stderr=%s", text.exit, text.stderr)
 	}
 }
 

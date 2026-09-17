@@ -32,6 +32,9 @@ func TestInitScaffoldsConfigAndPointsToRecord(t *testing.T) {
 	if !strings.Contains(res.stdout, "pawl record") {
 		t.Errorf("stdout does not mention next step `pawl record`: %q", res.stdout)
 	}
+	if !strings.Contains(res.stdout, "https://github.com/tiangong-dev/pawl/blob/main/RECIPES.md") {
+		t.Errorf("stdout does not link to the accessible recipe cookbook: %q", res.stdout)
+	}
 }
 
 // init is the zero-friction on-ramp: it requires no pre-existing pawl.yaml

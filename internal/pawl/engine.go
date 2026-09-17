@@ -23,7 +23,7 @@ var Version = "dev"
 func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	command := ""
 	configPath := "pawl.yaml"
-	format := "text"
+	format, formatProvided := "text", false
 	since := ""
 	limit := 20
 	limitSet := false
@@ -100,7 +100,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 				return 2
 			}
 			i++
-			format = args[i]
+			format, formatProvided = args[i], true
 		case args[i] == "--since":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--since requires a git ref\n")
@@ -197,7 +197,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--format is not valid on `agent` — it emits Markdown")
 		return 2
 	}
-	if command == "measure" && format != "text" {
+	if command == "measure" && formatProvided && format != "json" {
 		fmt.Fprintln(stderr, "--format is not valid on `measure` — it emits the measurement document")
 		return 2
 	}

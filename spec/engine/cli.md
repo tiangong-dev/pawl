@@ -64,9 +64,11 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
   `guard` ignores `--format` (its output is not tabular). `trend` and
-  `rank` honor `text` (default) and `json`. `agent` emits Markdown and
-  `measure` emits the measurement document by definition, so any `--format` on
-  either is a usage error (exit 2).
+  `rank` honor `text` (default) and `json`. `agent` emits Markdown, so any
+  `--format` there is a usage error (exit 2). `measure` emits the measurement
+  document by definition and accepts `--format json` as an equivalent,
+  compatibility spelling; every other explicit `--format` spelling, including
+  `--format text`, is a usage error (exit 2).
 - `--write <target>` installs `agent`'s block into an instruction file:
   `agent` → `./AGENTS.md` (Codex, Antigravity, Cursor), `claude` →
   `./CLAUDE.md` (Claude Code), specified in
@@ -105,4 +107,3 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.
-

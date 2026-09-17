@@ -37,6 +37,8 @@ Two decisions come up in almost every dimension, so let's get them out of the wa
 
 One dimension is not enough here. `total` catches a *new* file crossing the limit, but an already-long file can keep growing forever without moving the total. Pair a second dimension on the same builtin with `per-key-value` to stop that growth. `per-key-value` ignores new keys, so the two dimensions are complements, not duplicates.
 
+If this scan must cover real source files, add `min_files` to both paired dimensions. It counts regular files after `include` and `exclude` apply, so a moved source root or an over-broad exclude fails measurement instead of recording zero.
+
 ```yaml
 - id: "file-length-growth"
   title: "Already-long files must not grow"

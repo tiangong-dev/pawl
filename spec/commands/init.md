@@ -16,7 +16,7 @@ no existing config.
   `pattern-count`), so `pawl record` succeeds immediately with no external tool
   installed. Comments in the file point at the recipe cookbook for more.
 - On success it writes the file and prints next-steps lines (naming the file,
-  pointing at `pawl record`, and naming
+  pointing at `pawl record`, the accessible
+  `https://github.com/tiangong-dev/pawl/blob/main/RECIPES.md` cookbook, and naming
   [`agent`](agent.md) for repositories worked on by a coding agent),
   exit 0.
-
