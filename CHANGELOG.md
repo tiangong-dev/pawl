@@ -4,12 +4,21 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+## 0.8.3 — 2026-11-09
+
 ### Fixed
 
 - The `setup-pawl` action and `install.sh` no longer fail on a single
   transient GitHub error (such as a 504) while downloading the binary. They
   try `gh release download` first when `gh` is available, then fall back to
   `curl` with retries and backoff.
+- Clarified native scan coverage in CLI usage.
+
+### Added
+
+- Release archives published via GitHub Releases are keylessly signed
+  with cosign, and `install.sh` verifies signatures automatically when
+  cosign is available.
 
 ## 0.8.2 — 2026-08-31
 
