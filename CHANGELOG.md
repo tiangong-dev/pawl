@@ -4,6 +4,13 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Fixed
+
+- The `setup-pawl` action and `install.sh` no longer fail on a single
+  transient GitHub error (such as a 504) while downloading the binary. They
+  try `gh release download` first when `gh` is available, then fall back to
+  `curl` with retries and backoff.
+
 ## 0.8.2 — 2026-08-31
 
 ### Added
