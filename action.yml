@@ -68,9 +68,27 @@ runs:
           *) echo "::error::setup-pawl: unsupported runner arch '$RUNNER_ARCH'"; exit 1 ;;
         esac
 
+        # --retry covers 408/429/5xx and timeouts with exponential backoff;
+        # --retry-all-errors (curl >= 7.71) adds mid-transfer resets.
+        retry_flags=(--retry 5 --retry-connrefused)
+        if curl --retry-all-errors -V >/dev/null 2>&1; then
+          retry_flags+=(--retry-all-errors)
+        fi
+        have_gh=0
+        command -v gh >/dev/null 2>&1 && have_gh=1
+
         ver="$PAWL_VERSION"
         if [ "$ver" = latest ]; then
-          ver="$(gh release view --repo tiangong-dev/pawl --json tagName --jq .tagName)"
+          if [ "$have_gh" = 1 ]; then
+            ver="$(gh release view --repo tiangong-dev/pawl --json tagName --jq .tagName 2>/dev/null || true)"
+          fi
+          if [ -z "$ver" ] || [ "$ver" = latest ]; then
+            ver="$(curl -fsSL "${retry_flags[@]}" https://api.github.com/repos/tiangong-dev/pawl/releases/latest | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)"
+          fi
+          if [ -z "$ver" ]; then
+            echo "::error::setup-pawl: could not resolve the latest release tag"
+            exit 1
+          fi
         fi
         num="${ver#v}"
         asset="pawl-${num}-${plat}-${arch}.${ext}"
@@ -79,7 +97,19 @@ runs:
         dest="${RUNNER_TEMP}/pawl-bin"
         mkdir -p "$dest"
         echo "setup-pawl: downloading $asset ($ver)"
-        curl -fsSL "$url" -o "${RUNNER_TEMP}/${asset}"
+
+        downloaded=0
+        if [ "$have_gh" = 1 ]; then
+          if gh release download "$ver" --repo tiangong-dev/pawl --pattern "$asset" --dir "${RUNNER_TEMP}" --clobber && [ -f "${RUNNER_TEMP}/${asset}" ]; then
+            downloaded=1
+          else
+            echo "setup-pawl: gh release download failed, falling back to curl" >&2
+          fi
+        fi
+
+        if [ "$downloaded" -eq 0 ]; then
+          curl -fsSL "${retry_flags[@]}" "$url" -o "${RUNNER_TEMP}/${asset}"
+        fi
         if [ "$ext" = zip ]; then
           unzip -oq "${RUNNER_TEMP}/${asset}" -d "$dest"
         else
