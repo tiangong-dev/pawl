@@ -1,6 +1,6 @@
 {
   "name": "@pawl-tools/cli",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "pawl — language-agnostic quality ratchet for CI: fails the build when coverage, lint findings, file sizes, or any number you already measure gets worse than the baseline committed to the repository (prebuilt binary distribution)",
   "keywords": [
     "quality-gate",
@@ -36,11 +36,11 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@pawl-tools/cli-darwin-arm64": "0.8.2",
-    "@pawl-tools/cli-darwin-x64": "0.8.2",
-    "@pawl-tools/cli-linux-arm64": "0.8.2",
-    "@pawl-tools/cli-linux-x64": "0.8.2",
-    "@pawl-tools/cli-win32-arm64": "0.8.2",
-    "@pawl-tools/cli-win32-x64": "0.8.2"
+    "@pawl-tools/cli-darwin-arm64": "0.8.3",
+    "@pawl-tools/cli-darwin-x64": "0.8.3",
+    "@pawl-tools/cli-linux-arm64": "0.8.3",
+    "@pawl-tools/cli-linux-x64": "0.8.3",
+    "@pawl-tools/cli-win32-arm64": "0.8.3",
+    "@pawl-tools/cli-win32-x64": "0.8.3"
   }
 }
