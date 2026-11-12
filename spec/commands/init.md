@@ -6,7 +6,10 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 nothing to a passing gate in two commands (`pawl init && pawl record`). It reads
 no existing config.
 
-- Writes to the config path (`-c <path>`, default `./pawl.yaml`).
+- Writes to the config path (`-c <path>`, default `./pawl.yaml`), always in the
+  working directory — `init` never searches parent directories the way the
+  [config-reading commands](config.md#locating-the-config-file) do, so
+  scaffolding inside a subdirectory cannot clobber an upper config.
 - **Never overwrites**: if a file already exists at that path, it prints a
   message naming the path and exits 2 (a scaffolder that clobbered a hand-tuned
   config would be worse than useless). A different pre-existing filesystem error

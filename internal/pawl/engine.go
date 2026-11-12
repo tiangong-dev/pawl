@@ -22,7 +22,8 @@ var Version = "dev"
 // verdict (and must never read as a pass).
 func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	command := ""
-	configPath := "pawl.yaml"
+	configPath := defaultConfigName
+	configExplicit := false
 	format, formatProvided := "text", false
 	since := ""
 	limit := 20
@@ -47,6 +48,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
+			configExplicit = true
 		case args[i] == "--limit":
 			if i+1 >= len(args) {
 				fmt.Fprintf(stderr, "--limit requires a non-negative integer\n")
@@ -238,6 +240,32 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	// init writes a new config; it must not require (or read) an existing one, and it never searches — scaffolding in a subdirectory must not clobber an upper config.
+	if command == "init" {
+		return runInit(configPath, stdout, stderr)
+	}
+
+	// agent emits a fixed operating loop, identical in every repo — it reads no config, so it still works in a repo whose config is mid-edit or broken, which is exactly when someone reaches for the instructions.
+	if command == "agent" {
+		return runAgent(writeTarget, stdin, stdout, stderr)
+	}
+
+	// --quiet silences pawl's own progress and advisory output. An adapter's
+	// stderr is untouched: the whole point of a quiet run is that the noise goes
+	// away, not the diagnosis of the tool that is about to fail.
+	progress := stderr
+	if quiet {
+		progress = io.Discard
+	}
+
+	// Every command below reads a config. An explicit -c is used verbatim;
+	// without one, resolveConfigPath adopts the nearest pawl.yaml upward.
+	configPath, err := resolveConfigPath(configPath, configExplicit, progress)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+
 	// trend never measures — it reads config only for the snapshot path, so a
 	// temporarily-invalid measurement config (a bad adapter, zero dimensions)
 	// must not block viewing local history.
@@ -254,21 +282,11 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runTrend(cfg, metricID, limit, format, stdout, stderr)
 	}
 
-	// init writes a new config; it must not require (or read) an existing one.
-	if command == "init" {
-		return runInit(configPath, stdout, stderr)
-	}
-
 	// validate reads the config and nothing else — no measurement, no snapshot,
 	// no git — and is the one command where a stray key is fatal rather than an
 	// advisory warning.
 	if command == "validate" {
 		return runValidate(configPath, format, stdout, stderr)
-	}
-
-	// agent emits a fixed operating loop, identical in every repo — it reads no config, so it still works in a repo whose config is mid-edit or broken, which is exactly when someone reaches for the instructions.
-	if command == "agent" {
-		return runAgent(writeTarget, stdin, stdout, stderr)
 	}
 
 	// Config warnings go to stderr directly, not to the quietable progress
@@ -297,13 +315,6 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 2
 		}
 		supplied = m
-	}
-	// --quiet silences pawl's own progress and advisory output. An adapter's
-	// stderr is untouched: the whole point of a quiet run is that the noise goes
-	// away, not the diagnosis of the tool that is about to fail.
-	progress := stderr
-	if quiet {
-		progress = io.Discard
 	}
 	if command == "measure" {
 		measureCfg := cfg

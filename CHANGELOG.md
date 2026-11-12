@@ -45,6 +45,13 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   comparable; the next `record` that touches a unit, id, or breakdown key
   containing one of these characters shows a one-off diff with no change in
   meaning.
+- Running a config-reading command (`check`, `record`, `measure`, `guard`,
+  `trend`, `rank`) in a subdirectory without `-c` now adopts the nearest
+  `pawl.yaml` found upward from the working directory, stopping at the
+  enclosing git repository root — the way `git` and `eslint` do. An explicit
+  `-c` still pins one exact path, `init` still writes to the working directory,
+  paths inside the config stay relative to the config file, and a config in the
+  working directory is still reported by its relative name.
 
 ### Documentation
 
