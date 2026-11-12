@@ -1,0 +1,614 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json",
+  "title": "pawl.yaml",
+  "description": "Configuration for pawl, a language-agnostic anti-regression quality gate. Editors use this schema for completion and inline validation while a pawl.yaml is written; `pawl validate` remains the authoritative check (see spec/commands/config.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {
+      "description": "Reserved for user extensions (YAML anchors, tool metadata). Keys with this prefix are never reported as unknown."
+    }
+  },
+  "properties": {
+    "snapshot": {
+      "type": "string",
+      "description": "Optional. Snapshot path, resolved relative to the config file's directory. Default: pawl.snapshot.json."
+    },
+    "exclude": {
+      "$ref": "#/definitions/excludeGlobs",
+      "description": "Optional top-level glob list shared by every filesystem-scanning dimension (file-length, file-bytes, pattern-count). Appended to that dimension's own exclude."
+    },
+    "analyzers": {
+      "type": "array",
+      "description": "Named analyzers: one acquisition shared by every dimension that references them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {
+            "description": "Reserved for user extensions."
+          }
+        },
+        "required": ["id", "builtin"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required. Unique across analyzers; dimensions reference it with source."
+          },
+          "builtin": {
+            "type": "string",
+            "enum": ["eslint", "oxlint", "sarif", "lines"],
+            "description": "Required. Which acquisition contract to run: eslint, oxlint, sarif or lines. Acquired and decoded once per invocation, however many dimensions reference it."
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Optional Go duration (e.g. \"10m\") applied to acquisition and verification; default \"10m\"."
+          },
+          "verify": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "Optional ESLint/Oxlint --print-config commands producing one config JSON per representative file. Every rule a referencing dimension selects must be enabled in at least one verified config, or the measurement fails. Valid only for the eslint and oxlint builtins (for the sarif builtin, use options.verify_rules instead)."
+          },
+          "options": {
+            "type": "object",
+            "description": "Acquisition options for this analyzer's builtin; an unknown option is a config error, so the schema narrows it per builtin below."
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "builtin": { "const": "eslint" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/eslintAnalyzerOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "oxlint" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/oxlintAnalyzerOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "sarif" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/sarifAnalyzerOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "lines" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/linesAnalyzerOptions" } } }
+          }
+        ]
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Every dimension pawl measures. At least one is required.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {
+            "description": "Reserved for user extensions."
+          }
+        },
+        "required": ["id", "title", "direction"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required. Unique across dimensions; names the number in a verdict."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required. Human-readable label shown next to the number in a verdict."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["lower-is-better", "higher-is-better"],
+            "description": "Required. Which way is worse: lower-is-better for debt counts and size, higher-is-better for coverage and passing-test floors."
+          },
+          "gate": {
+            "type": "string",
+            "enum": ["total", "per-file-count", "per-key-value"],
+            "description": "Optional comparison mode; default total. total compares the single value, per-file-count refuses to let a fix in one file offset new findings in another, per-key-value protects each key already present in the baseline."
+          },
+          "tolerance": {
+            "type": "number",
+            "description": "Optional absolute slack in the worse direction, for noisy measurements; default 0."
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Optional Go duration (e.g. \"10m\") for this dimension's command; default \"10m\"."
+          },
+          "artifact_max_age": {
+            "type": "string",
+            "description": "Optional Go duration bounding the age of the report file a file-backed dimension reads (jscpd's report, a json-value/sarif/junit/coverage file, or a named analyzer's file). An older file is a measurement failure. Rejected on a dimension that reads no configured report file."
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Shell command run under sh -c with the config directory as cwd, printing {value,unit,breakdown} JSON — unless extract is set, in which case it prints the tool's raw output. Exactly one of command, builtin, source."
+          },
+          "valid_exit_codes": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "description": "Optional complete set of exit codes that count as a successful run, for tools that report findings through a non-zero exit; default: only 0. Valid only on a command dimension."
+          },
+          "builtin": {
+            "type": "string",
+            "enum": [
+              "file-length",
+              "file-bytes",
+              "pattern-count",
+              "eslint",
+              "oxlint",
+              "jscpd",
+              "swift-complexity",
+              "json-value",
+              "sarif",
+              "junit",
+              "coverage"
+            ],
+            "description": "Built-in adapter that does the measuring: a repo scan (file-length, file-bytes, pattern-count), a tool contract (eslint, oxlint, jscpd, swift-complexity), one number out of JSON (json-value), or a report format (sarif, junit, coverage). Exactly one of command, builtin, source; the lines builtin is an analyzer-only kind."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "id of a configured analyzer whose decoded findings this dimension filters (rules/levels) without rerunning the tool. Exactly one of command, builtin, source."
+          },
+          "options": {
+            "type": "object",
+            "description": "Builtin-specific options, or selector options on a source dimension; the schema narrows this by builtin/source below. Options are read per builtin, so a key this schema does not list is not one pawl uses — and pawl ignores an unknown builtin option rather than failing, which is why this object stays open."
+          },
+          "extract": {
+            "description": "Derive the measurement from the command's raw output instead of the {value,unit,breakdown} JSON contract. The scalar forms are the strings \"number\" and \"lines\"; the object forms name exactly one of regex / json_path, plus an optional unit. Command dimensions only.",
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": ["number", "lines"],
+                "description": "\"number\": the command's trimmed stdout must be exactly one finite number. \"lines\": value is the number of non-empty stdout lines."
+              },
+              { "$ref": "#/definitions/extractObject" }
+            ]
+          }
+        },
+        "oneOf": [
+          { "required": ["command"] },
+          { "required": ["builtin"] },
+          { "required": ["source"] }
+        ],
+        "allOf": [
+          {
+            "if": { "properties": { "builtin": { "const": "file-length" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/fileScanOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "file-bytes" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/fileScanOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "pattern-count" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/patternCountOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "eslint" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/eslintDimensionOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "oxlint" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/oxlintDimensionOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "jscpd" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/jscpdOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "swift-complexity" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/swiftComplexityOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "json-value" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/jsonValueOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "sarif" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/sarifDimensionOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "junit" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/junitOptions" } } }
+          },
+          {
+            "if": { "properties": { "builtin": { "const": "coverage" } }, "required": ["builtin"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/coverageOptions" } } }
+          },
+          {
+            "if": { "required": ["source"] },
+            "then": { "properties": { "options": { "$ref": "#/definitions/selectorOptions" } } }
+          },
+          {
+            "if": { "required": ["extract"] },
+            "then": { "required": ["command"] }
+          },
+          {
+            "if": { "required": ["valid_exit_codes"] },
+            "then": { "required": ["command"] }
+          }
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "includeGlobs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "Required non-empty glob list of files to scan, matched against paths relative to the config file's directory; ** is supported."
+    },
+    "excludeGlobs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional glob list of files and directories to prune; a matching directory is pruned without descending, and the .git directory is never traversed."
+    },
+    "minFiles": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional completeness floor: at least this many included regular files must be scanned after excludes apply, or the run is a measurement failure — never a recorded zero."
+    },
+    "fileScanOptions": {
+      "type": "object",
+      "description": "Options of the file-length / file-bytes repository scan.",
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "description": "Count a file as offending when it exceeds this size. Default: 500 lines for file-length, 32768 bytes for file-bytes."
+        },
+        "include": { "$ref": "#/definitions/includeGlobs" },
+        "exclude": { "$ref": "#/definitions/excludeGlobs" },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["include"]
+    },
+    "patternCountOptions": {
+      "type": "object",
+      "description": "Options of the pattern-count scan: every non-overlapping regexp match on every line counts.",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required Go regexp. Compiled at config load, so an invalid pattern aborts before anything runs."
+        },
+        "include": { "$ref": "#/definitions/includeGlobs" },
+        "exclude": { "$ref": "#/definitions/excludeGlobs" },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["pattern", "include"]
+    },
+    "eslintDimensionOptions": {
+      "type": "object",
+      "description": "Options of the eslint builtin: pawl owns ESLint's JSON format and its exit contract (0 clean, 1 problems found, 2+ fatal).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. ESLint invocation producing --format json on stdout, e.g. npx eslint src --format json."
+        },
+        "rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional rule ids to count; empty or omitted counts every message."
+        },
+        "verify": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Optional ESLint --print-config commands; every selected rule must be enabled in at least one of them."
+        },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["command"]
+    },
+    "oxlintDimensionOptions": {
+      "type": "object",
+      "description": "Options of the oxlint builtin: pawl owns Oxlint's native JSON format and its exit contract (0/1 accepted only with a complete native report).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Oxlint invocation producing --format json on stdout."
+        },
+        "rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional native diagnostic codes to count, e.g. eslint(no-debugger) or unicorn(no-invalid-fetch-options)."
+        },
+        "levels": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["error", "warning", "advice"] },
+          "description": "Optional diagnostic levels to count."
+        },
+        "verify": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Optional Oxlint --print-config commands; every selected rule must be enabled in at least one of them."
+        },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["command"]
+    },
+    "jscpdOptions": {
+      "type": "object",
+      "description": "Options of the jscpd builtin: duplicated lines (statistics.total.duplicatedLines) from the report the command writes. jscpd's own --threshold gating is not used, and a pre-existing report is deleted first.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. jscpd invocation with --reporters json, e.g. npx jscpd src --reporters json --output .pawl/jscpd."
+        },
+        "report": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Path of the produced jscpd-report.json, relative to the config file's directory."
+        }
+      },
+      "required": ["command", "report"]
+    },
+    "swiftComplexityOptions": {
+      "type": "object",
+      "description": "Options of the swift-complexity builtin: pawl counts functions at or above threshold itself, so the command must not pass the tool's own --threshold (its exit 1 conflates findings with errors).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. swift-complexity invocation with --format json."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Required. A function counts as an offender when its selected metric is >= this value."
+        },
+        "metric": {
+          "type": "string",
+          "enum": ["cognitive", "cyclomatic"],
+          "description": "Optional per-function metric to gate; default \"cognitive\"."
+        }
+      },
+      "required": ["command", "threshold"]
+    },
+    "jsonValueOptions": {
+      "type": "object",
+      "description": "Options of the json-value builtin: one finite number at a dotted path, read from the command's stdout, from a file, or from a file the command produces.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Dotted key path into the JSON, e.g. total.lines.pct."
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSON source: the command's stdout is the JSON. With file also set, the command produces that file first."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JSON source: a file relative to the config file's directory. With command also set, a pre-existing file is deleted before the command runs."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Optional unit stored with the measurement, e.g. \"%\"; default \"count\"."
+        }
+      },
+      "required": ["path"],
+      "anyOf": [{ "required": ["command"] }, { "required": ["file"] }]
+    },
+    "sarifDimensionOptions": {
+      "type": "object",
+      "description": "Options of the sarif builtin: results of a SARIF log, optionally filtered by ruleId and level. The command's exit code is not gated; the honesty guard is that a well-formed report with a runs array must be produced.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SARIF source: the command's stdout is the log. With file also set, the command produces that file first."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SARIF source: a log file relative to the config file's directory."
+        },
+        "rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional ruleId list to count; empty or omitted counts every result."
+        },
+        "levels": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["error", "warning", "note", "none"] },
+          "description": "Optional level list to count; a result without a level counts as warning, the SARIF default."
+        },
+        "min_files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional completeness floor: the log must carry at least this many artifacts."
+        }
+      },
+      "anyOf": [{ "required": ["command"] }, { "required": ["file"] }]
+    },
+    "junitOptions": {
+      "type": "object",
+      "description": "Options of the junit builtin: one quantity counted from the <testcase> elements of a JUnit XML report.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Report source: the command's stdout is the XML. With file also set, the command produces that file first."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Report source: an XML file relative to the config file's directory."
+        },
+        "count": {
+          "type": "string",
+          "enum": ["failures", "tests", "skipped", "passing"],
+          "description": "Optional quantity to count; default \"failures\". \"passing\" is tests - failures - skipped, for a passing-count floor."
+        }
+      },
+      "anyOf": [{ "required": ["command"] }, { "required": ["file"] }]
+    },
+    "coverageOptions": {
+      "type": "object",
+      "description": "Options of the coverage builtin: a coverage percentage from an lcov or cobertura report.",
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Coverage report relative to the config file's directory."
+        },
+        "format": {
+          "type": "string",
+          "enum": ["lcov", "cobertura"],
+          "description": "Required. Which report format the file is."
+        },
+        "metric": {
+          "type": "string",
+          "enum": ["lines", "branches", "functions"],
+          "description": "Optional metric to gate; default \"lines\". \"functions\" is lcov-only, so functions + cobertura is a config error."
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional. Runs the tests that produce the report; a pre-existing file is deleted first."
+        }
+      },
+      "required": ["file", "format"],
+      "allOf": [
+        {
+          "if": { "properties": { "metric": { "const": "functions" } }, "required": ["metric"] },
+          "then": { "properties": { "format": { "const": "lcov" } } }
+        }
+      ]
+    },
+    "selectorOptions": {
+      "type": "object",
+      "description": "Selector options on a dimension that uses source: which of the analyzer's decoded findings to count. The analyzer runs once however many dimensions reference it.",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional rule/diagnostic-id list to count."
+        },
+        "levels": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional level list to count. For a sarif analyzer these are error/warning/note/none and for an oxlint analyzer error/warning/advice; a lines analyzer accepts whatever its regex captures."
+        }
+      }
+    },
+    "eslintAnalyzerOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Acquisition options of an eslint analyzer.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. ESLint invocation producing --format json on stdout."
+        },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["command"]
+    },
+    "oxlintAnalyzerOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Acquisition options of an oxlint analyzer.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Oxlint invocation producing --format json on stdout."
+        },
+        "min_files": { "$ref": "#/definitions/minFiles" }
+      },
+      "required": ["command"]
+    },
+    "sarifAnalyzerOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Acquisition options of a sarif analyzer.",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SARIF source: the command's stdout is the log. With file also set, the command produces that file first."
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SARIF source: a log file relative to the config file's directory."
+        },
+        "min_files": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Optional completeness floor: the log must carry at least this many artifacts."
+        },
+        "valid_exit_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "description": "Optional export of the producer's successful/finding exit codes; any other exit fails even when a parseable report was written. Requires command."
+        },
+        "verify_rules": {
+          "type": "boolean",
+          "description": "Optional. Every filtered rule id must appear in the report's tool.driver.rules catalog, so a misspelling cannot become a clean zero. Requires at least one referencing dimension with a rules selector, and fails if the producer omits the catalog."
+        }
+      },
+      "anyOf": [{ "required": ["command"] }, { "required": ["file"] }]
+    },
+    "linesAnalyzerOptions": {
+      "type": "object",
+      "description": "Acquisition options of a lines analyzer: the tool-agnostic kind, which refuses min_files (line output names the files that had findings, not the files scanned) and verify/verify_rules (there is no rule catalog to verify against).",
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. The tool invocation whose line output is decoded."
+        },
+        "regex": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required. Go regexp applied to every non-empty output line; an unmatched line is a measurement failure. Named groups path, line, rule and level are all optional."
+        },
+        "valid_exit_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "description": "Optional complete set of exit codes that count as a successful run; default: only 0."
+        }
+      },
+      "required": ["command", "regex"]
+    },
+    "extractObject": {
+      "type": "object",
+      "description": "Object form of extract: exactly one of regex / json_path, plus an optional unit.",
+      "properties": {
+        "regex": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Go regexp applied to every non-empty stdout line; every line must match or the run is a measurement failure. A named group path builds a \"<path>:<line>\" breakdown from the optional line group."
+        },
+        "json_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dotted key path into the command's JSON stdout, e.g. total.lines.pct. Must resolve to one finite number."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Optional unit stored with the measurement; default \"count\"."
+        }
+      },
+      "oneOf": [{ "required": ["regex"] }, { "required": ["json_path"] }]
+    }
+  }
+}

@@ -156,6 +156,16 @@ dimensions:
 
 [配置示例（RECIPES.md）](./RECIPES.md) 收录了 Go、TypeScript、Python、Rust、Swift、常用 linter、各类报告格式与自定义命令的配置模板，开箱即用。
 
+### 编辑器补全
+
+配置已发布 [JSON Schema](./schema/pawl.schema.json)。`pawl init` 生成的配置首行会写入指向它的指令；已有配置同样可以加上这一行，写 `pawl.yaml` 时即可获得键名补全、枚举取值校验与悬停说明：
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+```
+
+schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate` 的判定为准。
+
 ### Gate 模式
 
 总数（scalar total）默认始终参与比对；`gate` 字段可在此基础上启用更精确的约束策略：
@@ -186,7 +196,41 @@ dimensions:
 | `junit` | 测试用例数（通过、失败、跳过或总计） | `total` |
 | `coverage` | lcov 或 cobertura 覆盖率报告 | `total` |
 
-多个维度可声明共用同一个命名 `analyzer`，避免重复执行开销巨大的扫描。各项适配器的完整配置项与输出规范详见 [引擎契约（spec）](./spec/README.md)。
+### 让多个维度共用同一次扫描
+
+两个维度如果各自写着同一条耗时命令，这条命令就会跑两遍。把这次扫描声明为一个命名 `analyzer`，再用 `source:` 让多个维度引用它：pawl 每次调用只采集并解码一次，各维度再各自套用自己的 `rules` / `levels` 选择器：
+
+```yaml
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"             # 可选值：eslint、oxlint、sarif、lines
+    verify:                       # 可选，但建议配置
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
+
+dimensions:
+  - id: "cognitive-complexity"
+    title: "认知复杂度"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"     # 此处不再写 command
+    options:
+      rules: ["sonarjs/cognitive-complexity"]
+
+  - id: "type-escapes"
+    title: "显式 any"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["@typescript-eslint/no-explicit-any"]
+```
+
+两个维度读的是同一次扫描结果。若不用 analyzer，而是把同一条 ESLint 命令分别写在两个 `command:` 维度上，它就会各执行一次：pawl 不会因为两个匿名维度的命令行字符串恰好相同就做去重，因为超时、文件集合、退出码策略与解码方式都属于来源身份的一部分。
+
+可共享的只有上述四种 analyzer（`eslint`、`oxlint`、`sarif`、`lines`），自定义 `command` 维度不能作为共享来源。想让别的工具也能被多个维度共用，就让它产出 pawl 能按维度切分的输出：用 `sarif` analyzer 接 SARIF 报告，或用 `lines` analyzer 接每行一条问题的输出，并通过正则里的 `rule` / `level` 命名分组做选择。各项适配器的完整配置项与输出规范详见 [引擎契约（spec）](./spec/README.md)。
 
 ### 自定义命令与声明式 `extract`
 
@@ -223,7 +267,8 @@ dimensions:
 
 | 命令 | 用途 |
 |---|---|
-| `pawl init` | 初始化起步配置文件 `pawl.yaml`（不会覆盖已有文件） |
+| `pawl init` | 初始化起步配置文件 `pawl.yaml`（不会覆盖已有文件）；根据标记文件识别项目类型，预填 `include` 与顶层共享 `exclude` |
+| `pawl validate` | 只校验 `pawl.yaml` 能否加载，不执行任何测量、不读写快照 |
 | `pawl record` | 重新测量各项指标并固化写入快照基线 |
 | `pawl check` | 对比当前测量值与基线快照；CLI 默认执行该命令 |
 | `pawl measure` | 仅输出当前测量结果，不读取基线、不进行裁决 |
@@ -274,7 +319,7 @@ pawl record --dry-run --accept-worse
 pawl record --accept-worse
 ```
 
-执行后，pawl 会在终端输出类似 `Pawl-Accept: <id> <value>` 的 Git commit trailer。在后续的代码评审中，`pawl guard` 会校验这一声明，借此区分“经过 PR 评审特批的技术债”与“未授权的私自篡改”。
+执行后，pawl 会在终端输出类似 `Pawl-Accept: <id> <value>` 的 Git commit trailer。在后续的代码评审中，`pawl guard` 会校验这一声明，借此区分“经过 PR 评审特批的技术债”与“未授权的私自篡改”，其中也包括总数没变但某个文件计数上升的 `per-file-count` 退化。若确实要改动某个指标的测量定义，请在提交信息里补一行 `Pawl-Redefine: <id>`，否则 guard 会拒绝该指标。
 
 ### 复用单次测量结果
 

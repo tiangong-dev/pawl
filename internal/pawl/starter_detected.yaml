@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+# pawl.yaml — a language-agnostic anti-regression quality gate.
+# Each dimension measures one number; `pawl record` snapshots them and
+# `pawl check` fails a PR when any dimension regresses. Numbers may only hold or
+# improve. Full contract: spec/README.md (index: SPEC.md). Copy-paste more dimensions (ESLint, coverage,
+# complexity, SARIF, JUnit, duplication, …) from RECIPES.md.
+#
+# Detected in this directory: __PAWL_DETECTED__.
+# `exclude` is the shared exclusion list: it is appended to every dimension's
+# own exclude, so the repeated globs live here once instead of in each dimension.
+
+exclude: __PAWL_EXCLUDE__
+
+dimensions:
+  # Files over 500 lines — a maintainability floor. Go-native, no tools needed.
+  - id: "file-length"
+    title: "Files over 500 lines"
+    direction: "lower-is-better"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: __PAWL_INCLUDE__
+
+  # Same scan, per-key-value: an already-long file must not keep growing.
+  - id: "file-length-growth"
+    title: "Already-long files must not grow"
+    direction: "lower-is-better"
+    gate: "per-key-value"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: __PAWL_INCLUDE__
+
+  # Escape-hatch / debt markers. Swap the pattern (and includes) for your stack:
+  # e.g. "as any" for TypeScript, "//nolint" for Go, "# type: ignore" for Python.
+  - id: "todos"
+    title: "TODO / FIXME markers"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    builtin: "pattern-count"
+    options:
+      pattern: "TODO|FIXME"
+      include: __PAWL_INCLUDE__

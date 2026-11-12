@@ -6,6 +6,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--write <target>] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
+  validate             check the config loads, without measuring anything
   agent                install (or print) the operating loop a coding agent
                        needs to use this gate
   measure              measure every dimension and print the measurement
@@ -26,7 +27,13 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   gate, not a usage error). "No command" means zero positional arguments — an
   empty-string argument is an unknown command (exit 2), so a wrapper passing an
   unset variable fails loud instead of silently running the default gate.
-- `-c <path>` selects the config file; default `./pawl.yaml`.
+- `-c <path>` (or `--config <path>`) selects the config file and is used
+  verbatim — pawl never searches when one is given. Without it, every
+  config-reading command (`check`, `record`, `measure`, `guard`, `trend`,
+  `rank`) adopts the nearest `pawl.yaml` from the working directory upward,
+  bounded by the enclosing git repository; `init` is the exception and always
+  writes to the working directory. Specified in
+  [§ Locating the config file](../commands/config.md#locating-the-config-file).
 - `-h` / `--help`, `pawl help`, and `pawl help <command>` print help without
   reading config. An unknown command/topic remains a usage error (exit 2).
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
@@ -52,9 +59,12 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   exit 2 carry a "which one, and by how much" the code alone cannot. An
   adapter's own stderr is never suppressed — a quiet run must lose the noise,
   not the diagnosis of the tool that is failing — and `--format json` always
-  emits its verdict, since a caller parsing one must always receive one. Valid
-  on `measure`, `record` and `check`; on any other command a usage error
-  (exit 2).
+  emits its verdict, since a caller parsing one must always receive one. Config
+  warnings ([§ Config](../commands/config.md#unknown-keys)) are not progress
+  either and are never suppressed. Valid
+  on `measure`, `record`, `check` and `validate`; on any other command a usage
+  error (exit 2). `validate` prints no progress at all, and its report is its
+  result, so `-q` changes nothing there.
 - `--current <path|->` supplies `check` or `record` with a measurement document
   — the output of `pawl measure`, from a file or (with `-`) stdin — instead of
   running the dimensions, specified in
@@ -63,8 +73,8 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 - `--format <text|json>` selects the output format of `record`/`check`;
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
-  `guard` ignores `--format` (its output is not tabular). `trend` and
-  `rank` honor `text` (default) and `json`. `agent` emits Markdown, so any
+  `guard` ignores `--format` (its output is not tabular). `trend`, `rank` and
+  `validate` honor `text` (default) and `json`. `agent` emits Markdown, so any
   `--format` there is a usage error (exit 2). `measure` emits the measurement
   document by definition and accepts `--format json` as an equivalent,
   compatibility spelling; every other explicit `--format` spelling, including
@@ -94,16 +104,24 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
 - `pawl init` writes a commented starter config to the config path (honoring
   `-c`) **without reading any existing config** — it is the zero-friction
-  on-ramp, specified in [§ init](../commands/init.md#init). If a file already exists at that path
+  on-ramp, specified in [§ init](../commands/init.md#init). It reads marker files
+  in the config file's directory and generates the detected stacks' `include`
+  and a shared top-level `exclude`. If a file already exists at that path
   it refuses (exit 2) rather than overwrite.
+- `pawl validate` loads the config and reports whether it is usable, measuring
+  nothing: no adapter runs, the snapshot is neither read nor written, and git is
+  never invoked. A key the schema does not define is exit 2 here instead of the
+  advisory warning the measuring commands emit, so a config typo is caught
+  before a gate silently measures something else; specified in
+  [§ validate](../commands/validate.md#validate).
 
 ### Exit codes
 
 | code | meaning |
 |------|---------|
-| 0 | pass (including legitimate guard skips) |
+| 0 | pass (including legitimate guard skips); `validate`: the config loads and defines no unknown key |
 | 1 | `check`: at least one dimension regressed; `guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
-| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
+| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref; `validate`: an invalid config or an unknown key |
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.

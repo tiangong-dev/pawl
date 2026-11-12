@@ -4,6 +4,96 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Added
+
+- `schema/pawl.schema.json` describes a `pawl.yaml` for editors (key completion,
+  enumerated values, hover help), and `pawl init` writes the
+  `# yaml-language-server: $schema=…` line that points an editor at it. The
+  schema is an editing aid: `pawl validate` remains the authority on whether a
+  config is usable.
+- `pawl validate` checks a `pawl.yaml` without measuring anything: it runs no
+  dimension command, reads and writes no snapshot, and never touches git, so an
+  editor integration or a pre-commit hook can run it on every save. It exits 2
+  on any config error and — unlike every measuring command — on a key the schema
+  does not define, naming the key path and the key you probably meant.
+- A top-level `exclude: [glob…]` in `pawl.yaml` is now appended to the exclude
+  list of every filesystem-scanning dimension (`file-length`, `file-bytes`,
+  `pattern-count`), so a glob repeated in each dimension can be written once.
+  Moving repeated globs to the top level keeps the effective exclude set — and
+  therefore the recorded definition — unchanged.
+- `pawl init` detects the project type from marker files (`package.json`,
+  `go.mod`, `Cargo.toml`, `pyproject.toml`/`requirements.txt`, `Package.swift`)
+  and generates matching `include` globs plus a shared top-level `exclude` list.
+  A directory with no marker file keeps the previous generic starter.
+- A key `pawl.yaml` does not define (a typo like `gat:` for `gate:` or
+  `optoins:` for `options:`) now prints a warning on stderr naming the full key
+  path and, when one is close, the key you probably meant. Keys prefixed `x-`
+  and YAML merge keys (`<<`) are exempt. The warning does not change the exit
+  code and is not silenced by `-q`; the next minor release plans to make an
+  unknown key a load error.
+- The `extract` layer accepts `extract: exit-code` on a command dimension. It
+  measures the command's exit status instead of its output: exit 0 is `0`,
+  exit 1 is `1`, and `valid_exit_codes` defaults to `[0, 1]` for this form so a
+  failing check is a measurement rather than "could not measure". A pass/fail
+  script no longer needs a `&& printf '0\n'` wrapper.
+- `check --since` prints one advisory line on stderr when untracked files count
+  as all-new while files were deleted — an unstaged `mv` git cannot pair as a
+  rename — naming `git add -N` and `git mv` as the fixes. It is progress output:
+  `-q` silences it and the verdict is unchanged.
+- `pawl.GuardViolationsWithGates(base, pr, gates)` compares two snapshots with
+  each metric's gate mode applied, which is what `guard` now uses.
+  `pawl.GuardViolations(base, pr)` keeps its signature and remains the
+  scalar-only comparison.
+- `pawl.GuardViolationsWithGatesAndRenames(base, pr, gates, renames)` is that
+  comparison with git's detected renames applied to the per-file predicate, and
+  `FileGrowth.RenamedFrom` names the base path a mapped count came from.
+  `GuardViolationsWithGates` keeps its signature and compares per path.
+
+### Changed
+
+- Snapshots write `<`, `>`, and `&` literally instead of as their `\u003c`,
+  `\u003e`, and `\u0026` escapes, so a unit such as `files > 500 lines` stays
+  readable and the file diffs cleanly. Existing snapshots stay valid and
+  comparable; the next `record` that touches a unit, id, or breakdown key
+  containing one of these characters shows a one-off diff with no change in
+  meaning.
+- Running a config-reading command (`check`, `record`, `measure`, `guard`,
+  `trend`, `rank`) in a subdirectory without `-c` now adopts the nearest
+  `pawl.yaml` found upward from the working directory, stopping at the
+  enclosing git repository root — the way `git` and `eslint` do. An explicit
+  `-c` still pins one exact path, `init` still writes to the working directory,
+  paths inside the config stay relative to the config file, and a config in the
+  working directory is still reported by its relative name.
+- `pawl guard` maps git-detected file renames in a `per-file-count` comparison,
+  so `git mv a.go b.go` no longer reads as a brand-new file full of debt. Copies
+  are never mapped, only 1:1 renames inside the config directory are, and a
+  rename that also adds an offender still fails. When git cannot detect renames
+  (a shallow clone with no merge base, a failed diff) guard prints a notice and
+  compares per path as before.
+- `pawl guard` now applies each configured dimension's gate mode, so it is
+  stricter: on a `per-file-count` metric it fails when any file's offender count
+  rose even if the scalar total held, naming the files. A
+  `Pawl-Accept: <id> <value>` trailer that covers the metric's total accepts
+  those per-file violations too.
+- A metric whose measurement definition changed now needs a
+  `Pawl-Redefine: <id>` commit trailer in `guard`'s compared range; without it
+  `guard` exits 1 and names the missing trailer instead of only printing a
+  notice. Add the trailer to the commit that changes `pawl.yaml` (the gate mode
+  is part of the definition, so relaxing a gate counts as a redefinition).
+
+### Documentation
+
+- The READMEs explain how a named `analyzers:` entry lets several dimensions
+  share one scan, and that two `command:` dimensions carrying the same ESLint
+  command are run twice instead.
+
+### Fixed
+
+- `check --since` pins rename detection on its `git diff`, so a moved file is
+  scoped to the lines actually added rather than counting every line of it as
+  new debt when the developer's `diff.renames` is off. The same commit no longer
+  gets a different verdict on different machines.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed
