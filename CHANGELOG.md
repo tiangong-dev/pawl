@@ -36,6 +36,10 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   exit 1 is `1`, and `valid_exit_codes` defaults to `[0, 1]` for this form so a
   failing check is a measurement rather than "could not measure". A pass/fail
   script no longer needs a `&& printf '0\n'` wrapper.
+- `check --since` prints one advisory line on stderr when untracked files count
+  as all-new while files were deleted — an unstaged `mv` git cannot pair as a
+  rename — naming `git add -N` and `git mv` as the fixes. It is progress output:
+  `-q` silences it and the verdict is unchanged.
 
 ### Changed
 
@@ -58,6 +62,13 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 - The READMEs explain how a named `analyzers:` entry lets several dimensions
   share one scan, and that two `command:` dimensions carrying the same ESLint
   command are run twice instead.
+
+### Fixed
+
+- `check --since` pins rename detection on its `git diff`, so a moved file is
+  scoped to the lines actually added rather than counting every line of it as
+  new debt when the developer's `diff.renames` is off. The same commit no longer
+  gets a different verdict on different machines.
 
 ## 0.8.3 — 2026-11-09
 
