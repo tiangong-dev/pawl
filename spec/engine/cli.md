@@ -52,7 +52,9 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   exit 2 carry a "which one, and by how much" the code alone cannot. An
   adapter's own stderr is never suppressed — a quiet run must lose the noise,
   not the diagnosis of the tool that is failing — and `--format json` always
-  emits its verdict, since a caller parsing one must always receive one. Valid
+  emits its verdict, since a caller parsing one must always receive one. Config
+  warnings ([§ Config](../commands/config.md#unknown-keys)) are not progress
+  either and are never suppressed. Valid
   on `measure`, `record` and `check`; on any other command a usage error
   (exit 2).
 - `--current <path|->` supplies `check` or `record` with a measurement document

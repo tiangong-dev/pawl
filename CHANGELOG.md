@@ -4,6 +4,15 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Added
+
+- A key `pawl.yaml` does not define (a typo like `gat:` for `gate:` or
+  `optoins:` for `options:`) now prints a warning on stderr naming the full key
+  path and, when one is close, the key you probably meant. Keys prefixed `x-`
+  and YAML merge keys (`<<`) are exempt. The warning does not change the exit
+  code and is not silenced by `-q`; the next minor release plans to make an
+  unknown key a load error.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed

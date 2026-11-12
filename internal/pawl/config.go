@@ -2,6 +2,7 @@ package pawl
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -107,8 +108,9 @@ func LoadConfigLite(path string) (*Config, error) {
 
 // LoadConfig reads and validates a pawl.yaml. Every validation failure is an
 // error — a config that cannot be trusted must abort with exit 2, never
-// half-run.
-func LoadConfig(path string) (*Config, error) {
+// half-run. Keys the schema does not define are the one exception: they were
+// already dropped by the parse, so they are reported on warn, not returned.
+func LoadConfig(path string, warn io.Writer) (*Config, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolving config path %s: %w", path, err)
@@ -124,6 +126,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+	// A stray key is invisible after the parse above, so report it before
+	// validation — the misspelling may be why the rest of the file looks wrong.
+	warnUnknownConfigKeys(data, path, warn)
 	if len(raw.Dimensions) == 0 {
 		return nil, fmt.Errorf("%s declares no dimensions — nothing to measure", path)
 	}

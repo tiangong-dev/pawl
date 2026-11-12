@@ -262,7 +262,10 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runAgent(writeTarget, stdin, stdout, stderr)
 	}
 
-	cfg, err := LoadConfig(configPath)
+	// Config warnings go to stderr directly, not to the quietable progress
+	// writer: a misspelled key must never be silenced by -q. --format json is
+	// unaffected because only stdout carries the verdict document.
+	cfg, err := LoadConfig(configPath, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
