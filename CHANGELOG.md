@@ -6,6 +6,15 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ### Added
 
+- A top-level `exclude: [glob…]` in `pawl.yaml` is now appended to the exclude
+  list of every filesystem-scanning dimension (`file-length`, `file-bytes`,
+  `pattern-count`), so a glob repeated in each dimension can be written once.
+  Moving repeated globs to the top level keeps the effective exclude set — and
+  therefore the recorded definition — unchanged.
+- `pawl init` detects the project type from marker files (`package.json`,
+  `go.mod`, `Cargo.toml`, `pyproject.toml`/`requirements.txt`, `Package.swift`)
+  and generates matching `include` globs plus a shared top-level `exclude` list.
+  A directory with no marker file keeps the previous generic starter.
 - A key `pawl.yaml` does not define (a typo like `gat:` for `gate:` or
   `optoins:` for `options:`) now prints a warning on stderr naming the full key
   path and, when one is close, the key you probably meant. Keys prefixed `x-`

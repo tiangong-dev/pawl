@@ -18,6 +18,24 @@ Two decisions come up in almost every dimension, so let's get them out of the wa
 
 **Which direction?** `lower-is-better` for counts of bad things (issues, duplication, long files); `higher-is-better` for good things that must not drop (coverage, passing tests). Get this backwards and pawl will obediently let your codebase rot. It trusts you on this one.
 
+**Where do excludes go?** Every filesystem-scanning dimension (`file-length`, `file-bytes`, `pattern-count`) appends the config's top-level `exclude` list to its own. Write the globs you would otherwise repeat in each dimension once, at the top:
+
+```yaml
+exclude: ["**/node_modules/**", "**/dist/**", "**/vendor/**"]
+
+dimensions:
+  - id: "file-length"
+    title: "Files over 500 lines"
+    direction: "lower-is-better"
+    builtin: "file-length"
+    options:
+      threshold: 500
+      include: ["**/*"]
+      exclude: ["**/*.snap"]
+```
+
+The dimension's own `exclude` still applies; the two lists are combined. Lifting a repeated glob up here does not change what is measured, so a recorded baseline stays valid.
+
 ---
 
 ## Primitives (zero dependencies)

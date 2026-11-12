@@ -225,7 +225,7 @@ func TestYAMLKeySetsMatchSchema(t *testing.T) {
 		sample any
 		want   []string
 	}{
-		{"config", configFile{}, []string{"analyzers", "dimensions", "snapshot"}},
+		{"config", configFile{}, []string{"analyzers", "dimensions", "exclude", "snapshot"}},
 		{"analyzer", analyzerConfig{}, []string{"builtin", "id", "options", "timeout", "verify"}},
 		{"dimension", dimensionConfig{}, []string{
 			"artifact_max_age", "builtin", "command", "direction", "extract", "gate",

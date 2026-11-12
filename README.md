@@ -215,7 +215,7 @@ construction. Without that option pawl reports age as provenance only.
 
 | command | purpose |
 |---|---|
-| `pawl init` | write a starter `pawl.yaml` without overwriting an existing one |
+| `pawl init` | write a starter `pawl.yaml` without overwriting an existing one; detects the project type from marker files and prefills `include` and a shared `exclude` |
 | `pawl record` | measure and write the snapshot |
 | `pawl check` | compare current measurements with the snapshot; the default command |
 | `pawl measure` | print current measurements without reading a baseline or giving a verdict |
