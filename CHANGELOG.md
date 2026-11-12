@@ -4,6 +4,16 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Added
+
+- Running a config-reading command (`check`, `record`, `measure`, `guard`,
+  `trend`, `rank`) in a subdirectory without `-c` now adopts the nearest
+  `pawl.yaml` found upward from the working directory, stopping at the
+  enclosing git repository root — the way `git` and `eslint` do. An explicit
+  `-c` still pins one exact path, `init` still writes to the working directory,
+  paths inside the config stay relative to the config file, and a config in the
+  working directory is still reported by its relative name.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed

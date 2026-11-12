@@ -35,7 +35,7 @@ Commands:
   version                 print the version
 
 Global flags:
-  -c, --config <path>     config file (default pawl.yaml)
+  -c, --config <path>     config file (default: nearest pawl.yaml)
       --format <format>   text or json
   -q, --quiet             silence progress and advisory output
   -h, --help              show help

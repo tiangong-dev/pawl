@@ -26,7 +26,13 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   gate, not a usage error). "No command" means zero positional arguments — an
   empty-string argument is an unknown command (exit 2), so a wrapper passing an
   unset variable fails loud instead of silently running the default gate.
-- `-c <path>` selects the config file; default `./pawl.yaml`.
+- `-c <path>` (or `--config <path>`) selects the config file and is used
+  verbatim — pawl never searches when one is given. Without it, every
+  config-reading command (`check`, `record`, `measure`, `guard`, `trend`,
+  `rank`) adopts the nearest `pawl.yaml` from the working directory upward,
+  bounded by the enclosing git repository; `init` is the exception and always
+  writes to the working directory. Specified in
+  [§ Locating the config file](../commands/config.md#locating-the-config-file).
 - `-h` / `--help`, `pawl help`, and `pawl help <command>` print help without
   reading config. An unknown command/topic remains a usage error (exit 2).
 - `--limit <n>` caps how many recent snapshots `trend` prints (default 20, `0`
