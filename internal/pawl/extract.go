@@ -17,9 +17,22 @@ import (
 const (
 	extractNumber   = "number"
 	extractLines    = "lines"
+	extractExitCode = "exit-code"
 	extractRegex    = "regex"
 	extractJSONPath = "json_path"
 )
+
+// extractExitCodeUnit is what an exit-code measurement counts: failed checks.
+// The scalar form has no place to override it, so it is fixed here rather than
+// left to the "count" default every other form inherits.
+const extractExitCodeUnit = "failures"
+
+// defaultExitCodeOk is `extract: exit-code`'s valid_exit_codes when the config
+// declares none. For a pass/fail script the exit code *is* the result, so a
+// failing check (1) is a measurement rather than a broken tool — but an exit
+// outside the set (timeout, signal, missing binary) still is a failure to
+// measure. Every other extract form keeps the plain "exit 0 or bust" default.
+var defaultExitCodeOk = map[int]bool{0: true, 1: true}
 
 // ExtractSpec is a validated extract declaration. Form selects the derivation;
 // the remaining fields carry the form-specific inputs.
@@ -39,9 +52,11 @@ func parseExtract(v any) (*ExtractSpec, error) {
 		switch e {
 		case extractNumber, extractLines:
 			return &ExtractSpec{Form: e}, nil
+		case extractExitCode:
+			return &ExtractSpec{Form: e, Unit: extractExitCodeUnit}, nil
 		default:
-			return nil, fmt.Errorf("unknown form %q — want %q, %q, or an object with %q/%q",
-				e, extractNumber, extractLines, extractRegex, extractJSONPath)
+			return nil, fmt.Errorf("unknown form %q — want %q, %q, %q, or an object with %q/%q",
+				e, extractNumber, extractLines, extractExitCode, extractRegex, extractJSONPath)
 		}
 	case map[string]any:
 		regexVal, hasRegex := e[extractRegex]
@@ -70,8 +85,8 @@ func parseExtract(v any) (*ExtractSpec, error) {
 		}
 		return &ExtractSpec{Form: extractJSONPath, JSONPath: jsonPath, Unit: unit}, nil
 	default:
-		return nil, fmt.Errorf("must be a string (%q/%q) or an object (%q/%q)",
-			extractNumber, extractLines, extractRegex, extractJSONPath)
+		return nil, fmt.Errorf("must be a string (%q/%q/%q) or an object (%q/%q)",
+			extractNumber, extractLines, extractExitCode, extractRegex, extractJSONPath)
 	}
 }
 
@@ -79,16 +94,20 @@ func parseExtract(v any) (*ExtractSpec, error) {
 // form. The command must exit 0 unless valid_exit_codes widens the contract; an
 // unaccepted exit, a timeout, or output that cannot be extracted is a
 // measurement failure (never a silent zero), matching the raw exec contract's
-// honesty rule.
+// honesty rule. `exit-code` inverts the roles: the exit code is the
+// measurement, and the output is not read at all.
 func measureExtract(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	stdout, exitCode, err := runAdapterCommand(cfg, dim, stderr, dim.Command)
 	if err != nil {
 		return MeasureResult{}, err
 	}
+	spec := dim.Extract
+	if spec.Form == extractExitCode {
+		return extractExitCodeValue(dim.OkExit, exitCode)
+	}
 	if !exitAccepted(dim.OkExit, exitCode) {
 		return MeasureResult{}, exitCodeError(dim.OkExit, exitCode)
 	}
-	spec := dim.Extract
 	switch spec.Form {
 	case extractNumber:
 		return extractNumberValue(stdout, spec)
@@ -104,6 +123,25 @@ func measureExtract(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult
 		return MeasureResult{Value: n, Unit: spec.Unit}, nil
 	}
 	return MeasureResult{}, fmt.Errorf("unknown extract form %q", spec.Form)
+}
+
+// extractExitCodeValue turns a pass/fail script's exit code into the
+// measurement: 0 means the check passed, any other accepted code means it
+// reported failures. A code outside the accepted set (including a signal or a
+// missing binary, which the shell reports as an ordinary exit) stays a
+// measurement failure — "the tool never ran" must not read as "the check
+// failed".
+func extractExitCodeValue(ok map[int]bool, exitCode int) (MeasureResult, error) {
+	if ok == nil {
+		ok = defaultExitCodeOk
+	}
+	if !exitAccepted(ok, exitCode) {
+		return MeasureResult{}, exitCodeError(ok, exitCode)
+	}
+	if exitCode == 0 {
+		return MeasureResult{Value: 0, Unit: extractExitCodeUnit}, nil
+	}
+	return MeasureResult{Value: 1, Unit: extractExitCodeUnit}, nil
 }
 
 // extractNumberValue takes the command's trimmed stdout as exactly one finite

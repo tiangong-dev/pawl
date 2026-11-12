@@ -29,7 +29,7 @@ dimensions:
     timeout: "10m"               # optional Go duration, default "10m"
     artifact_max_age: "24h"      # optional freshness bound for file-backed reports
     command: "./scripts/count-nolint.sh"  # exactly one of command | builtin | source
-    valid_exit_codes: [0, 1]     # optional, command dimensions only; default [0]
+    valid_exit_codes: [0, 1]     # optional, command dimensions only; default [0], or [0, 1] for extract: exit-code
 
   - id: "file-length"
     title: "Files over 500 lines"
@@ -158,7 +158,10 @@ verdict.
 
 Optional on a `command` dimension (raw exec or `extract`), and spelled the same
 way as the named SARIF analyzer's acquisition option. Absent, the contract is
-the historical one: exit 0 or the run is a measurement failure. Present, it is
+the historical one: exit 0 or the run is a measurement failure. The one
+exception is `extract: exit-code`, which defaults to `[0, 1]` because its
+measurement *is* the exit code (see
+[adapters/extract.md](../adapters/extract.md#extract-exit-code)). Present, it is
 the complete set of exit codes that count as a successful run.
 
 It exists for tools that report findings through a non-zero exit. Appending

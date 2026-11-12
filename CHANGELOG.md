@@ -31,6 +31,11 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   and YAML merge keys (`<<`) are exempt. The warning does not change the exit
   code and is not silenced by `-q`; the next minor release plans to make an
   unknown key a load error.
+- The `extract` layer accepts `extract: exit-code` on a command dimension. It
+  measures the command's exit status instead of its output: exit 0 is `0`,
+  exit 1 is `1`, and `valid_exit_codes` defaults to `[0, 1]` for this form so a
+  failing check is a measurement rather than "could not measure". A pass/fail
+  script no longer needs a `&& printf '0\n'` wrapper.
 
 ### Changed
 
