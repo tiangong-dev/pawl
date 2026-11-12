@@ -176,7 +176,53 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 | `junit` | passing, failing, skipped, or total tests | `total` |
 | `coverage` | lcov or cobertura coverage | `total` |
 
-Named analyzers let several dimensions share one scan. Exact options and output semantics are part of the [engine contract](./spec/README.md).
+### Share one scan between dimensions
+
+Two dimensions that each carry the same expensive command run it twice. Declare
+the scan once as a named `analyzer` and point the dimensions at it with
+`source:`. Pawl acquires and decodes the analyzer once per invocation, then each
+dimension applies its own `rules` / `levels` selector to the same decoded
+findings:
+
+```yaml
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"             # eslint, oxlint, sarif, or lines
+    verify:                       # optional, but recommended
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
+
+dimensions:
+  - id: "cognitive-complexity"
+    title: "Cognitive complexity"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"     # no command here
+    options:
+      rules: ["sonarjs/cognitive-complexity"]
+
+  - id: "type-escapes"
+    title: "Explicit any"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["@typescript-eslint/no-explicit-any"]
+```
+
+Both dimensions read one scan. Without the analyzer, putting the same ESLint
+command on two `command:` dimensions runs it twice: pawl never deduplicates
+anonymous dimensions, because timeouts, files, exit policies, and decoders are
+part of the source identity.
+
+Only these four kinds can be shared (`eslint`, `oxlint`, `sarif`, `lines`); a
+custom `command` dimension cannot be a shared source. To share any other tool,
+make it emit output pawl can split per dimension — SARIF for the `sarif`
+analyzer, or one finding per line for the `lines` analyzer, which selects on the
+`rule` / `level` named groups of your regex. Exact options and output semantics
+are part of the [engine contract](./spec/README.md).
 
 ### Custom commands and `extract`
 

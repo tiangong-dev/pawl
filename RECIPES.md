@@ -124,6 +124,12 @@ Swap `include` / `pattern` for your stack. Run these while you're iterating loca
 
 ### ESLint issues
 
+Both dimensions below share one ESLint run through a named analyzer. Write the
+same command on two `command:` dimensions instead and it runs twice — pawl never
+deduplicates anonymous dimensions. See [Share one scan between
+dimensions](./README.md#share-one-scan-between-dimensions) for which sources can
+be shared and how to give an arbitrary tool the same treatment.
+
 ```yaml
 analyzers:
   - id: "frontend-eslint"

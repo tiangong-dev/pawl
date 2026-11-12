@@ -4,6 +4,12 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Documentation
+
+- The READMEs explain how a named `analyzers:` entry lets several dimensions
+  share one scan, and that two `command:` dimensions carrying the same ESLint
+  command are run twice instead.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed
