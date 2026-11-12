@@ -4,6 +4,15 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Changed
+
+- Snapshots write `<`, `>`, and `&` literally instead of as their `\u003c`,
+  `\u003e`, and `\u0026` escapes, so a unit such as `files > 500 lines` stays
+  readable and the file diffs cleanly. Existing snapshots stay valid and
+  comparable; the next `record` that touches a unit, id, or breakdown key
+  containing one of these characters shows a one-off diff with no change in
+  meaning.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed
