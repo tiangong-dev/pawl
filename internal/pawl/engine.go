@@ -404,6 +404,7 @@ func runMeasureCommand(full, measure *Config, command, format, since string, onl
 			return abortCouldNotMeasure(runScope, format, err.Error(), nil, stdout, stderr)
 		}
 		scope = s
+		hintUnstagedRename(progress, scope)
 	}
 	exit := 0
 	if hasLiveRegression(rep) {

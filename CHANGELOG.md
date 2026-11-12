@@ -4,6 +4,20 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Fixed
+
+- `check --since` pins rename detection on its `git diff`, so a moved file is
+  scoped to the lines actually added rather than counting every line of it as
+  new debt when the developer's `diff.renames` is off. The same commit no longer
+  gets a different verdict on different machines.
+
+### Added
+
+- `check --since` prints one advisory line on stderr when untracked files count
+  as all-new while files were deleted — an unstaged `mv` git cannot pair as a
+  rename — naming `git add -N` and `git mv` as the fixes. It is progress output:
+  `-q` silences it and the verdict is unchanged.
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed
