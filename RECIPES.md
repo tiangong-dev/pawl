@@ -261,7 +261,7 @@ dimensions:
     regex: '^(?P<path>[^:]+):(?P<line>\d+):\d+:'
 ```
 
-`valid_exit_codes` is the complete set of exit codes that count as a successful run; leave it out and the contract is the default `[0]`. Reach for it instead of appending `|| true`. That shell trick accepts *every* exit code, which means a crashed linter, a typo'd flag, or a missing binary all measure as a clean zero. We've watched exactly that happen; it's why this paragraph exists.
+`valid_exit_codes` is the complete set of exit codes that count as a successful run; leave it out and the contract is the default `[0]` (`[0, 1]` for `extract: exit-code`, see below). Reach for it instead of appending `|| true`. That shell trick accepts *every* exit code, which means a crashed linter, a typo'd flag, or a missing binary all measure as a clean zero. We've watched exactly that happen; it's why this paragraph exists.
 
 ### Any linter, several rules, one run (`lines`)
 
@@ -403,9 +403,27 @@ Pawl is language-agnostic: a dimension's `command` runs via `sh -c` and just has
   direction: "lower-is-better"
   command: "npx madge --circular --json src | jq 'length'"
   extract: number
+
+# A script that answers pass or fail with its exit status.
+- id: "api-compat"
+  title: "Public API compatibility"
+  direction: "lower-is-better"
+  command: "bash scripts/check-api.sh"
+  extract: exit-code
 ```
 
-For the full raw-JSON contract, the four `extract` forms, and the exec adapter environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see [SPEC.md § Exec adapter contract](./spec/adapters/exec.md) and [§ Declarative extract layer](./spec/adapters/extract.md).
+If a script already passes or fails through its exit status, don't wrap it.
+Writing `command: bash x.sh check >&2 && printf '0\n'` inverts the gate: the
+script failing makes the *command* fail, so pawl reports "could not measure"
+(exit 2) instead of a regression, and every passing run hard-codes the same `0`.
+`extract: exit-code` reads the status itself — exit 0 measures 0, exit 1
+measures 1, and anything else (a timeout, a signal, a missing binary) stays a
+measurement failure. Its output is ignored, so a human-facing summary is free.
+
+For the full raw-JSON contract, the five `extract` forms, and the exec adapter
+environment (`PAWL_ROOT`, cwd, timeout, exit-code honesty), see
+[SPEC.md § Exec adapter contract](./spec/adapters/exec.md) and
+[§ Declarative extract layer](./spec/adapters/extract.md).
 
 ---
 
