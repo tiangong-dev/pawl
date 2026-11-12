@@ -323,7 +323,7 @@ pawl record --dry-run --accept-worse
 pawl record --accept-worse
 ```
 
-Pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot.
+Pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot, including a `per-file-count` regression that left the total unchanged. When a change to a dimension's measurement definition is deliberate, add a `Pawl-Redefine: <id>` trailer — otherwise guard fails on the redefined metric.
 
 ### Reuse one measurement
 
