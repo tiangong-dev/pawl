@@ -156,6 +156,16 @@ dimensions:
 
 [配置示例（RECIPES.md）](./RECIPES.md) 收录了 Go、TypeScript、Python、Rust、Swift、常用 linter、各类报告格式与自定义命令的配置模板，开箱即用。
 
+### 编辑器补全
+
+配置已发布 [JSON Schema](./schema/pawl.schema.json)。`pawl init` 生成的配置首行会写入指向它的指令；已有配置同样可以加上这一行，写 `pawl.yaml` 时即可获得键名补全、枚举取值校验与悬停说明：
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+```
+
+schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate` 的判定为准。
+
 ### Gate 模式
 
 总数（scalar total）默认始终参与比对；`gate` 字段可在此基础上启用更精确的约束策略：
