@@ -15,6 +15,10 @@
       "type": "string",
       "description": "Optional. Snapshot path, resolved relative to the config file's directory. Default: pawl.snapshot.json."
     },
+    "exclude": {
+      "$ref": "#/definitions/excludeGlobs",
+      "description": "Optional top-level glob list shared by every filesystem-scanning dimension (file-length, file-bytes, pattern-count). Appended to that dimension's own exclude."
+    },
     "analyzers": {
       "type": "array",
       "description": "Named analyzers: one acquisition shared by every dimension that references them.",

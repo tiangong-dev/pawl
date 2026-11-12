@@ -6,6 +6,10 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 # Optional. Snapshot path, resolved relative to the config file's directory.
 snapshot: "pawl.snapshot.json"
 
+# Optional. Exclusion globs shared by every filesystem-scanning dimension:
+# appended to each such dimension's own exclude. See § Shared exclude below.
+exclude: ["**/node_modules/**", "**/dist/**"]
+
 analyzers:
   - id: "frontend-lint"         # required, unique across analyzers
     builtin: "eslint"           # eslint, oxlint, sarif or lines
@@ -57,6 +61,27 @@ invalid `artifact_max_age` (it must be a positive duration and the dimension mus
 out-of-range entry, zero dimensions, unparseable YAML, config file not found.
 
 An *unknown* key is not in that list — see the next section.
+
+### Shared `exclude`
+
+An optional top-level `exclude: [glob…]` is the exclusion list shared by every
+dimension that scans the filesystem: `file-length`, `file-bytes`, and
+`pattern-count`. It is **appended** to that dimension's own `exclude`, so both
+lists apply and a dimension's own globs keep working. Glob syntax and the
+config-directory-relative matching rules are the same as a dimension's
+`exclude`.
+
+It reaches only the filesystem-scanning builtins. A dimension whose input is a
+command (`command`/`extract`) or a named analyzer (`source`) walks no directory
+and ignores the list entirely. Its purpose is the `node_modules`/`dist`/`vendor`
+list a repository otherwise repeats in every dimension: write it once at the top.
+
+The **definition fingerprint** is computed from the merged, de-duplicated
+effective exclude set, so lifting a glob that was repeated in each dimension up
+to the top level leaves every recorded measurement comparable — no re-baseline,
+no redefined metric. A change that genuinely alters the effective set (adding,
+removing, or editing a glob) changes the fingerprint, and `check` reports the
+affected metrics as redefined.
 
 ### Unknown keys
 

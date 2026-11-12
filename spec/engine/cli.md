@@ -98,7 +98,9 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   `-ldflags "-X github.com/tiangong-dev/pawl/internal/pawl.Version=<x.y.z>"`.
 - `pawl init` writes a commented starter config to the config path (honoring
   `-c`) **without reading any existing config** — it is the zero-friction
-  on-ramp, specified in [§ init](../commands/init.md#init). If a file already exists at that path
+  on-ramp, specified in [§ init](../commands/init.md#init). It reads marker files
+  in the config file's directory and generates the detected stacks' `include`
+  and a shared top-level `exclude`. If a file already exists at that path
   it refuses (exit 2) rather than overwrite.
 - `pawl validate` loads the config and reports whether it is usable, measuring
   nothing: no adapter runs, the snapshot is neither read nor written, and git is

@@ -233,7 +233,7 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 
 | 命令 | 用途 |
 |---|---|
-| `pawl init` | 初始化起步配置文件 `pawl.yaml`（不会覆盖已有文件） |
+| `pawl init` | 初始化起步配置文件 `pawl.yaml`（不会覆盖已有文件）；根据标记文件识别项目类型，预填 `include` 与顶层共享 `exclude` |
 | `pawl validate` | 只校验 `pawl.yaml` 能否加载，不执行任何测量、不读写快照 |
 | `pawl record` | 重新测量各项指标并固化写入快照基线 |
 | `pawl check` | 对比当前测量值与基线快照；CLI 默认执行该命令 |

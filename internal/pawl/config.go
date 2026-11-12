@@ -59,6 +59,7 @@ type Config struct {
 
 type configFile struct {
 	Snapshot   string            `yaml:"snapshot"`
+	Exclude    []string          `yaml:"exclude"`
 	Analyzers  []analyzerConfig  `yaml:"analyzers"`
 	Dimensions []dimensionConfig `yaml:"dimensions"`
 }
@@ -163,12 +164,8 @@ func LoadConfig(path string, warn io.Writer) (*Config, error) {
 		seen[dim.ID] = true
 		cfg.Dimensions = append(cfg.Dimensions, dim)
 	}
-	for i := range cfg.Dimensions {
-		definition, err := definitionFingerprint(cfg, cfg.Dimensions[i])
-		if err != nil {
-			return nil, err
-		}
-		cfg.Dimensions[i].Definition = definition
+	if err := bindDimensionDefinitions(cfg, raw.Exclude); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }

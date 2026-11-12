@@ -5,6 +5,10 @@
 # improve. Full contract: spec/README.md (index: SPEC.md). Copy-paste more dimensions (ESLint, coverage,
 # complexity, SARIF, JUnit, duplication, …) from RECIPES.md.
 
+# Shared exclusion list: appended to each dimension's own exclude, so common
+# globs are declared once here instead of repeated in every dimension.
+exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+
 dimensions:
   # Files over 500 lines — a maintainability floor. Go-native, no tools needed.
   - id: "file-length"
@@ -14,7 +18,6 @@ dimensions:
     options:
       threshold: 500
       include: ["**/*"]
-      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
 
   # Same scan, per-key-value: an already-long file must not keep growing.
   - id: "file-length-growth"
@@ -25,7 +28,6 @@ dimensions:
     options:
       threshold: 500
       include: ["**/*"]
-      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
 
   # Escape-hatch / debt markers. Swap the pattern (and includes) for your stack:
   # e.g. "as any" for TypeScript, "//nolint" for Go, "# type: ignore" for Python.
@@ -37,4 +39,3 @@ dimensions:
     options:
       pattern: "TODO|FIXME"
       include: ["**/*"]
-      exclude: ["pawl.yaml", "pawl.snapshot.json", "**/node_modules/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
