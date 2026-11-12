@@ -56,6 +56,36 @@ an unknown named-analyzer acquisition option or dimension selector,
 invalid `artifact_max_age` (it must be a positive duration and the dimension must read a configured report file), `valid_exit_codes` on a `builtin`/`source` dimension or holding a non-integer or
 out-of-range entry, zero dimensions, unparseable YAML, config file not found.
 
+An *unknown* key is not in that list — see the next section.
+
+### Unknown keys
+
+A key the schema above does not define is dropped by the parser, so a typo
+(`gat:` for `gate:`, `optoins:` for `options:`) silently removes the field and
+the dimension falls back to its defaults. Pawl reports every such key on
+stderr — at the top level, inside each `analyzers[]` entry, and inside each
+`dimensions[]` entry — with the full key path (`dimensions[2].gat`) and, when a
+defined key at that level is close by, a "did you mean `<key>`" suggestion. All
+stray keys are listed, not just the first. Keys beginning with `x-` are
+reserved for user extensions (YAML anchors, tool metadata) and are never
+reported.
+
+This is a warning: the exit code is unchanged and the run proceeds. It is not
+progress, so `-q` / `--quiet` does not suppress it — a config mistake must not
+be silent. Under `GITHUB_ACTIONS` each line is emitted as a `::warning::`
+annotation, still on stderr; with `--format json` the warning goes to stderr
+too, so stdout remains a single JSON object. The next minor release plans to
+promote an unknown key to a load error (exit 2). The `x-` prefix stays valid.
+
+YAML merge keys are not reported: `<<` (`!!merge`) is a language feature, and
+an alias where a mapping or sequence is expected is skipped rather than
+dereferenced. The consequence is a known limitation — a key a merge pulls in
+through `<<` is not visible to the scan, so a typo carried that way is not
+reported.
+
+The accepted-key vocabulary is derived from the parser's own struct tags, so
+it cannot drift from what `pawl` accepts.
+
 ### `valid_exit_codes`
 
 Optional on a `command` dimension (raw exec or `extract`), and spelled the same
