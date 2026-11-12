@@ -85,7 +85,7 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	violations, removed := GuardViolationsWithGates(baseSnap.Metrics, currentSnap.Metrics, gateModes(cfg))
+	violations, removed := GuardViolationsWithGatesAndRenames(baseSnap.Metrics, currentSnap.Metrics, gateModes(cfg), guardRenamesFor(cfg, ref, stdout))
 	redefined := RedefinedMetrics(baseSnap.Metrics, currentSnap.Metrics)
 
 	// A redefined metric is not comparable, so the author has to say so in the
@@ -196,6 +196,36 @@ func gateModes(cfg *Config) map[string]GateMode {
 		out[dim.ID] = dim.Gate
 	}
 	return out
+}
+
+// guardRenamesFor resolves git's renames for guard's per-file comparison and
+// reports its own unavailability. Renames only reach a per-file-count
+// comparison, so without such a dimension git is not asked at all. When the
+// answer is unavailable guard still compares — without mapping, which is
+// stricter — but the author is told why a purely renamed file can read as a new
+// offender, so the extra failure is not mistaken for a real one.
+func guardRenamesFor(cfg *Config, ref string, stdout io.Writer) map[string]string {
+	perFile := false
+	for _, dim := range cfg.Dimensions {
+		if dim.Gate == GatePerFileCount {
+			perFile = true
+			break
+		}
+	}
+	if !perFile {
+		return nil
+	}
+	renames, ok := guardRenames(cfg.Dir, ref)
+	if ok {
+		return renames
+	}
+	message := fmt.Sprintf("guard: rename detection between %s and HEAD is unavailable (no merge base, or git diff failed) — a purely renamed file may be reported as a new offender.", ref)
+	if onCI() {
+		fmt.Fprintf(stdout, "::notice::%s\n", message)
+	} else {
+		fmt.Fprintf(stdout, "ℹ️  %s\n", message)
+	}
+	return nil
 }
 
 // commitMessages returns the bodies of the commits in ref..HEAD, one per

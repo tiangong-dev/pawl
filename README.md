@@ -219,7 +219,7 @@ construction. Without that option pawl reports age as provenance only.
 | `pawl record` | measure and write the snapshot |
 | `pawl check` | compare current measurements with the snapshot; the default command |
 | `pawl measure` | print current measurements without reading a baseline or giving a verdict |
-| `pawl guard <ref>` | compare the snapshot with the version at `<ref>` |
+| `pawl guard <ref>` | compare the snapshot with the version at `<ref>`, mapping git-detected renames in a per-file-count comparison |
 | `pawl trend [<id>]` | show committed snapshot history |
 | `pawl rank` | rank included files by line or byte size |
 | `pawl agent` | install or print operating instructions for coding agents |

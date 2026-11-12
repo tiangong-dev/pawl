@@ -10,9 +10,19 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   each metric's gate mode applied, which is what `guard` now uses.
   `pawl.GuardViolations(base, pr)` keeps its signature and remains the
   scalar-only comparison.
+- `pawl.GuardViolationsWithGatesAndRenames(base, pr, gates, renames)` is that
+  comparison with git's detected renames applied to the per-file predicate, and
+  `FileGrowth.RenamedFrom` names the base path a mapped count came from.
+  `GuardViolationsWithGates` keeps its signature and compares per path.
 
 ### Changed
 
+- `pawl guard` maps git-detected file renames in a `per-file-count` comparison,
+  so `git mv a.go b.go` no longer reads as a brand-new file full of debt. Copies
+  are never mapped, only 1:1 renames inside the config directory are, and a
+  rename that also adds an offender still fails. When git cannot detect renames
+  (a shallow clone with no merge base, a failed diff) guard prints a notice and
+  compares per path as before.
 - `pawl guard` now applies each configured dimension's gate mode, so it is
   stricter: on a `per-file-count` metric it fails when any file's offender count
   rose even if the scalar total held, naming the files. A
