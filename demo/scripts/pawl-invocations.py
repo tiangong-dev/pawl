@@ -60,7 +60,7 @@ PAWL_CALL = re.compile(
 # classifying it as a check would credit an agent that measured but never asked
 # whether anything got worse.
 KNOWN_COMMANDS = {
-    "init", "agent", "record", "check", "measure", "guard",
+    "init", "validate", "agent", "record", "check", "measure", "guard",
     "trend", "rank", "version", "help",
     "diff", "status", "constraints", "agent-md", "baseline-guard",
 }

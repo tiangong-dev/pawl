@@ -25,15 +25,45 @@ func warnUnknownConfigKeys(data []byte, path string, warn io.Writer) {
 	}
 }
 
-// unknownConfigKeys scans the config document for mapping keys the schema does
-// not define — at the top level, inside each analyzers[] entry, and inside each
-// dimensions[] entry. Keys prefixed `x-` are reserved for user extensions
-// (people park YAML anchors there) and are never warned about. The scan reads
-// the raw document, so it sees the keys yaml.Unmarshal silently dropped, and
+// unknownConfigKey is one mapping key the config schema does not define: the
+// path that locates it in the document, and — when a defined key is a plausible
+// typo — the key its author probably meant. message is the advisory form the
+// warning prints; the exported-in-JSON fields are what a command that must act
+// on the finding (validate) reports, so a caller never has to re-scan the
+// document or scrape the suggestion back out of the sentence.
+type unknownConfigKey struct {
+	Path       string `json:"path"`
+	Suggestion string `json:"suggestion"`
+}
+
+func (k unknownConfigKey) message() string {
+	msg := fmt.Sprintf("unknown key %q", k.Path)
+	if k.Suggestion != "" {
+		msg += fmt.Sprintf(" — did you mean %q?", k.Suggestion)
+	}
+	return msg
+}
+
+// unknownConfigKeys reports the advisory message for every stray key, in
+// document order.
+func unknownConfigKeys(data []byte) []string {
+	keys := findUnknownConfigKeys(data)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k.message())
+	}
+	return out
+}
+
+// findUnknownConfigKeys scans the config document for mapping keys the schema
+// does not define — at the top level, inside each analyzers[] entry, and inside
+// each dimensions[] entry. Keys prefixed `x-` are reserved for user extensions
+// (people park YAML anchors there) and are never reported. The scan reads the
+// raw document, so it sees the keys yaml.Unmarshal silently dropped, and
 // reports every one rather than stopping at the first. Merge keys and aliases
 // are skipped: `<<` is a YAML keyword, not a user key, and the keys a merge
 // splices in are not visible here — a documented limitation.
-func unknownConfigKeys(data []byte) []string {
+func findUnknownConfigKeys(data []byte) []unknownConfigKey {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil
@@ -51,7 +81,7 @@ func unknownConfigKeys(data []byte) []string {
 	analyzerKeys := yamlKeySet(analyzerConfig{})
 	dimensionKeys := yamlKeySet(dimensionConfig{})
 
-	var out []string
+	var out []unknownConfigKey
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		keyNode := root.Content[i]
 		if isMergeKey(keyNode) {
@@ -62,7 +92,7 @@ func unknownConfigKeys(data []byte) []string {
 			continue
 		}
 		if !topKeys[key] {
-			out = append(out, unknownKeyMessage(key, key, topKeys))
+			out = append(out, unknownConfigKey{Path: key, Suggestion: closestKey(key, topKeys)})
 		}
 		switch key {
 		case "analyzers":
@@ -79,11 +109,11 @@ func unknownConfigKeys(data []byte) []string {
 // typo in a file with several dimensions. A non-sequence value (an alias to a
 // sequence, say) is skipped, as is an item that is an alias rather than a
 // mapping: its keys live in the anchored mapping checked at its own position.
-func itemUnknownKeys(seq *yaml.Node, prefix string, allowed map[string]bool) []string {
+func itemUnknownKeys(seq *yaml.Node, prefix string, allowed map[string]bool) []unknownConfigKey {
 	if seq.Kind != yaml.SequenceNode {
 		return nil
 	}
-	var out []string
+	var out []unknownConfigKey
 	for i, item := range seq.Content {
 		if item.Kind != yaml.MappingNode {
 			continue
@@ -98,7 +128,7 @@ func itemUnknownKeys(seq *yaml.Node, prefix string, allowed map[string]bool) []s
 				continue
 			}
 			path := fmt.Sprintf("%s[%d].%s", prefix, i, key)
-			out = append(out, unknownKeyMessage(path, key, allowed))
+			out = append(out, unknownConfigKey{Path: path, Suggestion: closestKey(key, allowed)})
 		}
 	}
 	return out
@@ -131,17 +161,6 @@ func yamlKeySet(sample any) map[string]bool {
 		keys[name] = true
 	}
 	return keys
-}
-
-// unknownKeyMessage names the stray key and, when a defined key is a plausible
-// typo, suggests it. leaf is the bare key (without its `dimensions[i].` prefix)
-// the suggestion is measured against.
-func unknownKeyMessage(path, leaf string, allowed map[string]bool) string {
-	msg := fmt.Sprintf("unknown key %q", path)
-	if suggestion := closestKey(leaf, allowed); suggestion != "" {
-		msg += fmt.Sprintf(" — did you mean %q?", suggestion)
-	}
-	return msg
 }
 
 // closestKey returns the accepted key nearest to name by edit distance, or ""

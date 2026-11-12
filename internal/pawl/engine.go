@@ -139,9 +139,9 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// `pawl frobnicate --version` is the usage error the contract promises,
 	// never laundered into a clean version print.
 	switch command {
-	case "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "version", "help":
+	case "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "validate", "version", "help":
 	default:
-		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | guard <ref> | trend [<id>] | rank | version | help\n", command)
+		fmt.Fprintf(stderr, "unknown command %q. use: init | agent | measure | record | check | guard <ref> | trend [<id>] | rank | validate | version | help\n", command)
 		return 2
 	}
 	if format != "text" && format != "json" {
@@ -181,8 +181,10 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "--accept-worse is only valid on `record`, not %q\n", command)
 		return 2
 	}
-	if quiet && command != "measure" && command != "record" && command != "check" {
-		fmt.Fprintf(stderr, "--quiet is only valid on `measure`, `record` or `check`, not %q\n", command)
+	// -q neither silences nor buffers validate: that command prints no progress,
+	// and its report is its result, so there is nothing to hold back.
+	if quiet && command != "measure" && command != "record" && command != "check" && command != "validate" {
+		fmt.Fprintf(stderr, "--quiet is only valid on `measure`, `record`, `check` or `validate`, not %q\n", command)
 		return 2
 	}
 	if currentPath != "" && command != "record" && command != "check" {
@@ -255,6 +257,13 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// init writes a new config; it must not require (or read) an existing one.
 	if command == "init" {
 		return runInit(configPath, stdout, stderr)
+	}
+
+	// validate reads the config and nothing else — no measurement, no snapshot,
+	// no git — and is the one command where a stray key is fatal rather than an
+	// advisory warning.
+	if command == "validate" {
+		return runValidate(configPath, format, stdout, stderr)
 	}
 
 	// agent emits a fixed operating loop, identical in every repo — it reads no config, so it still works in a repo whose config is mid-edit or broken, which is exactly when someone reaches for the instructions.

@@ -6,6 +6,11 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ### Added
 
+- `pawl validate` checks a `pawl.yaml` without measuring anything: it runs no
+  dimension command, reads and writes no snapshot, and never touches git, so an
+  editor integration or a pre-commit hook can run it on every save. It exits 2
+  on any config error and — unlike every measuring command — on a key the schema
+  does not define, naming the key path and the key you probably meant.
 - A key `pawl.yaml` does not define (a typo like `gat:` for `gate:` or
   `optoins:` for `options:`) now prints a warning on stderr naming the full key
   path and, when one is close, the key you probably meant. Keys prefixed `x-`

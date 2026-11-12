@@ -76,6 +76,9 @@ be silent. Under `GITHUB_ACTIONS` each line is emitted as a `::warning::`
 annotation, still on stderr; with `--format json` the warning goes to stderr
 too, so stdout remains a single JSON object. The next minor release plans to
 promote an unknown key to a load error (exit 2). The `x-` prefix stays valid.
+The one command that already treats an unknown key as an error is
+[§ validate](validate.md#validate), whose whole job is judging the config: it
+exits 2 rather than measuring against a key the author probably misspelled.
 
 YAML merge keys are not reported: `<<` (`!!merge`) is a language feature, and
 an alias where a mapping or sequence is expected is skipped rather than
