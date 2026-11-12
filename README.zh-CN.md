@@ -196,7 +196,41 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 | `junit` | 测试用例数（通过、失败、跳过或总计） | `total` |
 | `coverage` | lcov 或 cobertura 覆盖率报告 | `total` |
 
-多个维度可声明共用同一个命名 `analyzer`，避免重复执行开销巨大的扫描。各项适配器的完整配置项与输出规范详见 [引擎契约（spec）](./spec/README.md)。
+### 让多个维度共用同一次扫描
+
+两个维度如果各自写着同一条耗时命令，这条命令就会跑两遍。把这次扫描声明为一个命名 `analyzer`，再用 `source:` 让多个维度引用它：pawl 每次调用只采集并解码一次，各维度再各自套用自己的 `rules` / `levels` 选择器：
+
+```yaml
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"             # 可选值：eslint、oxlint、sarif、lines
+    verify:                       # 可选，但建议配置
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
+
+dimensions:
+  - id: "cognitive-complexity"
+    title: "认知复杂度"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"     # 此处不再写 command
+    options:
+      rules: ["sonarjs/cognitive-complexity"]
+
+  - id: "type-escapes"
+    title: "显式 any"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["@typescript-eslint/no-explicit-any"]
+```
+
+两个维度读的是同一次扫描结果。若不用 analyzer，而是把同一条 ESLint 命令分别写在两个 `command:` 维度上，它就会各执行一次：pawl 不会因为两个匿名维度的命令行字符串恰好相同就做去重，因为超时、文件集合、退出码策略与解码方式都属于来源身份的一部分。
+
+可共享的只有上述四种 analyzer（`eslint`、`oxlint`、`sarif`、`lines`），自定义 `command` 维度不能作为共享来源。想让别的工具也能被多个维度共用，就让它产出 pawl 能按维度切分的输出：用 `sarif` analyzer 接 SARIF 报告，或用 `lines` analyzer 接每行一条问题的输出，并通过正则里的 `rule` / `level` 命名分组做选择。各项适配器的完整配置项与输出规范详见 [引擎契约（spec）](./spec/README.md)。
 
 ### 自定义命令与声明式 `extract`
 
