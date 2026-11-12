@@ -155,7 +155,7 @@ func TestGuardTreatsSharedExcludeMigrationAsTheSameDefinition(t *testing.T) {
 	if res := runPawl(t, dir, gitEnv(homeDir), "record"); res.exit != 0 {
 		t.Fatalf("record exit = %d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
-	gitCommitAll(t, dir, homeDir, "initial baseline with repeated excludes")
+	base := gitCommitAll(t, dir, homeDir, "initial baseline with repeated excludes")
 
 	shared := `exclude: ["vendor/**"]
 ` + sharedExcludeScanConfig("")
@@ -163,7 +163,7 @@ func TestGuardTreatsSharedExcludeMigrationAsTheSameDefinition(t *testing.T) {
 	if res := runPawl(t, dir, gitEnv(homeDir), "record"); res.exit != 0 {
 		t.Fatalf("record after migration exit = %d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
-	res := runPawl(t, dir, gitEnv(homeDir), "guard", "main")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("guard exit = %d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
@@ -177,7 +177,11 @@ func TestGuardTreatsSharedExcludeMigrationAsTheSameDefinition(t *testing.T) {
 	if res := runPawl(t, dir, gitEnv(homeDir), "record"); res.exit != 0 {
 		t.Fatalf("record after widening exit = %d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
-	res = runPawl(t, dir, gitEnv(homeDir), "guard", "main")
+	// Widening the effective exclude changes the recorded definition, so guard
+	// compares it only once the commit that changes the config carries a
+	// Pawl-Redefine trailer naming the affected dimensions.
+	gitCommitAll(t, dir, homeDir, "widen the shared exclude\n\nPawl-Redefine: length, markers\n")
+	res = runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 0 {
 		t.Fatalf("guard after widening exit = %d, want 0 (redefinition is reported, not failed)\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
