@@ -7,7 +7,7 @@ import (
 
 func validHelpTopic(topic string) bool {
 	switch topic {
-	case "", "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "version":
+	case "", "init", "agent", "measure", "record", "check", "guard", "trend", "rank", "validate", "version":
 		return true
 	default:
 		return false
@@ -25,6 +25,7 @@ Usage:
 
 Commands:
   init                    write a starter pawl.yaml
+  validate                check the config without measuring anything
   agent                   install (or print) the agent operating loop for this gate
   measure                 measure every dimension and print the numbers, no verdict
   record                  measure and write the snapshot
@@ -55,14 +56,15 @@ Command flags:
 		return
 	}
 	fmt.Fprintf(w, "Usage: %s\n", map[string]string{
-		"init":    "pawl init [-c pawl.yaml]",
-		"agent":   "pawl agent [--write agent|claude]",
-		"measure": "pawl measure [--only <id>[,<id>…]] [-q]",
-		"record":  "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
-		"check":   "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
-		"guard":   "pawl guard [<ref>]",
-		"trend":   "pawl trend [<id>] [--limit <n>] [--format text|json]",
-		"rank":    "pawl rank [--format text|json]",
-		"version": "pawl version",
+		"init":     "pawl init [-c pawl.yaml]",
+		"validate": "pawl validate [-c pawl.yaml] [--format text|json]",
+		"agent":    "pawl agent [--write agent|claude]",
+		"measure":  "pawl measure [--only <id>[,<id>…]] [-q]",
+		"record":   "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
+		"check":    "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
+		"guard":    "pawl guard [<ref>]",
+		"trend":    "pawl trend [<id>] [--limit <n>] [--format text|json]",
+		"rank":     "pawl rank [--format text|json]",
+		"version":  "pawl version",
 	}[topic])
 }

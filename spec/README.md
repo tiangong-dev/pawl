@@ -44,6 +44,7 @@ assuming a bug.
 ### Commands
 
 - [commands/init.md](commands/init.md) — `init`
+- [commands/validate.md](commands/validate.md) — `validate` (check the config, measure nothing)
 - [commands/agent.md](commands/agent.md) — `agent`
 - [commands/measure.md](commands/measure.md) — `measure` + `--current`
 - [commands/config.md](commands/config.md) — Config — `pawl.yaml`

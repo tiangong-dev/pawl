@@ -6,6 +6,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--write <target>] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
+  validate             check the config loads, without measuring anything
   agent                install (or print) the operating loop a coding agent
                        needs to use this gate
   measure              measure every dimension and print the measurement
@@ -55,8 +56,9 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   emits its verdict, since a caller parsing one must always receive one. Config
   warnings ([§ Config](../commands/config.md#unknown-keys)) are not progress
   either and are never suppressed. Valid
-  on `measure`, `record` and `check`; on any other command a usage error
-  (exit 2).
+  on `measure`, `record`, `check` and `validate`; on any other command a usage
+  error (exit 2). `validate` prints no progress at all, and its report is its
+  result, so `-q` changes nothing there.
 - `--current <path|->` supplies `check` or `record` with a measurement document
   — the output of `pawl measure`, from a file or (with `-`) stdin — instead of
   running the dimensions, specified in
@@ -65,8 +67,8 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 - `--format <text|json>` selects the output format of `record`/`check`;
   default `text`. `json` is specified in
   [§ Machine-readable output](verdict.md#machine-readable-output).
-  `guard` ignores `--format` (its output is not tabular). `trend` and
-  `rank` honor `text` (default) and `json`. `agent` emits Markdown, so any
+  `guard` ignores `--format` (its output is not tabular). `trend`, `rank` and
+  `validate` honor `text` (default) and `json`. `agent` emits Markdown, so any
   `--format` there is a usage error (exit 2). `measure` emits the measurement
   document by definition and accepts `--format json` as an equivalent,
   compatibility spelling; every other explicit `--format` spelling, including
@@ -98,14 +100,20 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
   `-c`) **without reading any existing config** — it is the zero-friction
   on-ramp, specified in [§ init](../commands/init.md#init). If a file already exists at that path
   it refuses (exit 2) rather than overwrite.
+- `pawl validate` loads the config and reports whether it is usable, measuring
+  nothing: no adapter runs, the snapshot is neither read nor written, and git is
+  never invoked. A key the schema does not define is exit 2 here instead of the
+  advisory warning the measuring commands emit, so a config typo is caught
+  before a gate silently measures something else; specified in
+  [§ validate](../commands/validate.md#validate).
 
 ### Exit codes
 
 | code | meaning |
 |------|---------|
-| 0 | pass (including legitimate guard skips) |
+| 0 | pass (including legitimate guard skips); `validate`: the config loads and defines no unknown key |
 | 1 | `check`: at least one dimension regressed; `guard`: snapshot regressed vs `<ref>` and not covered by an accepted-debt trailer; `record`: refused a worse value without `--accept-worse` (including under `--dry-run`, which mirrors what a real record would do) |
-| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref |
+| 2 | anything that prevents an honest verdict: unknown command, missing/invalid config, no dimensions, missing snapshot for `check`, malformed snapshot shape, orphaned metric, measurement failure, unresolvable git ref; `validate`: an invalid config or an unknown key |
 
 The 1-vs-2 split is load-bearing: 1 means "measured fine, code got worse";
 2 means "could not measure/compare honestly" and must never read as a pass.
