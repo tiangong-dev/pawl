@@ -3,9 +3,15 @@ package pawl
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
+
+// analyzerBuiltins is every builtin a named analyzer may declare, in the order
+// the config error lists them. schema/pawl.schema.json's analyzer builtin enum
+// is pinned to it by TestSchemaEnumsMatchCode.
+var analyzerBuiltins = []string{builtinEslint, builtinOxlint, builtinSarif, builtinLines}
 
 // Analyzer is a named, explicitly shareable tool invocation. It acquires and
 // decodes one complete finding report; dimensions reference it with source and
@@ -35,7 +41,7 @@ func validateAnalyzer(index int, raw analyzerConfig) (Analyzer, error) {
 		id = fmt.Sprintf("#%d", index+1)
 		return Analyzer{}, fmt.Errorf("analyzer %s: missing id", id)
 	}
-	if raw.Builtin != builtinEslint && raw.Builtin != builtinOxlint && raw.Builtin != builtinSarif && raw.Builtin != builtinLines {
+	if !slices.Contains(analyzerBuiltins, raw.Builtin) {
 		return Analyzer{}, fmt.Errorf("analyzer %s: builtin must be %q, %q, %q or %q, got %q",
 			id, builtinEslint, builtinOxlint, builtinSarif, builtinLines, raw.Builtin)
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -447,9 +448,7 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		// several dimensions are meant to share, which is the whole point of it.
 		return fmt.Errorf("builtin %q is a named-analyzer kind, not a dimension builtin — declare it under analyzers: and point dimensions at it with source: (a single line-oriented dimension wants command: + extract: regex instead)", builtin)
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,
-			builtinJscpd, builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
+		return fmt.Errorf("unknown builtin %q (available: %s)", builtin, strings.Join(dimensionBuiltins, ", "))
 	}
 	return nil
 }

@@ -15,6 +15,11 @@ no existing config.
   dimension using only zero-dependency primitive builtins (`file-length`,
   `pattern-count`), so `pawl record` succeeds immediately with no external tool
   installed. Comments in the file point at the recipe cookbook for more.
+- Its **first line** is the editor directive
+  `# yaml-language-server: $schema=<schema $id>`, pointing at
+  [`schema/pawl.schema.json`](../../schema/pawl.schema.json) so an editor
+  completes and checks keys from the moment the file is written — see
+  [§ Editor schema](config.md#editor-schema).
 - On success it writes the file and prints next-steps lines (naming the file,
   pointing at `pawl record`, the accessible
   `https://github.com/tiangong-dev/pawl/blob/main/RECIPES.md` cookbook, and naming

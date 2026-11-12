@@ -14,6 +14,10 @@ The config path resolves exactly as it does everywhere else (`-c <path>`,
 default `./pawl.yaml`); nothing here searches parent directories. The `snapshot`
 path is not checked, so a config whose snapshot does not exist yet is valid.
 
+This is also the authority the editor
+[schema](../commands/config.md#editor-schema) only assists: whatever a schema
+makes a tooltip say, a config is usable when `validate` says so.
+
 ### Unknown keys
 
 Unlike every other command, a key the schema does not define is a **problem**

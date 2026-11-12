@@ -6,6 +6,11 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ### Added
 
+- `schema/pawl.schema.json` describes a `pawl.yaml` for editors (key completion,
+  enumerated values, hover help), and `pawl init` writes the
+  `# yaml-language-server: $schema=…` line that points an editor at it. The
+  schema is an editing aid: `pawl validate` remains the authority on whether a
+  config is usable.
 - `pawl validate` checks a `pawl.yaml` without measuring anything: it runs no
   dimension command, reads and writes no snapshot, and never touches git, so an
   editor integration or a pre-commit hook can run it on every save. It exits 2

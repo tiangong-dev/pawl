@@ -150,6 +150,16 @@ dimensions:
 
 The [recipe cookbook](./RECIPES.md) has ready-to-edit examples for Go, TypeScript, Python, Rust, Swift, common linters, report formats, and custom commands.
 
+### Editor completion
+
+The config has a published [JSON Schema](./schema/pawl.schema.json). `pawl init` writes the directive that points an editor at it on the file's first line; add the same line to an existing config to get key completion, enum checks, and hover help while you edit:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+```
+
+The schema only helps while editing — `pawl validate` still decides whether the config is usable.
+
 ### Gate modes
 
 The scalar total is always compared. `gate` can add a more precise comparison:

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
 # pawl.yaml — a language-agnostic anti-regression quality gate.
 # Each dimension measures one number; `pawl record` snapshots them and
 # `pawl check` fails a PR when any dimension regresses. Numbers may only hold or

@@ -89,6 +89,46 @@ reported.
 The accepted-key vocabulary is derived from the parser's own struct tags, so
 it cannot drift from what `pawl` accepts.
 
+### Editor schema
+
+[`schema/pawl.schema.json`](../../schema/pawl.schema.json) (JSON Schema
+draft-07, `$id`
+`https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json`)
+describes this file: the top-level keys, `analyzers[]`, `dimensions[]`, the
+enumerated values (`direction`, `gate`, every builtin), and the options each
+builtin and analyzer reads. An editor reading it completes key names, marks a
+value outside an enum, and shows the meaning of the thing under the cursor.
+
+A config opts in with a directive on its own first line — the line
+[`pawl init`](init.md) writes into every scaffold:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+```
+
+The URL is the schema's own `$id` on the default branch, so an editor fetches it
+with no configuration; an editor that maps schemas by setting can point there
+instead of editing the file.
+
+The schema is an editing aid, never the verdict. `pawl validate` (and every
+measuring command) loads the config itself, and where an editor's suggestion and
+pawl disagree, pawl is authoritative — the schema can lag behind a released
+pawl on a detail no test pins.
+
+Which unknown keys it closes follows the same rule as the warning above: the
+three levels pawl warns about (top level, `analyzers[]`, `dimensions[]`) plus a
+named analyzer's `options`, where an unknown option is already a config error,
+set `additionalProperties: false`; `^x-` stays open at every one of them.
+Inside a dimension's `options` and inside the `extract` object it stays open,
+because pawl reads the keys it knows there and ignores anything else — an option
+name typo is not something pawl reports today.
+
+Two things keep the file honest: the key sets and the enumerated values are
+compared against the parser and the builtin registries by Go tests, so adding a
+key or a builtin without updating the schema fails the build; and nothing in the
+schema is a dependency of the binary — a missing or stale schema changes no
+verdict.
+
 ### `valid_exit_codes`
 
 Optional on a `command` dimension (raw exec or `extract`), and spelled the same
