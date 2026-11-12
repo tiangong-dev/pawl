@@ -85,10 +85,23 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	violations, removed := GuardViolations(baseSnap.Metrics, currentSnap.Metrics)
+	violations, removed := GuardViolationsWithGates(baseSnap.Metrics, currentSnap.Metrics, gateModes(cfg))
 	redefined := RedefinedMetrics(baseSnap.Metrics, currentSnap.Metrics)
 
+	// A redefined metric is not comparable, so the author has to say so in the
+	// history rather than let a config change reinterpret recorded numbers.
+	var unconfirmed []string
 	if len(redefined) > 0 {
+		confirmed, err := redefineTrailers(cfg.Dir, ref)
+		if err != nil {
+			fmt.Fprintf(stderr, "guard: could not read commit trailers between %s and HEAD: %v\n", ref, err)
+			return 2
+		}
+		for _, id := range redefined {
+			if !confirmed[id] {
+				unconfirmed = append(unconfirmed, id)
+			}
+		}
 		message := fmt.Sprintf("guard: measurement definition changed for: %s — numeric comparison is skipped for those metrics; review the pawl.yaml and snapshot diff together.", strings.Join(redefined, ", "))
 		if onCI() {
 			fmt.Fprintf(stdout, "::notice::%s\n", message)
@@ -144,11 +157,19 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if len(unconfirmed) > 0 {
+		fmt.Fprintf(stdout, "guard: missing `Pawl-Redefine: %s` trailer in %s..HEAD — numeric comparison was skipped for: %s, whose measurement definition changed; confirm the config change is deliberate.\n",
+			strings.Join(unconfirmed, ", "), ref, strings.Join(unconfirmed, ", "))
+	}
+
 	if len(remaining) > 0 {
 		fmt.Fprintf(stdout, "guard: snapshot regressed against %s:\n", ref)
 		for _, v := range remaining {
 			fmt.Fprintf(stdout, "  • %s\n", v)
 		}
+	}
+
+	if len(remaining) > 0 || len(unconfirmed) > 0 {
 		return 1
 	}
 
@@ -162,18 +183,46 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// gateModes indexes the configured dimensions by id, so guard applies the same
+// gate-aware predicate check does. Guard reads the working tree's config: a
+// snapshot records direction and tolerance but no gate, and a config that
+// changes a gate changes that metric's definition fingerprint, which puts the
+// metric into redefineTrailers' territory instead of silently switching which
+// predicate it is compared under. A metric with no configured dimension has no
+// gate here and is compared on its scalar alone.
+func gateModes(cfg *Config) map[string]GateMode {
+	out := make(map[string]GateMode, len(cfg.Dimensions))
+	for _, dim := range cfg.Dimensions {
+		out[dim.ID] = dim.Gate
+	}
+	return out
+}
+
+// commitMessages returns the bodies of the commits in ref..HEAD, one per
+// element. `%B%x00` terminates each body with a NUL so no message can bleed
+// into the next. A git failure is returned, never mistaken for "no trailers":
+// a shallow clone missing the range must fail loudly, not silently disable the
+// gate.
+func commitMessages(dir, ref string) ([]string, error) {
+	out, code, gitErr := gitOutput(dir, "log", "--format=%B%x00", ref+"..HEAD")
+	if code != 0 {
+		return nil, fmt.Errorf("git log %s..HEAD: %s", ref, gitErr)
+	}
+	return strings.Split(out, "\x00"), nil
+}
+
 // acceptedTrailers scans the commits in ref..HEAD for `Pawl-Accept: <id>
 // <value>` trailer lines and groups the declared values by dimension id. A
 // line that doesn't parse (no numeric value) is skipped rather than treated
 // as an error — a malformed trailer must fall back to "not accepted", never
 // silently disable the gate.
 func acceptedTrailers(dir, ref string) (map[string][]float64, error) {
-	out, code, gitErr := gitOutput(dir, "log", "--format=%B%x00", ref+"..HEAD")
-	if code != 0 {
-		return nil, fmt.Errorf("git log %s..HEAD: %s", ref, gitErr)
+	messages, err := commitMessages(dir, ref)
+	if err != nil {
+		return nil, err
 	}
 	declared := map[string][]float64{}
-	for _, msg := range strings.Split(out, "\x00") {
+	for _, msg := range messages {
 		for _, line := range strings.Split(msg, "\n") {
 			rest, ok := strings.CutPrefix(strings.TrimSpace(line), "Pawl-Accept:")
 			if !ok {
@@ -193,6 +242,33 @@ func acceptedTrailers(dir, ref string) (map[string][]float64, error) {
 		}
 	}
 	return declared, nil
+}
+
+// redefineTrailers scans the commits in ref..HEAD for `Pawl-Redefine: <id>`
+// trailer lines and returns the set of ids they confirm. One line may name
+// several ids separated by commas, and a line naming no id is skipped rather
+// than treated as an error — a malformed trailer must fall back to
+// "unconfirmed", never silently disable the gate.
+func redefineTrailers(dir, ref string) (map[string]bool, error) {
+	messages, err := commitMessages(dir, ref)
+	if err != nil {
+		return nil, err
+	}
+	confirmed := map[string]bool{}
+	for _, msg := range messages {
+		for _, line := range strings.Split(msg, "\n") {
+			rest, ok := strings.CutPrefix(strings.TrimSpace(line), "Pawl-Redefine:")
+			if !ok {
+				continue
+			}
+			for _, id := range strings.Split(rest, ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					confirmed[id] = true
+				}
+			}
+		}
+	}
+	return confirmed, nil
 }
 
 // trailerAccepts reports whether v's current value is no worse than the

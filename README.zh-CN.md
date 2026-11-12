@@ -274,7 +274,7 @@ pawl record --dry-run --accept-worse
 pawl record --accept-worse
 ```
 
-执行后，pawl 会在终端输出类似 `Pawl-Accept: <id> <value>` 的 Git commit trailer。在后续的代码评审中，`pawl guard` 会校验这一声明，借此区分“经过 PR 评审特批的技术债”与“未授权的私自篡改”。
+执行后，pawl 会在终端输出类似 `Pawl-Accept: <id> <value>` 的 Git commit trailer。在后续的代码评审中，`pawl guard` 会校验这一声明，借此区分“经过 PR 评审特批的技术债”与“未授权的私自篡改”，其中也包括总数没变但某个文件计数上升的 `per-file-count` 退化。若确实要改动某个指标的测量定义，请在提交信息里补一行 `Pawl-Redefine: <id>`，否则 guard 会拒绝该指标。
 
 ### 复用单次测量结果
 

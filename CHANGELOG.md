@@ -4,6 +4,26 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+### Added
+
+- `pawl.GuardViolationsWithGates(base, pr, gates)` compares two snapshots with
+  each metric's gate mode applied, which is what `guard` now uses.
+  `pawl.GuardViolations(base, pr)` keeps its signature and remains the
+  scalar-only comparison.
+
+### Changed
+
+- `pawl guard` now applies each configured dimension's gate mode, so it is
+  stricter: on a `per-file-count` metric it fails when any file's offender count
+  rose even if the scalar total held, naming the files. A
+  `Pawl-Accept: <id> <value>` trailer that covers the metric's total accepts
+  those per-file violations too.
+- A metric whose measurement definition changed now needs a
+  `Pawl-Redefine: <id>` commit trailer in `guard`'s compared range; without it
+  `guard` exits 1 and names the missing trailer instead of only printing a
+  notice. Add the trailer to the commit that changes `pawl.yaml` (the gate mode
+  is part of the definition, so relaxing a gate counts as a redefinition).
+
 ## 0.8.3 — 2026-11-09
 
 ### Fixed
