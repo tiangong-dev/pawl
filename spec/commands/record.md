@@ -35,6 +35,13 @@ By default, `record` refuses to write a snapshot that would move any dimension b
 1. at least one trailer names that metric's id, **and**
 2. the metric's current value is no worse (per its recorded direction and tolerance) than the **worst** value declared across all matching trailers in range. Multiple trailers for the same id accumulate; the gate honors the most debt any of them declared.
 
+Because the declared value is the metric's scalar, a trailer covering that total
+also accepts a `per-file-count` violation of the same metric: the author
+accepted the metric's debt, wherever inside it the count moved. A metric whose
+recorded `definition` changed is the other kind of change and takes the other
+trailer — guard requires a `Pawl-Redefine: <id>` line in `<ref>..HEAD` for it
+(see [§ guard](guard.md#guard)).
+
 Edge cases, each chosen so a sloppy or hostile history can't quietly widen the gate:
 
 - A trailer for an id the snapshot doesn't regress on is unused.

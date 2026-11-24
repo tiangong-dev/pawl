@@ -24,10 +24,14 @@ output**, and pawl derives the measurement from it declaratively.
   good outcome: declare `valid_exit_codes: [0, 1]` rather than appending
   `|| true`. The two are not equivalent — `|| true` also accepts grep's exit 2,
   so an unreadable directory would measure a clean zero.
-- The extracted `unit` defaults to `"count"`. The object forms
-  (`regex`/`json_path`) accept an optional `unit` string.
 
-Four forms — the scalar forms are a bare YAML string, the object forms a map:
+  `extract: exit-code` is the one form that reads that exit instead of the
+  output, and its undeclared contract is `[0, 1]` rather than `[0]`.
+- The extracted `unit` defaults to `"count"`. The object forms
+  (`regex`/`json_path`) accept an optional `unit` string; `extract: exit-code`
+  is fixed to `"failures"`.
+
+Five forms — the scalar forms are a bare YAML string, the object forms a map:
 
 ### `extract: number`
 
@@ -54,6 +58,32 @@ blank after trimming trailing `\r`/whitespace). No breakdown. Intended for
   direction: "lower-is-better"
   extract: lines
 ```
+
+### `extract: exit-code`
+
+A pass/fail switch: the command's **exit code** is the measurement and its
+stdout is ignored. `value` = `0` when the command exits 0 and `1` for any other
+accepted exit code; `unit` is `"failures"` and there is no breakdown.
+
+The undeclared contract here is `valid_exit_codes: [0, 1]`, not `[0]`, because a
+failing check has to be measurable. It is not widened beyond that: a timeout, a
+signal, or a missing binary is outside the set and stays a *measurement
+failure*. That distinction is exactly what `|| true` — or a
+`&& printf '0\n'` suffix that turns a failing script into a failed command —
+erases, reporting "could not measure" where the honest answer is "the check
+failed".
+
+```yaml
+- id: api-compat
+  title: "Public API compatibility check"
+  direction: "lower-is-better"
+  command: "bash scripts/check-api.sh"
+  extract: exit-code
+```
+
+Reach for it when a script already answers pass or fail through its exit status
+and its output is written for a human. It carries one bit: a tool that reports
+*how many* findings it produced wants `lines`/`regex` instead.
 
 ### `extract: { regex: "<Go regexp>", unit?: "<unit>" }`
 

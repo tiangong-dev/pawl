@@ -10,9 +10,10 @@ scanner: it still requires the snapshot (missing snapshot → exit 2, like
 `check`). `--since` is valid only on `check`.
 
 **Changed-line set.** `git merge-base <ref> HEAD` (in `cfg.Dir`), then
-`git diff --unified=0 --no-ext-diff <merge-base>` (working tree vs merge-base,
-so staged and unstaged edits are included) unioned with every line of every
-untracked, non-ignored file from `git ls-files --others --exclude-standard --full-name -z`.
+`git diff --unified=0 --no-ext-diff --find-renames <merge-base>` (working tree vs
+merge-base, so staged and unstaged edits are included) unioned with every line of
+every untracked, non-ignored file from
+`git ls-files --others --exclude-standard --full-name -z`.
 The added (`+`) lines give `map[repo-relative path]set<new line number>`. A
 `\ No newline at end of file` marker inside a hunk annotates the line before it
 rather than being a line of the file, so it does not advance the new-side
@@ -35,6 +36,31 @@ to repo-relative via `cfg.Dir`'s position under `git rev-parse --show-toplevel`
 before intersecting. Failure to resolve the ref, compute a merge-base (e.g. a
 shallow clone with no common ancestor), or run the diff / `ls-files` is a
 measurement-style failure → exit 2 (never a silent "nothing changed").
+
+**Renames.** `--find-renames` is pinned for the same reason as the header
+prefixes: whether git reports a rename as a rename or as a delete-plus-add
+otherwise follows the developer's `diff.renames`, and the add form counts every
+line of the moved file as new debt, so the same commit would pass on one machine
+and fail on another. A detected rename is attributed to its new path: a pure
+rename contributes no added lines at all, and a rename with edits contributes
+only the lines genuinely added to the moved file. The old path is not a deletion
+when git pairs it with the new one.
+
+**Unstaged `mv`.** A plain `mv` that is not `git add`ed leaves the new path
+untracked, so git cannot pair it with the deleted old path: every line of the
+moved file is unioned in as all-added and its pre-existing findings read as new
+debt. pawl cannot write the index, so when a `--since` run unions in at least one
+untracked file while the same diff shows at least one deleted file, it prints one
+advisory line on stderr naming the cause and the fixes:
+
+```
+pawl: --since: 1 untracked file(s) count as all-new while 1 file(s) were deleted; if this is a rename, run `git add -N <paths>` or `git mv` so renames are detected
+```
+
+That line is progress output: `-q` silences it, it never appears on stdout, and
+it never changes the exit code or a metric value. It is a heuristic (an unrelated
+untracked file beside an unrelated deletion also triggers it), phrased as such —
+it says "if this is a rename".
 
 **Scoping rule, per dimension.** The 1-vs-2 exit split is preserved (measurement
 failures are still exit 2).
@@ -82,6 +108,8 @@ breakdown could hide a scalar rise the per-key pass never sees.
 merge-base short SHA, the dimensions scoped vs. enforced-in-full, and the count
 of pre-existing regressions exempted. `--format json` sets `mode: "since"`,
 `since: "<ref>"`, and carries `suppressed: true` on each exempted regression.
+The unstaged-`mv` advisory described above goes to stderr in both formats, so
+stdout stays the single verdict object either way.
 The exit code is 1 iff any live (non-suppressed) regression remains — including
 a full-strength `total` regression — else 0.
 

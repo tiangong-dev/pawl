@@ -23,6 +23,12 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
   config, grants the same slack the gate does).
 - `definition` binds the number to the semantic parts of its validated dimension: direction, gate, tolerance, extract form, builtin measurement options, or named-analyzer decoder and selectors. Titles, timeouts, commands, report paths, verification probes and exit-code policy affect presentation/acquisition rather than the meaning of a successful number and are excluded. Config lists with set semantics are order-insensitive. Legacy snapshots without this field remain readable; the next record upgrades measured metrics.
 - Metric ids are serialized in sorted order; 2-space indent; trailing newline.
+- HTML-sensitive characters (`<`, `>`, `&`) are written verbatim, not as
+  `\u003c` / `\u003e` / `\u0026`, so a unit like `files > 500 lines` and a path
+  containing `&` stay readable. Both spellings are valid JSON and decode to the
+  same string: snapshots written before this change remain readable and
+  comparable, and only the next `record` that touches such a unit, id, or
+  breakdown key shows a one-off diff with no change in meaning.
 - Numbers print in minimal decimal notation, never exponent form
   (`3613`, `72.41` — as by Go's `strconv.FormatFloat(v, 'f', -1, 64)`).
 

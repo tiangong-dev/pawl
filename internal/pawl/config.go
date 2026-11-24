@@ -2,9 +2,11 @@ package pawl
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -57,6 +59,7 @@ type Config struct {
 
 type configFile struct {
 	Snapshot   string            `yaml:"snapshot"`
+	Exclude    []string          `yaml:"exclude"`
 	Analyzers  []analyzerConfig  `yaml:"analyzers"`
 	Dimensions []dimensionConfig `yaml:"dimensions"`
 }
@@ -107,8 +110,9 @@ func LoadConfigLite(path string) (*Config, error) {
 
 // LoadConfig reads and validates a pawl.yaml. Every validation failure is an
 // error — a config that cannot be trusted must abort with exit 2, never
-// half-run.
-func LoadConfig(path string) (*Config, error) {
+// half-run. Keys the schema does not define are the one exception: they were
+// already dropped by the parse, so they are reported on warn, not returned.
+func LoadConfig(path string, warn io.Writer) (*Config, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolving config path %s: %w", path, err)
@@ -124,6 +128,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+	// A stray key is invisible after the parse above, so report it before
+	// validation — the misspelling may be why the rest of the file looks wrong.
+	warnUnknownConfigKeys(data, path, warn)
 	if len(raw.Dimensions) == 0 {
 		return nil, fmt.Errorf("%s declares no dimensions — nothing to measure", path)
 	}
@@ -157,12 +164,8 @@ func LoadConfig(path string) (*Config, error) {
 		seen[dim.ID] = true
 		cfg.Dimensions = append(cfg.Dimensions, dim)
 	}
-	for i := range cfg.Dimensions {
-		definition, err := definitionFingerprint(cfg, cfg.Dimensions[i])
-		if err != nil {
-			return nil, err
-		}
-		cfg.Dimensions[i].Definition = definition
+	if err := bindDimensionDefinitions(cfg, raw.Exclude); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
@@ -442,9 +445,7 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 		// several dimensions are meant to share, which is the whole point of it.
 		return fmt.Errorf("builtin %q is a named-analyzer kind, not a dimension builtin — declare it under analyzers: and point dimensions at it with source: (a single line-oriented dimension wants command: + extract: regex instead)", builtin)
 	default:
-		return fmt.Errorf("unknown builtin %q (available: %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-			builtin, builtinFileLength, builtinFileBytes, builtinPatternCount, builtinEslint, builtinOxlint,
-			builtinJscpd, builtinSwiftComplexity, builtinJSONValue, builtinSarif, builtinJUnit, builtinCoverage)
+		return fmt.Errorf("unknown builtin %q (available: %s)", builtin, strings.Join(dimensionBuiltins, ", "))
 	}
 	return nil
 }

@@ -150,6 +150,16 @@ dimensions:
 
 The [recipe cookbook](./RECIPES.md) has ready-to-edit examples for Go, TypeScript, Python, Rust, Swift, common linters, report formats, and custom commands.
 
+### Editor completion
+
+The config has a published [JSON Schema](./schema/pawl.schema.json). `pawl init` writes the directive that points an editor at it on the file's first line; add the same line to an existing config to get key completion, enum checks, and hover help while you edit:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tiangong-dev/pawl/main/schema/pawl.schema.json
+```
+
+The schema only helps while editing — `pawl validate` still decides whether the config is usable.
+
 ### Gate modes
 
 The scalar total is always compared. `gate` can add a more precise comparison:
@@ -176,7 +186,53 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 | `junit` | passing, failing, skipped, or total tests | `total` |
 | `coverage` | lcov or cobertura coverage | `total` |
 
-Named analyzers let several dimensions share one scan. Exact options and output semantics are part of the [engine contract](./spec/README.md).
+### Share one scan between dimensions
+
+Two dimensions that each carry the same expensive command run it twice. Declare
+the scan once as a named `analyzer` and point the dimensions at it with
+`source:`. Pawl acquires and decodes the analyzer once per invocation, then each
+dimension applies its own `rules` / `levels` selector to the same decoded
+findings:
+
+```yaml
+analyzers:
+  - id: "frontend-eslint"
+    builtin: "eslint"             # eslint, oxlint, sarif, or lines
+    verify:                       # optional, but recommended
+      - "npx eslint --print-config src/probe.ts"
+    options:
+      command: "npx eslint src --format json --no-inline-config"
+      min_files: 1
+
+dimensions:
+  - id: "cognitive-complexity"
+    title: "Cognitive complexity"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"     # no command here
+    options:
+      rules: ["sonarjs/cognitive-complexity"]
+
+  - id: "type-escapes"
+    title: "Explicit any"
+    direction: "lower-is-better"
+    gate: "per-file-count"
+    source: "frontend-eslint"
+    options:
+      rules: ["@typescript-eslint/no-explicit-any"]
+```
+
+Both dimensions read one scan. Without the analyzer, putting the same ESLint
+command on two `command:` dimensions runs it twice: pawl never deduplicates
+anonymous dimensions, because timeouts, files, exit policies, and decoders are
+part of the source identity.
+
+Only these four kinds can be shared (`eslint`, `oxlint`, `sarif`, `lines`); a
+custom `command` dimension cannot be a shared source. To share any other tool,
+make it emit output pawl can split per dimension — SARIF for the `sarif`
+analyzer, or one finding per line for the `lines` analyzer, which selects on the
+`rule` / `level` named groups of your regex. Exact options and output semantics
+are part of the [engine contract](./spec/README.md).
 
 ### Custom commands and `extract`
 
@@ -215,11 +271,12 @@ construction. Without that option pawl reports age as provenance only.
 
 | command | purpose |
 |---|---|
-| `pawl init` | write a starter `pawl.yaml` without overwriting an existing one |
+| `pawl init` | write a starter `pawl.yaml` without overwriting an existing one; detects the project type from marker files and prefills `include` and a shared `exclude` |
+| `pawl validate` | check that `pawl.yaml` loads, without measuring anything |
 | `pawl record` | measure and write the snapshot |
 | `pawl check` | compare current measurements with the snapshot; the default command |
 | `pawl measure` | print current measurements without reading a baseline or giving a verdict |
-| `pawl guard <ref>` | compare the snapshot with the version at `<ref>` |
+| `pawl guard <ref>` | compare the snapshot with the version at `<ref>`, mapping git-detected renames in a per-file-count comparison |
 | `pawl trend [<id>]` | show committed snapshot history |
 | `pawl rank` | rank included files by line or byte size |
 | `pawl agent` | install or print operating instructions for coding agents |
@@ -266,7 +323,7 @@ pawl record --dry-run --accept-worse
 pawl record --accept-worse
 ```
 
-Pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot.
+Pawl prints a `Pawl-Accept: <id> <value>` commit trailer. `pawl guard` uses that trailer to distinguish reviewed debt from a weakened snapshot, including a `per-file-count` regression that left the total unchanged. When a change to a dimension's measurement definition is deliberate, add a `Pawl-Redefine: <id>` trailer — otherwise guard fails on the redefined metric.
 
 ### Reuse one measurement
 

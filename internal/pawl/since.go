@@ -23,6 +23,8 @@ type sinceScope struct {
 	mergeBase    string
 	added        map[string]map[int]bool // repo-relative path → added new-line numbers
 	relDir       string                  // config dir relative to the repo toplevel
+	untracked    int                     // untracked files unioned in as all-added
+	deleted      int                     // files the diff shows deleted since the merge-base
 	exempted     int                     // regressions suppressed as pre-existing
 	unscopeable  int                     // live regressions with no attributable line
 	enforcedFull []string                // dimension ids kept at full strength (no line to scope)
@@ -33,7 +35,7 @@ type sinceScope struct {
 // config dir outside the repo — is returned so the caller can abort as
 // could-not-measure rather than a silent "nothing changed".
 func applySinceScope(cfg *Config, rep *Report, baseline *Snapshot, current map[string]Metric, ref string) (*sinceScope, error) {
-	added, mergeBase, err := addedLinesSince(cfg.Dir, ref)
+	changes, err := addedLinesSince(cfg.Dir, ref)
 	if err != nil {
 		return nil, fmt.Errorf("check --since: %w", err)
 	}
@@ -42,7 +44,10 @@ func applySinceScope(cfg *Config, rep *Report, baseline *Snapshot, current map[s
 		return nil, fmt.Errorf("check --since: %w", err)
 	}
 
-	scope := &sinceScope{ref: ref, mergeBase: mergeBase, added: added, relDir: relDir}
+	scope := &sinceScope{
+		ref: ref, mergeBase: changes.mergeBase, added: changes.added, relDir: relDir,
+		untracked: changes.untracked, deleted: changes.deleted,
+	}
 	rep.Mode = "since"
 	rep.Since = &ref
 	dimByID := map[string]Dimension{}
@@ -154,21 +159,32 @@ func (s *sinceScope) repoPath(p string) string {
 	return s.relDir + "/" + p
 }
 
+// sinceChanges is the resolved changed-line set for one --since run, plus the
+// two counts the unstaged-rename hint reads.
+type sinceChanges struct {
+	added     map[string]map[int]bool // repo-relative path → added new-line numbers
+	mergeBase string
+	untracked int // untracked, non-ignored files unioned in as all-added
+	deleted   int // files the diff shows deleted relative to the merge-base
+}
+
 // addedLinesSince returns the added (new-file) lines between merge-base(ref,HEAD)
-// and the working tree, keyed by repo-relative path, plus the merge-base commit.
-// The working tree (tracked edits + untracked files) is the comparison, not
-// HEAD: an agent that check --since before committing would otherwise see an
-// empty added-line set and have new debt suppressed as "pre-existing". In CI
-// the working tree matches HEAD, so the committed-only form is unchanged.
-// Ref resolution and merge-base are separate git calls so a typo'd ref fails
-// loud rather than silently disabling the scoping.
-func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
+// and the working tree, keyed by repo-relative path, together with the
+// merge-base commit and the rename-diagnosis counts. The working tree (tracked
+// edits + untracked files) is the comparison, not HEAD: an agent that check
+// --since before committing would otherwise see an empty added-line set and have
+// new debt suppressed as "pre-existing". In CI the working tree matches HEAD, so
+// the committed-only form is unchanged. Ref resolution and merge-base are
+// separate git calls so a typo'd ref fails loud rather than silently disabling
+// the scoping.
+func addedLinesSince(dir, ref string) (sinceChanges, error) {
+	var out sinceChanges
 	if _, code, gitErr := gitOutput(dir, "rev-parse", "--verify", ref); code != 0 {
-		return nil, "", fmt.Errorf("could not resolve ref %q: %s", ref, gitErr)
+		return out, fmt.Errorf("could not resolve ref %q: %s", ref, gitErr)
 	}
 	mergeBase, code, gitErr := gitOutput(dir, "merge-base", ref, "HEAD")
 	if code != 0 {
-		return nil, "", fmt.Errorf("no merge-base between %q and HEAD: %s", ref, gitErr)
+		return out, fmt.Errorf("no merge-base between %q and HEAD: %s", ref, gitErr)
 	}
 	// Working tree vs merge-base (staged + unstaged). Untracked files are not
 	// in this diff; they are unioned in below.
@@ -177,36 +193,70 @@ func addedLinesSince(dir, ref string) (map[string]map[int]bool, string, error) {
 	// to c//w/), diff.noprefix, and diff.srcPrefix/dstPrefix are all developer
 	// preferences that would make every `+++ b/<path>` header parse to the wrong
 	// path — an empty added-line set, which reads as "nothing changed" and
-	// exempts every new offender as pre-existing debt.
+	// exempts every new offender as pre-existing debt. --find-renames is pinned
+	// for the same reason: whether git pairs a rename as rename or as
+	// delete-plus-add otherwise follows the developer's diff.renames, and the
+	// add form counts every line of the moved file as new debt.
 	diff, code, gitErr := gitOutput(dir, "diff", "--unified=0", "--no-ext-diff",
-		"--src-prefix=a/", "--dst-prefix=b/", mergeBase)
+		"--find-renames", "--src-prefix=a/", "--dst-prefix=b/", mergeBase)
 	if code != 0 {
-		return nil, "", fmt.Errorf("git diff failed: %s", gitErr)
+		return out, fmt.Errorf("git diff failed: %s", gitErr)
 	}
-	added := parseAddedLines(diff)
-	if err := addUntrackedLines(dir, added); err != nil {
-		return nil, "", err
+	out.added = parseAddedLines(diff)
+	out.deleted = countDeletedFiles(diff)
+	untracked, err := addUntrackedLines(dir, out.added)
+	if err != nil {
+		return out, err
 	}
-	return added, mergeBase, nil
+	out.untracked = untracked
+	out.mergeBase = mergeBase
+	return out, nil
+}
+
+// countDeletedFiles counts the files the diff removes entirely, from their
+// `+++ /dev/null` header. A rename is not a deletion: with --find-renames
+// pinned, git prints a `rename from`/`rename to` header (and, when the content
+// also changed, an `a/<old>`→`b/<new>` pair) instead of an add/delete pair, so
+// a staged `git mv` contributes nothing here. Hunk state is tracked for the
+// same reason parseAddedLines tracks it: a hunk-body content line may itself
+// start with `+++ `.
+func countDeletedFiles(diff string) int {
+	n := 0
+	inHunk := false
+	for _, line := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			inHunk = false
+		case strings.HasPrefix(line, "@@"):
+			inHunk = true
+		case !inHunk && strings.HasPrefix(line, "+++ ") && parseDiffPath(line[len("+++ "):]) == "":
+			n++ // `+++ /dev/null` — the new side is empty, so the old file is gone
+		}
+	}
+	return n
 }
 
 // addUntrackedLines unions every line of every untracked, non-ignored file
-// into the added-line set. A brand-new file the agent has not `git add`ed
-// yet is the common local-loop case; treating it as all-added keeps --since
-// from suppressing its findings as pre-existing debt.
-func addUntrackedLines(dir string, added map[string]map[int]bool) error {
+// into the added-line set, returning how many files it unioned. A brand-new
+// file the agent has not `git add`ed yet is the common local-loop case;
+// treating it as all-added keeps --since from suppressing its findings as
+// pre-existing debt. The count is of files actually unioned — a non-regular,
+// unreadable, or empty entry contributes no lines, so it is not part of the
+// "counts as all-new" the hint reports.
+func addUntrackedLines(dir string, added map[string]map[int]bool) (int, error) {
 	listed, code, gitErr := gitOutputRaw(dir, "ls-files", "--others", "--exclude-standard", "--full-name", "-z")
 	if code != 0 {
-		return fmt.Errorf("git ls-files failed: %s", gitErr)
+		return 0, fmt.Errorf("git ls-files failed: %s", gitErr)
 	}
 	if listed == "" {
-		return nil
+		return 0, nil
 	}
 	toplevel, code, gitErr := gitOutput(dir, "rev-parse", "--show-toplevel")
 	if code != 0 {
-		return fmt.Errorf("git ls-files: %s is not inside a git repository: %s", dir, gitErr)
+		return 0, fmt.Errorf("git ls-files: %s is not inside a git repository: %s", dir, gitErr)
 	}
 	toplevel = canonicalPath(toplevel)
+	count := 0
 	for _, rel := range strings.Split(listed, "\x00") {
 		if rel == "" {
 			continue
@@ -235,14 +285,19 @@ func addUntrackedLines(dir string, added map[string]map[int]bool) error {
 		for i := 1; i <= n; i++ {
 			added[rel][i] = true
 		}
+		count++
 	}
-	return nil
+	return count, nil
 }
 
 // parseAddedLines parses a `git diff --unified=0` into added new-file line
 // numbers per repo-relative path. It tracks hunk state so a hunk-body content
 // line that happens to start with `+++ ` is recorded as an added line, not
-// mistaken for a file header (headers appear only before the first `@@`).
+// mistaken for a file header (headers appear only before the first `@@`). A
+// detected rename is attributed to its new path: the `rename from`/`rename to`
+// header carries no lines, and when the content also changed the `+++ b/<new>`
+// header names the new path, so only the genuinely added lines land under it and
+// a pure rename contributes none.
 func parseAddedLines(diff string) map[string]map[int]bool {
 	added := map[string]map[int]bool{}
 	curPath := ""
@@ -320,6 +375,22 @@ func parseHunkNewStart(line string) int {
 		return 0
 	}
 	return n
+}
+
+// hintUnstagedRename warns when --since runs beside what looks like an unstaged
+// `mv`: git sees the new path as an untracked file (so every line of it counts
+// as added) and the old path as deleted, and cannot pair the two because the new
+// path has no index entry. The mover's pre-existing findings then read as new
+// debt. The line names the cause and both fixes; it is progress output — `-q`
+// silences it, and the caller passes a discarded writer — and it never touches
+// the verdict or the metric values. A staged `git mv` is detected as a rename
+// and reports neither count, so it prints nothing.
+func hintUnstagedRename(w io.Writer, s *sinceScope) {
+	if s == nil || s.untracked == 0 || s.deleted == 0 {
+		return
+	}
+	fmt.Fprintf(w, "pawl: --since: %d untracked file(s) count as all-new while %d file(s) were deleted; if this is a rename, run `git add -N <paths>` or `git mv` so renames are detected\n",
+		s.untracked, s.deleted)
 }
 
 // renderSinceText prints the diff-mode banner and the scoped verdict: which

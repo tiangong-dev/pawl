@@ -47,7 +47,8 @@ func ReadSnapshotFile(path string) (*Snapshot, any, error) {
 
 // WriteSnapshotFile serializes with a pinned byte shape — 2-space indent,
 // sorted metric ids, per-metric field order direction/definition/value/unit/
-// breakdown/tolerance, minimal decimal numbers, trailing newline — so the snapshot
+// breakdown/tolerance, minimal decimal numbers, trailing newline, and
+// HTML-sensitive characters (`<`, `>`, `&`) written verbatim — so the snapshot
 // diffs cleanly in review and byte-identical measurements produce
 // byte-identical files.
 func WriteSnapshotFile(path string, metrics map[string]Metric) error {
@@ -115,11 +116,21 @@ func writeBreakdown(b *strings.Builder, breakdown map[string]float64) {
 	b.WriteString("\n      }")
 }
 
+// jsonString renders s as a JSON string literal. HTML-sensitive characters
+// (`<`, `>`, `&`) are written verbatim: both spellings are valid JSON and parse
+// to the same string, but the raw form keeps a snapshot's units, ids and
+// breakdown keys readable in diffs. Only this writing path drops the default
+// escaping — the definition fingerprint is computed elsewhere and keeps
+// json.Marshal's byte shape, so recorded baselines do not move.
 func jsonString(s string) string {
-	encoded, err := json.Marshal(s)
-	if err != nil {
-		// json.Marshal of a string cannot fail; keep the gate honest anyway.
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		// json.Encoder of a string cannot fail; keep the gate honest anyway.
 		panic(err)
 	}
-	return string(encoded)
+	// Encode terminates the value with a newline; the surrounding format
+	// strings already own the layout.
+	return strings.TrimSuffix(b.String(), "\n")
 }

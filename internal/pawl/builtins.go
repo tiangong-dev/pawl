@@ -21,6 +21,24 @@ const (
 const defaultFileLengthThreshold = 500
 const defaultFileBytesThreshold = 32768
 
+// dimensionBuiltins is every builtin a dimension may declare, in the order the
+// config error lists them. measureBuiltin dispatches exactly this set, and
+// schema/pawl.schema.json's builtin enum is pinned to it by
+// TestSchemaEnumsMatchCode — a new builtin belongs in both places.
+var dimensionBuiltins = []string{
+	builtinFileLength,
+	builtinFileBytes,
+	builtinPatternCount,
+	builtinEslint,
+	builtinOxlint,
+	builtinJscpd,
+	builtinSwiftComplexity,
+	builtinJSONValue,
+	builtinSarif,
+	builtinJUnit,
+	builtinCoverage,
+}
+
 func measureBuiltin(cfg *Config, dim Dimension, stderr io.Writer) (MeasureResult, error) {
 	switch dim.Builtin {
 	case builtinFileLength:
