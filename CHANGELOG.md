@@ -4,6 +4,16 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+## 0.9.0 — 2026-11-24
+
+### Upgrade notes
+
+- `pawl guard` now checks each file separately for `per-file-count` dimensions,
+  so existing CI may fail when a file's count increased even if the overall
+  count did not. Review the reported files and use `Pawl-Accept` when the debt
+  is intentional. A changed metric definition also requires a `Pawl-Redefine`
+  trailer in the compared commit range.
+
 ### Added
 
 - `schema/pawl.schema.json` describes a `pawl.yaml` for editors (key completion,
@@ -29,8 +39,8 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   `optoins:` for `options:`) now prints a warning on stderr naming the full key
   path and, when one is close, the key you probably meant. Keys prefixed `x-`
   and YAML merge keys (`<<`) are exempt. The warning does not change the exit
-  code and is not silenced by `-q`; the next minor release plans to make an
-  unknown key a load error.
+  code and is not silenced by `-q`; unknown keys remain warnings during config
+  loading.
 - The `extract` layer accepts `extract: exit-code` on a command dimension. It
   measures the command's exit status instead of its output: exit 0 is `0`,
   exit 1 is `1`, and `valid_exit_codes` defaults to `[0, 1]` for this form so a
