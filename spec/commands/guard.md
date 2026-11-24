@@ -60,9 +60,10 @@ comparing, guard maps git's detected renames, and that mapping can only re-key
 base counts git attributes to the same file — it never widens what passes:
 
 - **Detection.** One
-  `git diff --find-renames --name-status -z --diff-filter=R --no-ext-diff`
+  `git diff --find-renames --no-relative --name-status -z --diff-filter=R --no-ext-diff`
   over `merge-base(<ref>, HEAD)..HEAD`. `--find-renames` is pinned so the
-  repository's `diff.renames` setting cannot switch detection off, `-z` keeps
+  repository's `diff.renames` setting cannot switch detection off, `--no-relative`
+  keeps paths repo-relative regardless of `diff.relative`, `-z` keeps
   paths with spaces and non-ASCII bytes intact, and only `R` records are read.
 - **Copies are not mapped.** `-C`/`--find-copies` is not used: an added copy is
   new code with its own offenders, not a move of the original, so a copy whose

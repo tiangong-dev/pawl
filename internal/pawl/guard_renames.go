@@ -38,15 +38,14 @@ func parseRenameRecords(out string) [][2]string {
 // an end outside the config dir is dropped, because no breakdown key can name
 // it.
 //
-// --find-renames is pinned so the user's diff.renames setting cannot switch
-// detection off. Copies are deliberately left alone: an added copy is new code
-// that happens to look like existing code, not a move of it.
+// Pin rename detection and repository-relative paths independently of git's
+// diff.renames and diff.relative settings. Copies remain new code, not moves.
 func guardRenames(dir, ref string) (map[string]string, bool) {
 	mergeBase, code, _ := gitOutput(dir, "merge-base", ref, "HEAD")
 	if code != 0 {
 		return nil, false
 	}
-	out, code, _ := gitOutputRaw(dir, "diff", "--find-renames", "--name-status", "-z",
+	out, code, _ := gitOutputRaw(dir, "diff", "--find-renames", "--no-relative", "--name-status", "-z",
 		"--diff-filter=R", "--no-ext-diff", mergeBase+"..HEAD")
 	if code != 0 {
 		return nil, false
