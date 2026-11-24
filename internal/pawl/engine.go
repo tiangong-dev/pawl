@@ -262,8 +262,7 @@ func RunCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// without one, resolveConfigPath adopts the nearest pawl.yaml upward.
 	configPath, err := resolveConfigPath(configPath, configExplicit, progress)
 	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
+		return reportConfigResolutionError(command, format, err, stdout, stderr)
 	}
 
 	// trend never measures — it reads config only for the snapshot path, so a

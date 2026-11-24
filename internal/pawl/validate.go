@@ -31,6 +31,17 @@ type validateProblem struct {
 	Message string `json:"message"`
 }
 
+func reportConfigResolutionError(command, format string, err error, stdout, stderr io.Writer) int {
+	if command != "validate" {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	return renderValidate(validateReport{
+		SchemaVersion: 1, Command: "validate", Config: defaultConfigName,
+		Errors: []validateProblem{{Message: err.Error()}}, UnknownKeys: []unknownConfigKey{},
+	}, format, stdout, stderr)
+}
+
 // runValidate loads the config and reports whether it is usable, without
 // measuring anything: no adapter runs, no snapshot is read or written, no git
 // ref is resolved, no file is created. It is the fast pre-flight for a config
