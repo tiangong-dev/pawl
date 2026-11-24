@@ -364,7 +364,7 @@ jobs:
       # 提前运行生成覆盖率或测试报告的命令
       - run: npm test -- --coverage
 
-      - uses: tiangong-dev/pawl@v0.8.3
+      - uses: tiangong-dev/pawl@v0.9.0
         with:
           command: check
           args: --since origin/${{ github.base_ref || 'main' }}
@@ -406,7 +406,7 @@ quality:
 Jenkins、CircleCI、Buildkite、Azure Pipelines、Woodpecker 等系统，只要能执行二进制即可直接使用，无需安装专属插件：
 
 ```bash
-npx -y @pawl-tools/cli@0.8.3 check
+npx -y @pawl-tools/cli@0.9.0 check
 ```
 
 整个过程不依赖服务端组件。
