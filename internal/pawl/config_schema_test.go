@@ -32,6 +32,7 @@ type schemaNode struct {
 	Properties           map[string]schemaNode `json:"properties"`
 	PatternProperties    map[string]schemaNode `json:"patternProperties"`
 	Items                *schemaNode           `json:"items"`
+	OneOf                []schemaNode          `json:"oneOf"`
 	AllOf                []schemaNode          `json:"allOf"`
 	If                   *schemaNode           `json:"if"`
 	Then                 *schemaNode           `json:"then"`

@@ -161,12 +161,12 @@
             "description": "Builtin-specific options, or selector options on a source dimension; the schema narrows this by builtin/source below. Options are read per builtin, so a key this schema does not list is not one pawl uses — and pawl ignores an unknown builtin option rather than failing, which is why this object stays open."
           },
           "extract": {
-            "description": "Derive the measurement from the command's raw output instead of the {value,unit,breakdown} JSON contract. The scalar forms are the strings \"number\" and \"lines\"; the object forms name exactly one of regex / json_path, plus an optional unit. Command dimensions only.",
+            "description": "Derive the measurement from the command's raw output or exit code instead of the {value,unit,breakdown} JSON contract. The scalar forms are \"number\", \"lines\", and \"exit-code\"; the object forms name exactly one of regex / json_path, plus an optional unit. Command dimensions only.",
             "oneOf": [
               {
                 "type": "string",
-                "enum": ["number", "lines"],
-                "description": "\"number\": the command's trimmed stdout must be exactly one finite number. \"lines\": value is the number of non-empty stdout lines."
+                "enum": ["number", "lines", "exit-code"],
+                "description": "\"number\": the command's trimmed stdout must be exactly one finite number. \"lines\": value is the number of non-empty stdout lines. \"exit-code\": stdout is ignored; exit 0 measures 0 failures and any other accepted exit measures 1. By default, exits 0 and 1 are accepted."
               },
               { "$ref": "#/definitions/extractObject" }
             ]
