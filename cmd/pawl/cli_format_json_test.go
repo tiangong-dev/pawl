@@ -16,6 +16,7 @@ type jsonReport struct {
 	Command       string              `json:"command"`
 	Mode          string              `json:"mode"`
 	Since         *string             `json:"since"`
+	BaseRef       *string             `json:"base_ref"`
 	Only          []string            `json:"only"`
 	Excluded      []string            `json:"excluded"`
 	DryRun        bool                `json:"dry_run"`
@@ -78,6 +79,7 @@ type jsonRegression struct {
 	Current    float64 `json:"current"`
 	Message    string  `json:"message"`
 	Suppressed bool    `json:"suppressed"`
+	NewKey     bool    `json:"new_key"`
 }
 
 // parseReport asserts stdout is exactly one JSON object (nothing else) and

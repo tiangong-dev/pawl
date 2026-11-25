@@ -12,10 +12,9 @@ import (
 )
 
 // runGuard compares the working tree's snapshot against the version
-// committed at ref (in CI: the PR's base branch). This is what stops a
-// hand-edited snapshot from faking a pass — check alone only verifies
-// consistency between the snapshot on disk and a fresh measurement, not that
-// the file's history is honest.
+// committed at ref (in CI: the PR's base branch). This detects comparable
+// recorded regressions, while check verifies consistency between the snapshot
+// on disk and a fresh measurement. Neither proves the snapshot is complete.
 func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 	if ref == "" {
 		fmt.Fprintln(stderr, "guard requires a git ref, e.g. `pawl guard origin/main`")
@@ -86,6 +85,13 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 	}
 
 	violations, removed := GuardViolationsWithGatesAndRenames(baseSnap.Metrics, currentSnap.Metrics, gateModes(cfg), guardRenamesFor(cfg, ref, stdout))
+	configured := gateModes(cfg)
+	var missingConfigured []string
+	for _, id := range removed {
+		if _, ok := configured[id]; ok {
+			missingConfigured = append(missingConfigured, id)
+		}
+	}
 	redefined := RedefinedMetrics(baseSnap.Metrics, currentSnap.Metrics)
 
 	// A redefined metric is not comparable, so the author has to say so in the
@@ -119,6 +125,9 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "⚠️  %s\n", message)
 		}
+	}
+	if len(missingConfigured) > 0 {
+		fmt.Fprintf(stdout, "guard: configured metric(s) missing from the working tree snapshot: %s.\n", strings.Join(missingConfigured, ", "))
 	}
 
 	var accepted, remaining []GuardViolation
@@ -169,7 +178,7 @@ func runGuard(cfg *Config, ref string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if len(remaining) > 0 || len(unconfirmed) > 0 {
+	if len(remaining) > 0 || len(unconfirmed) > 0 || len(missingConfigured) > 0 {
 		return 1
 	}
 
@@ -347,9 +356,16 @@ func gitOutputRaw(dir string, args ...string) (string, int, string) {
 	err := cmd.Run()
 	code := 0
 	if err != nil {
-		code = cmd.ProcessState.ExitCode()
-		if code <= 0 {
+		if cmd.ProcessState == nil {
 			code = 1
+			if stderr.Len() == 0 {
+				fmt.Fprint(&stderr, err)
+			}
+		} else {
+			code = cmd.ProcessState.ExitCode()
+			if code <= 0 {
+				code = 1
+			}
 		}
 	}
 	return stdout.String(), code, strings.TrimSpace(stderr.String())

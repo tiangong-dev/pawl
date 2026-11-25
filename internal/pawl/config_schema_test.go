@@ -140,7 +140,7 @@ func TestSchemaEnumsMatchCode(t *testing.T) {
 		want []string
 	}{
 		{"direction", dimensionItem.property(t, "direction").Enum, []string{string(LowerIsBetter), string(HigherIsBetter)}},
-		{"gate", dimensionItem.property(t, "gate").Enum, []string{string(GateTotal), string(GatePerFileCount), string(GatePerKeyValue)}},
+		{"gate", dimensionItem.property(t, "gate").Enum, []string{string(GateTotal), string(GatePerFileCount), string(GatePerKeyValue), string(GatePerKeyValueStrict)}},
 		{"dimension builtin", dimensionItem.property(t, "builtin").Enum, dimensionBuiltins},
 		{"analyzer builtin", analyzerBuiltinEnum.Enum, analyzerBuiltins},
 	}

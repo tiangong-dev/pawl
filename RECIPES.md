@@ -15,6 +15,7 @@ Two decisions come up in almost every dimension, so let's get them out of the wa
 | one scalar (a %, a total, a size) | `total` (default) | there's nothing per-file to attribute |
 | findings that come and go (lint issues, TODOs) | `per-file-count` | fixing file A must not pay for a new offender in file B |
 | a fixed set of named values (per-package coverage) | `per-key-value` | each key is guarded against dropping |
+| path-keyed values where a rename must count as new | `per-key-value-strict` | existing values cannot worsen; new paths fail |
 
 **Which direction?** `lower-is-better` for counts of bad things (issues, duplication, long files); `higher-is-better` for good things that must not drop (coverage, passing tests). Get this backwards and pawl will obediently let your codebase rot. It trusts you on this one.
 
@@ -53,7 +54,7 @@ The dimension's own `exclude` still applies; the two lists are combined. Lifting
     exclude: ["**/*.snap", "**/*.min.*"]
 ```
 
-One dimension is not enough here. `total` catches a *new* file crossing the limit, but an already-long file can keep growing forever without moving the total. Pair a second dimension on the same builtin with `per-key-value` to stop that growth. `per-key-value` ignores new keys, so the two dimensions are complements, not duplicates.
+An already-long file can keep growing forever without moving the total. Add a `per-key-value` dimension to stop existing paths from growing. That mode ignores new paths; if any new path, copy, or rename must fail even when the total stays flat, use `per-key-value-strict` instead. Strict mode treats paths as identities and does not ask Git to detect renames, so it works the same when rename detection is unavailable.
 
 If this scan must cover real source files, add `min_files` to both paired dimensions. It counts regular files after `include` and `exclude` apply, so a moved source root or an over-broad exclude fails measurement instead of recording zero.
 
@@ -61,7 +62,7 @@ If this scan must cover real source files, add `min_files` to both paired dimens
 - id: "file-length-growth"
   title: "Already-long files must not grow"
   direction: "lower-is-better"
-  gate: "per-key-value"
+  gate: "per-key-value-strict"
   builtin: "file-length"
   options:
     threshold: 500

@@ -189,6 +189,24 @@ func TestGuardRemovedMetricWarnsNotFails(t *testing.T) {
 	}
 }
 
+func TestGuardFailsWhenConfiguredMetricIsMissingFromSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	config := guardConfig + `  - id: "b"
+    title: "B"
+    direction: "lower-is-better"
+    command: "echo '{\"value\": 1}'"
+`
+	writeFile(t, dir, "pawl.yaml", config)
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null},"b":{"direction":"lower-is-better","value":1,"unit":"count","breakdown":null}}}`+"\n")
+	base := gitCommitAll(t, dir, homeDir, "baseline")
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"b":{"direction":"lower-is-better","value":1,"unit":"count","breakdown":null}}}`+"\n")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 || !strings.Contains(res.stdout, "configured metric(s) missing") || !strings.Contains(res.stdout, "a") {
+		t.Fatalf("exit=%d, want missing configured metric failure\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
 // The recorded tolerance from the COMMITTED baseline is honored, since
 // guard has no config dimensions to fall back on.
 func TestGuardHonorsRecordedTolerance(t *testing.T) {
@@ -230,6 +248,19 @@ func TestGuardMissingWorkingTreeSnapshotExitsTwo(t *testing.T) {
 	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
 	if res.exit != 2 {
 		t.Fatalf("exit = %d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+func TestGuardRejectsInvalidTypedSnapshotFields(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", guardConfig)
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null}}}`+"\n")
+	base := gitCommitAll(t, dir, homeDir, "valid baseline")
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"a":{"direction":"lower-is-better","value":5,"unit":"count","breakdown":null,"tolerance":"bad"}}}`+"\n")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 2 || !strings.Contains(res.stderr, "tolerance") {
+		t.Fatalf("guard exit=%d, want 2 with a tolerance diagnostic\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 }
 

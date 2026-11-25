@@ -10,8 +10,12 @@ until you know *why*.
    `next_action`, and `watch`.
 2. `watch` entries are `near` / `over` files this invocation touched, with
    remaining `headroom`. Do not grow them. Watch does not change the exit code.
-3. `"status": "better"` → run that metric's `next_action`
-   (`pawl record --only <id>`). Never a full `pawl record` to lock one win.
+3. `"status": "better"` → run that metric's `next_action` only when the field
+   is present. If absent, inspect `regressions` and the comparison mode first;
+   scalar improvement can coexist with a gate regression or a `--since`-suppressed
+   regression. `--base` compares a Git ref's snapshot, while `record` writes the
+   workspace snapshot, so that mode also has no `next_action`. Never run a full
+   `pawl record` to lock one win.
 4. `failure_class: "regression"` / exit 1 → fix source.
    `failure_class: "could-not-measure"` / exit 2 → fix the environment
    (`error`, `failed_metrics`). Do not invent snapshot numbers.
@@ -27,7 +31,8 @@ until you know *why*.
 ## This repository
 
 This repo dogfoods pawl (`pawl.yaml`). After changing Go that moves a dimension,
-run `pawl check --format json` and, on a genuine improvement, `pawl record --only <id>`.
+run `pawl check --format json` and, when a clean improvement includes
+`next_action`, run `pawl record --only <id>`.
 
 The behavioral law is [`spec/`](spec/README.md) (start at `spec/README.md`). Do
 not read all of it — pick the file for the change. Root `SPEC.md` is only the

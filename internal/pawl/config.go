@@ -191,9 +191,9 @@ func validateDimension(index int, d dimensionConfig, analyzers map[string]Analyz
 	}
 	gate := GateMode(d.Gate)
 	switch gate {
-	case "", GateTotal, GatePerFileCount, GatePerKeyValue:
+	case "", GateTotal, GatePerFileCount, GatePerKeyValue, GatePerKeyValueStrict:
 	default:
-		return fail("gate must be %q, %q or %q, got %q", GateTotal, GatePerFileCount, GatePerKeyValue, d.Gate)
+		return fail("gate must be %q, %q, %q or %q, got %q", GateTotal, GatePerFileCount, GatePerKeyValue, GatePerKeyValueStrict, d.Gate)
 	}
 	timeout := defaultTimeout
 	if d.Timeout != "" {

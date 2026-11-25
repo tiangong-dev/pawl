@@ -9,6 +9,7 @@ import (
 // fileGrowthShown caps how many files one violation line names: a regression
 // touching dozens of files must stay a single readable line.
 const fileGrowthShown = 10
+const keyGrowthShown = 10
 
 // FileGrowth is one file whose recorded offender count rose between two
 // snapshots — the per-file half of a GuardViolation on a per-file-count
@@ -23,6 +24,14 @@ type FileGrowth struct {
 	RenamedFrom string
 }
 
+// KeyGrowth is a shared breakdown key that worsened under a per-key gate or a
+// new key under the strict per-key gate.
+type KeyGrowth struct {
+	Key           string
+	Base, Current float64
+	NewKey        bool
+}
+
 // GuardViolation is one metric that worsened between two recorded snapshots,
 // as compared directly (not via a fresh measurement) — the shape
 // `pawl guard` needs to decide whether a Pawl-Accept trailer covers it.
@@ -32,18 +41,37 @@ type GuardViolation struct {
 	Base      float64
 	Current   float64
 	Tolerance float64
-	// Files lists the per-file rises behind the violation of a
-	// per-file-count metric; empty for every other gate mode and for a
-	// purely scalar regression.
+	// Files lists per-file rises behind a per-file-count metric.
 	Files []FileGrowth
+	// Keys lists keyed rises behind per-key-value gate modes.
+	Keys []KeyGrowth
 }
 
 func (v GuardViolation) String() string {
 	line := fmt.Sprintf("%s: %s → %s", v.ID, FormatNumber(v.Base), FormatNumber(v.Current))
-	if len(v.Files) == 0 {
+	if len(v.Files) == 0 && len(v.Keys) == 0 {
 		return line
 	}
-	return fmt.Sprintf("%s (%s)", line, formatFileGrowth(v.Files))
+	if len(v.Files) > 0 {
+		return fmt.Sprintf("%s (%s)", line, formatFileGrowth(v.Files))
+	}
+	return fmt.Sprintf("%s (%s)", line, formatKeyGrowth(v.Keys))
+}
+
+func formatKeyGrowth(keys []KeyGrowth) string {
+	parts := make([]string, 0, len(keys)+1)
+	for _, k := range keys {
+		if len(parts) == keyGrowthShown {
+			parts = append(parts, fmt.Sprintf("and %d more", len(keys)-keyGrowthShown))
+			break
+		}
+		prefix := ""
+		if k.NewKey {
+			prefix = "new key: "
+		}
+		parts = append(parts, fmt.Sprintf("%s%s %s → %s", prefix, k.Key, FormatNumber(k.Base), FormatNumber(k.Current)))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // formatFileGrowth renders the per-file detail of a violation as
@@ -143,6 +171,17 @@ func guardFileGrowth(gate GateMode, base, cur map[string]float64, renames map[st
 	return out
 }
 
+func guardKeyGrowth(gate GateMode, direction Direction, tolerance float64, base, cur map[string]float64) []KeyGrowth {
+	if gate != GatePerKeyValue && gate != GatePerKeyValueStrict {
+		return nil
+	}
+	var out []KeyGrowth
+	for _, r := range perKeyRegressions(gate, direction, tolerance, base, cur) {
+		out = append(out, KeyGrowth{Key: r.Key, Base: r.Base, Current: r.Current, NewKey: r.NewKey})
+	}
+	return out
+}
+
 // GuardViolations compares two recorded snapshots' metrics directly:
 // violations are metrics that worsened per their recorded direction (empty
 // direction reads as lower-is-better, the conservative default for
@@ -150,17 +189,17 @@ func guardFileGrowth(gate GateMode, base, cur map[string]float64, renames map[st
 // in base but missing from pr. A metric only in pr has no baseline to
 // violate and is ignored. Both lists are sorted by id.
 //
-// It is the scalar-only comparison; GuardViolationsWithGates adds the per-file
-// predicate of a configured gate on top.
+// It is the scalar-only comparison; GuardViolationsWithGates adds configured
+// per-file-count and per-key-value predicates on top.
 func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string) {
 	return GuardViolationsWithGates(base, pr, nil)
 }
 
-// GuardViolationsWithGates is GuardViolations plus the per-file predicate of
-// each metric's gate mode: under a per-file-count gate a metric whose scalar
-// total did not worsen is still a violation when an offender count rose in
-// some file. gates comes from the working tree's config because a snapshot
-// records direction and tolerance but no gate; a config that changes a gate
+// GuardViolationsWithGates is GuardViolations plus configured gate predicates:
+// per-file-count checks file totals, and per-key-value modes check shared
+// breakdown keys (strict mode also checks current-only keys). gates comes from
+// the working tree's config because a snapshot records direction and tolerance
+// but no gate; a config that changes a gate
 // changes the metric's definition fingerprint, so the metric is redefined for
 // guard rather than silently reinterpreted. A nil gates map (or an id absent
 // from it) compares the scalar alone, exactly like GuardViolations.
@@ -173,8 +212,8 @@ func GuardViolationsWithGates(base, pr map[string]Metric, gates map[string]GateM
 // the path git says the same file has in pr, both relative to the config dir
 // (the form breakdown keys use). Applying it stops a purely renamed file from
 // reading as a brand-new offender while still catching a rename that also added
-// one. It changes nothing for a total or per-key-value gate, and a nil map is
-// the plain comparison.
+// one. It changes nothing for a total or per-key-value gate, including the
+// strict variant which compares literal keys; a nil map is the plain comparison.
 func GuardViolationsWithGatesAndRenames(base, pr map[string]Metric, gates map[string]GateMode, renames map[string]string) (violations []GuardViolation, removed []string) {
 	for _, id := range sortedMetricKeys(base) {
 		b := base[id]
@@ -183,7 +222,7 @@ func GuardViolationsWithGatesAndRenames(base, pr map[string]Metric, gates map[st
 			removed = append(removed, id)
 			continue
 		}
-		if !definitionsCompatible(b.Definition, p.Definition) {
+		if !guardDefinitionsCompatible(b.Definition, p.Definition) {
 			continue
 		}
 		direction := b.Direction
@@ -195,9 +234,10 @@ func GuardViolationsWithGatesAndRenames(base, pr map[string]Metric, gates map[st
 			tolerance = *b.Tolerance
 		}
 		files := guardFileGrowth(gates[id], b.Breakdown, p.Breakdown, renames)
-		if Worse(direction, b.Value, p.Value, tolerance) || len(files) > 0 {
+		keys := guardKeyGrowth(gates[id], direction, tolerance, b.Breakdown, p.Breakdown)
+		if Worse(direction, b.Value, p.Value, tolerance) || len(files) > 0 || len(keys) > 0 {
 			violations = append(violations, GuardViolation{
-				ID: id, Direction: direction, Base: b.Value, Current: p.Value, Tolerance: tolerance, Files: files,
+				ID: id, Direction: direction, Base: b.Value, Current: p.Value, Tolerance: tolerance, Files: files, Keys: keys,
 			})
 		}
 	}

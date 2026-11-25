@@ -24,7 +24,7 @@ dimensions:
   - id: "nolint-count"          # required, unique across dimensions
     title: "nolint suppressions" # required, human-readable
     direction: "lower-is-better" # required: lower-is-better | higher-is-better
-    gate: "per-file-count"       # optional: total (default) | per-file-count | per-key-value
+    gate: "per-file-count"       # optional: total (default) | per-file-count | per-key-value | per-key-value-strict
     tolerance: 0.0               # optional, absolute slack in the worse direction, default 0
     timeout: "10m"               # optional Go duration, default "10m"
     artifact_max_age: "24h"      # optional freshness bound for file-backed reports
@@ -35,6 +35,7 @@ dimensions:
     title: "Files over 500 lines"
     direction: "lower-is-better"
     builtin: "file-length"
+    gate: "per-key-value-strict" # also rejects new paths, even when total stays flat
     options:                     # builtin-specific options
       threshold: 500
       include: ["**/*.go"]

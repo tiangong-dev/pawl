@@ -169,6 +169,7 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 | `total` | coverage, bundle size, total findings | compares the single value |
 | `per-file-count` | lint findings, suppressions, TODOs | findings in one file cannot be offset by fixes in another |
 | `per-key-value` | per-package coverage, size by bundle | each key already present in the baseline is protected |
+| `per-key-value-strict` | path-keyed values where renames/copies must fail | every new key fails, independent of total and tolerance |
 
 `lower-is-better` is for debt counts and size. `higher-is-better` is for coverage, passing tests, and similar floors. `tolerance` adds absolute slack in the worse direction for noisy measurements.
 
@@ -176,7 +177,7 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 
 | builtin | reads or runs | typical gate |
 |---|---|---|
-| `file-length`, `file-bytes` | repository files | `total` + `per-key-value` |
+| `file-length`, `file-bytes` | repository files | `total` + `per-key-value` (or strict mode when new paths must fail) |
 | `pattern-count` | regular-expression matches | `per-file-count` |
 | `eslint`, `oxlint` | native linter output | `per-file-count` |
 | `jscpd`, `swift-complexity` | tool-specific JSON | `total` / `per-file-count` |
@@ -274,7 +275,7 @@ construction. Without that option pawl reports age as provenance only.
 | `pawl init` | write a starter `pawl.yaml` without overwriting an existing one; detects the project type from marker files and prefills `include` and a shared `exclude` |
 | `pawl validate` | check that `pawl.yaml` loads, without measuring anything |
 | `pawl record` | measure and write the snapshot |
-| `pawl check` | compare current measurements with the snapshot; the default command |
+| `pawl check` | compare current measurements with the snapshot; `--base <ref>` uses a committed snapshot instead |
 | `pawl measure` | print current measurements without reading a baseline or giving a verdict |
 | `pawl guard <ref>` | compare the snapshot with the version at `<ref>`, mapping git-detected renames in a per-file-count comparison |
 | `pawl trend [<id>]` | show committed snapshot history |
@@ -313,6 +314,18 @@ pawl check --since origin/main
 ```
 
 Line-addressable `per-file-count` findings are scoped to changed lines. Metrics that cannot be attributed to a line, such as total coverage, remain fully enforced and are labelled as such. Uncommitted and untracked changes are included.
+
+### Compare with a trusted base snapshot
+
+In a pull request, compare fresh measurements with the snapshot from the target branch:
+
+```bash
+pawl check --base origin/main
+```
+
+This reads the snapshot from Git and ignores the working tree snapshot, so changing or deleting that file cannot lower the comparison baseline. Invalid refs, missing or malformed base snapshots, and incompatible measurement definitions exit 2. `--base` cannot be combined with `--since`. `Pawl-Accept` and `Pawl-Redefine` trailers do not waive this check; accepted debt or a changed definition must first be recorded on a trusted base branch through review.
+
+This trusts the selected Git ref, Pawl binary, current config and measurement commands, CI workflow, and any supplied `--current` document. It does not protect against an arbitrary change to those inputs.
 
 ### Accept debt explicitly
 

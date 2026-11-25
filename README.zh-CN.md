@@ -175,6 +175,7 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 | `total`（默认） | 覆盖率、打包体积、问题总数 | 仅比对整体单一数值 |
 | `per-file-count` | lint 问题、类型抑制、TODO 标记 | 精确到单文件计数：修好文件 A 绝不能抵消文件 B 新增的问题 |
 | `per-key-value` | 分包/模块覆盖率、各 chunk 体积 | 分别保护基线中已存在的每一个 key，防止局部恶化 |
+| `per-key-value-strict` | 路径作为身份，重命名或复制也会失败 | 每个新 key 都会失败，不受总数和容差影响 |
 
 **指标好坏方向：**
 - `lower-is-better`：用于技术债计数、缺陷标记与产物体积（越小越好）；
@@ -186,7 +187,7 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 
 | 内置适配器 | 数据来源 | 常用 Gate |
 |---|---|---|
-| `file-length`、`file-bytes` | 仓库源码文件 | `total` + `per-key-value` |
+| `file-length`、`file-bytes` | 仓库源码文件 | `total` + `per-key-value`（新路径也必须失败时用 strict） |
 | `pattern-count` | 正则文本匹配 | `per-file-count` |
 | `eslint`、`oxlint` | linter 原生 JSON 输出 | `per-file-count` |
 | `jscpd`、`swift-complexity` | 专用工具导出的 JSON | `total` / `per-file-count` |
@@ -270,7 +271,7 @@ dimensions:
 | `pawl init` | 初始化起步配置文件 `pawl.yaml`（不会覆盖已有文件）；根据标记文件识别项目类型，预填 `include` 与顶层共享 `exclude` |
 | `pawl validate` | 只校验 `pawl.yaml` 能否加载，不执行任何测量、不读写快照 |
 | `pawl record` | 重新测量各项指标并固化写入快照基线 |
-| `pawl check` | 对比当前测量值与基线快照；CLI 默认执行该命令 |
+| `pawl check` | 对比当前测量值与基线快照；可用 `--base <ref>` 指定 Git 中的快照 |
 | `pawl measure` | 仅输出当前测量结果，不读取基线、不进行裁决 |
 | `pawl guard <ref>` | 比对当前快照与 `<ref>` 处的历史快照，防止基线被意外或恶意降低 |
 | `pawl trend [<id>]` | 遍历 Git 历史中的快照提交，查看指标演进趋势 |
@@ -309,6 +310,18 @@ pawl check --since origin/main
 ```
 
 对于支持行级定位的 `per-file-count` 维度，门禁仅比对改动行引入的问题；而覆盖率总数等无法可靠归属到具体某行的全局指标，依然会执行全量比对并在输出中明确注明。工作区内未暂存和未跟踪的改动也会一并纳入检查。
+
+### 使用可信分支的快照比较
+
+在 PR 中，可以把当前测量值与目标分支上的快照比较：
+
+```bash
+pawl check --base origin/main
+```
+
+该命令从 Git 读取基线快照，不读取工作区快照，因此修改或删除工作区快照不会降低比较基线。Git ref 无效、目标提交没有快照、快照损坏或测量定义不兼容时，命令以退出码 2 结束。`--base` 不能与 `--since` 同时使用。`Pawl-Accept` 和 `Pawl-Redefine` trailer 都不会豁免这次比较；接受退化或更改测量定义后，需要先经评审并记录到可信基线分支。
+
+此模式仍依赖所选 Git ref、Pawl 程序、当前配置和测量命令、CI 流程，以及调用方提供的 `--current` 文件。它不能防护对这些输入的任意恶意修改。
 
 ### 显式接受技术债（特批劣化）
 

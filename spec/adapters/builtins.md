@@ -8,13 +8,13 @@ Counts files whose line count exceeds `threshold` (default 500). Options: `thres
 - `min_files` requires at least that many included regular files to be opened after excludes apply. A short scan is a measurement failure, never a recorded zero; successful non-quiet runs print the scanned count and config root to stderr, but neither is stored in a measurement document or snapshot.
 - Line count: empty file = 0 lines; a trailing newline does not add a line (`"a\nb\n"` = 2 lines, `"a\nb"` = 2 lines).
 - Result: `value` = number of files over the threshold, `unit` = `"files > <threshold> lines"`, `breakdown` = `{ "<relative path>": <line count> }` for each offending file.
-- Intended gate: `total` — growing an already-long file must not fail CI; only a new file crossing the limit (which moves the total) should. Pair a second dimension on the same builtin with `gate: per-key-value` to also refuse growth of files already in the breakdown. See RECIPES.md.
+- Intended gate: `total` — growing an already-long file must not fail CI; only a new file crossing the limit (which moves the total) should. Add `per-key-value` to reject growth of existing paths, or `per-key-value-strict` when a renamed/copied path must count as new even if the total stays flat. See RECIPES.md.
 
 ### `file-bytes`
 
 Counts files whose byte size exceeds `threshold` (default 32768). Same options and traversal semantics as `file-length`. A closer proxy for token cost than line count, still a language-agnostic filesystem scan — not a tokenizer.
 - Result: `value` = number of files over the threshold, `unit` = `"files > <threshold> bytes"`, `breakdown` = `{ "<relative path>": <byte count> }` for each offending file.
-- Intended gate: same pairing as `file-length` (`total` plus optional `per-key-value`).
+- Intended gate: same pairing as `file-length` (`total` plus optional `per-key-value` or `per-key-value-strict`).
 
 ### `pattern-count`
 

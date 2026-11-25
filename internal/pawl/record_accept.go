@@ -130,7 +130,7 @@ func printAcceptedWorseTrailers(w io.Writer, worse []WorseDimension) {
 // regression, followed by RegressionsOf's own detail lines — the same
 // rendering check's "❌ regressions:" block uses. A scalar-only "base →
 // current" line would be misleading (or silently "same value") for a
-// per-file-count/per-key-value dimension whose scalar total didn't move but
+// per-file-count/per-key-value dimension (including strict per-key) whose scalar did not move but
 // still gate-regressed; this reuses the gate-aware detail so the refusal
 // explains itself the same way `check` would have.
 func printWorseDetail(w io.Writer, dims []Dimension, baseline, current map[string]Metric) {

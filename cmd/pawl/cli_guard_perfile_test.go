@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,49 @@ const guardPerFileConfig = `dimensions:
       pattern: "MARKER"
       include: ["**/*.go"]
 `
+
+const guardPerKeyConfig = `dimensions:
+  - id: "markers"
+    title: "MARKER comments"
+    direction: "lower-is-better"
+    gate: "per-key-value"
+    builtin: "pattern-count"
+    options:
+      pattern: "MARKER"
+      include: ["**/*.go"]
+`
+
+func TestGuardPerKeyValueCatchesSharedKeyAndAcceptsTrailer(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", guardPerKeyConfig)
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"markers":{"direction":"lower-is-better","value":2,"unit":"count","tolerance":1,"breakdown":{"a.go:1":4,"b.go:1":2}}}}`+"\n")
+	base := gitCommitAll(t, dir, homeDir, "per-key baseline")
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"markers":{"direction":"lower-is-better","value":2,"unit":"count","tolerance":1,"breakdown":{"a.go:1":6,"new.go:1":100}}}}`+"\n")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 || !strings.Contains(res.stdout, "a.go:1 4 → 6") {
+		t.Fatalf("exit=%d, want worsened shared key\n%s", res.exit, res.stdout)
+	}
+	gitCommitAll(t, dir, homeDir, "accept keyed regression\n\nPawl-Accept: markers 2\n")
+	res = runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 0 || !strings.Contains(res.stdout, "accepted regression") || !strings.Contains(res.stdout, "a.go:1 4 → 6") {
+		t.Fatalf("accepted keyed regression: exit=%d\n%s", res.exit, res.stdout)
+	}
+}
+
+func TestGuardLegacyPerKeyUsesBaselineDirectionAndTolerance(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	config := strings.Replace(guardPerKeyConfig, `direction: "lower-is-better"`, "direction: \"higher-is-better\"\n    tolerance: 100", 1)
+	writeFile(t, dir, "pawl.yaml", config)
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"markers":{"direction":"lower-is-better","value":2,"unit":"count","tolerance":1,"breakdown":{"a.go:1":4}}}}`+"\n")
+	base := gitCommitAll(t, dir, homeDir, "legacy baseline with recorded gate parameters")
+	writeFile(t, dir, "pawl.snapshot.json", `{"metrics":{"markers":{"direction":"higher-is-better","value":2,"unit":"count","tolerance":100,"breakdown":{"a.go:1":6}}}}`+"\n")
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 || !strings.Contains(res.stdout, "a.go:1 4 → 6") {
+		t.Fatalf("guard must use baseline lower-is-better direction and tolerance despite legacy definition: exit=%d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
 
 // 3 offenders in a.go, none in b.go.
 const guardFlatTotalBaseSnapshot = `{"metrics":{"markers":{"direction":"lower-is-better","value":3,"unit":"offenders","breakdown":{"a.go:1":1,"a.go:2":1,"a.go:3":1}}}}` + "\n"
@@ -256,5 +300,48 @@ func TestGuardGateChangeLandsInRedefinition(t *testing.T) {
 	gitCommitAll(t, dir, homeDir, "the gate change is deliberate\n\nPawl-Redefine: markers\n")
 	if res2 := runPawl(t, dir, gitEnv(homeDir), "guard", base); res2.exit != 0 {
 		t.Fatalf("exit = %d, want 0 with the trailer\nstdout=%s\nstderr=%s", res2.exit, res2.stdout, res2.stderr)
+	}
+}
+
+func TestGuardRejectsRemovedDefinitionFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", guardPerFileConfig)
+	writeFile(t, dir, "a.go", "package a\n// MARKER one\n// MARKER two\n")
+	writeFile(t, dir, "b.go", "package b\n")
+	gitCommitAll(t, dir, homeDir, "two offenders in a.go")
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record exit = %d, want 0\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	base := gitCommitAll(t, dir, homeDir, "record the per-file-count baseline")
+
+	writeFile(t, dir, "pawl.yaml", strings.Replace(guardPerFileConfig, `gate: "per-file-count"`, `gate: "total"`, 1))
+	writeFile(t, dir, "a.go", "package a\n// MARKER one\n")
+	writeFile(t, dir, "b.go", "package b\n// MARKER two\n")
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record after the gate change exit = %d, want 0\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	current, err := os.ReadFile(dirJoin(dir, "pawl.snapshot.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json")).Metrics["markers"].Definition
+	withDefinition := `"definition": "` + definition + `",` + "\n"
+	if !strings.Contains(string(current), withDefinition) {
+		t.Fatalf("snapshot does not contain expected definition field %q:\n%s", definition, current)
+	}
+	writeFile(t, dir, "pawl.snapshot.json", strings.Replace(string(current), withDefinition, "", 1))
+
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 {
+		t.Fatalf("exit = %d, want 1 after deleting a present baseline fingerprint\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "Pawl-Redefine: markers") {
+		t.Fatalf("stdout does not require confirmation for the removed fingerprint:\n%s", res.stdout)
+	}
+	gitCommitAll(t, dir, homeDir, "confirm the missing definition as a redefinition\n\nPawl-Redefine: markers\n")
+	res = runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 0 || !strings.Contains(res.stdout, "measurement definition changed") {
+		t.Fatalf("explicit redefinition should permit the legacy-shaped current snapshot: exit=%d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 }

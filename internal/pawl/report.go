@@ -16,6 +16,7 @@ type Report struct {
 	Command       string   `json:"command"`
 	Mode          string   `json:"mode"`
 	Since         *string  `json:"since"`
+	BaseRef       *string  `json:"base_ref,omitempty"`
 	Only          []string `json:"only,omitempty"`
 	// Excluded lists configured dimension ids `--only` left unmeasured this
 	// run — present whenever Only is, even on the exit-2 could-not-measure
@@ -230,8 +231,11 @@ func annotateReport(rep *Report) {
 	if rep.Command != "check" {
 		return
 	}
+	if rep.BaseRef != nil {
+		return
+	}
 	for i := range rep.Metrics {
-		if rep.Metrics[i].Improved {
+		if rep.Metrics[i].Improved && len(rep.Metrics[i].Regressions) == 0 {
 			rep.Metrics[i].NextAction = "pawl record --only " + rep.Metrics[i].ID
 		}
 	}
@@ -250,14 +254,13 @@ func renderReportJSON(w io.Writer, rep *Report) error {
 	return err
 }
 
-// reportScope is what an invocation knows about its own coverage before it has
-// a verdict: which command, whether --since narrowed it to changed lines, and
-// which dimensions --only limited it to. Both the verdict and the exit-2 abort
-// carry it, so a consumer never has to infer coverage from which metrics happen
-// to be present — an exit-0 subset must not read as a green full gate.
+// reportScope carries the invocation's refs and selected dimensions into both
+// the verdict and exit-2 object, so consumers can identify the comparison even
+// when measurement failed before any metric was reported.
 type reportScope struct {
 	command  string
 	since    string
+	baseRef  string
 	only     []string
 	excluded []string
 }
@@ -270,6 +273,9 @@ func (s reportScope) apply(rep *Report) {
 		ref := s.since
 		rep.Mode = "since"
 		rep.Since = &ref
+	}
+	if s.baseRef != "" {
+		rep.BaseRef = &s.baseRef
 	}
 }
 
