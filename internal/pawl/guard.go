@@ -356,9 +356,16 @@ func gitOutputRaw(dir string, args ...string) (string, int, string) {
 	err := cmd.Run()
 	code := 0
 	if err != nil {
-		code = cmd.ProcessState.ExitCode()
-		if code <= 0 {
+		if cmd.ProcessState == nil {
 			code = 1
+			if stderr.Len() == 0 {
+				fmt.Fprint(&stderr, err)
+			}
+		} else {
+			code = cmd.ProcessState.ExitCode()
+			if code <= 0 {
+				code = 1
+			}
 		}
 	}
 	return stdout.String(), code, strings.TrimSpace(stderr.String())
