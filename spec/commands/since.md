@@ -70,10 +70,11 @@ keeps `--since` **exactly the full-mode verdict, narrowed to added lines** —
 never inventing a regression full mode wouldn't raise, never dropping one it
 would.
 
-- **`total` and `per-key-value` dimensions** — enforced **at full strength** (the
+- **`total`, `per-key-value`, and `per-key-value-strict` dimensions** — enforced **at full strength** (the
   normal verdict, unscoped). A scalar total has no line to attribute; a
-  `per-key-value` scalar is not a sum of its breakdown and its gate ignores new
-  keys, so scoping it would diverge from full mode. Both are *not* silently
+  `per-key-value` scalar is not a sum of its breakdown and ignores new keys;
+  `per-key-value-strict` also treats new keys as regressions but path identity is
+  not safely line-scopable. Scoping either would diverge from full mode. These are *not* silently
   exempted — the output lists them as "enforced in full". A `per-file-count`
   dimension with **no breakdown** is treated the same way.
 - **`per-file-count` dimension (with a breakdown)** — its scalar is the count /

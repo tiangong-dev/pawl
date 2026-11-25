@@ -12,13 +12,14 @@ const (
 )
 
 // GateMode is how check compares a re-measured value against the snapshot.
-// The zero value means "total".
+// The zero value means "total"; strict per-key mode rejects current-only keys.
 type GateMode string
 
 const (
-	GateTotal        GateMode = "total"
-	GatePerFileCount GateMode = "per-file-count"
-	GatePerKeyValue  GateMode = "per-key-value"
+	GateTotal             GateMode = "total"
+	GatePerFileCount      GateMode = "per-file-count"
+	GatePerKeyValue       GateMode = "per-key-value"
+	GatePerKeyValueStrict GateMode = "per-key-value-strict"
 )
 
 // Metric is one dimension's measurement as stored in the snapshot. Definition

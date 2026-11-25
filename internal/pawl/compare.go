@@ -58,15 +58,18 @@ type perKeyRegression struct {
 	Base, Current float64
 }
 
-// perKeyRegressions is the shared per-key predicate for check and guard. Only
-// keys present in both snapshots are comparable; output follows sorted baseline
-// keys.
-func perKeyRegressions(direction Direction, tolerance float64, base, cur map[string]float64) []perKeyRegression {
+// perKeyRegressions is the shared predicate for check, annotations and guard.
+// The strict mode additionally treats each current-only key as a regression,
+// independent of direction and tolerance.
+func perKeyRegressions(gate GateMode, direction Direction, tolerance float64, base, cur map[string]float64) []perKeyRegression {
 	var out []perKeyRegression
-	for _, key := range sortedKeys(base) {
-		value, ok := cur[key]
-		if ok && Worse(direction, base[key], value, tolerance) {
-			out = append(out, perKeyRegression{Key: key, Base: base[key], Current: value})
+	for _, key := range sortedKeyUnion(base, cur) {
+		baseValue, exists := base[key]
+		currentValue, present := cur[key]
+		if exists && present && Worse(direction, baseValue, currentValue, tolerance) {
+			out = append(out, perKeyRegression{Key: key, Base: baseValue, Current: currentValue})
+		} else if !exists && present && gate == GatePerKeyValueStrict {
+			out = append(out, perKeyRegression{Key: key, Current: currentValue})
 		}
 	}
 	return out
@@ -115,8 +118,8 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 		for _, r := range perFileRegressions(base.Breakdown, cur.Breakdown) {
 			out = append(out, fmt.Sprintf("%s  %s → %s", r.File, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
-	case GatePerKeyValue:
-		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+	case GatePerKeyValue, GatePerKeyValueStrict:
+		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
 			out = append(out, fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
 	}
@@ -126,7 +129,7 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 // Regression is one machine-readable regression detail — the structured form
 // behind a `--format json` verdict and the unit `--since` scopes to changed
 // lines. For a `total` regression Key/Path/Line are nil; for per-file-count /
-// per-key-value they are parsed from the breakdown key. Base/Current are the two
+// per-key-value modes they are parsed from the breakdown key. Base/Current are the two
 // compared numbers (scalar values for total, offender counts for per-file-count,
 // the key's values for per-key-value). Message is the exact text-mode detail
 // line. Suppressed is set only by `--since` scoping.
@@ -143,7 +146,7 @@ type Regression struct {
 
 // StructuredRegressions is the machine-readable twin of RegressionsOf. It emits
 // one entry per new or increased offender key that contributes to a regressed
-// file (per-file-count), or worsened baseline key (per-key-value) — the
+// file (per-file-count), or worsened/shared or new key (per-key-value modes) — the
 // granularity `--since` needs to test each against changed lines — plus a
 // `total` entry when the scalar regressed. The scalar and per-key predicates
 // match RegressionsOf exactly, so the two views never disagree on whether a
@@ -170,9 +173,9 @@ func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 						FormatNumber(r.Base), FormatNumber(r.Current))))
 			}
 		}
-	case GatePerKeyValue:
-		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
-			out = append(out, keyRegression("per-key-value", r.Key, r.Base, r.Current,
+	case GatePerKeyValue, GatePerKeyValueStrict:
+		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+			out = append(out, keyRegression(string(spec.Gate), r.Key, r.Base, r.Current,
 				fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current))))
 		}
 	}
@@ -351,7 +354,8 @@ func recordOnlyCommand(ids []string) string {
 // regressed dimension so violations surface inline on the PR diff, reusing the
 // `path:line` breakdown key shape. Per-file-count emits one line-anchored
 // annotation per new or increased offender key in a file whose count rose;
-// per-key-value emits one per key that worsened; a total-gate (or detail-less)
+// per-key-value emits one per worsened shared key, and strict mode also emits
+// one per new key; a total-gate (or detail-less)
 // regression emits a single file-less annotation. Empty when nothing regressed.
 func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) []string {
 	var out []string
@@ -366,8 +370,8 @@ func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) 
 				out = append(out, annotationLine(id, title, key, detail))
 			}
 		}
-	case GatePerKeyValue:
-		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+	case GatePerKeyValue, GatePerKeyValueStrict:
+		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
 			out = append(out, annotationLine(id, title, r.Key, FormatNumber(r.Base)+" → "+FormatNumber(r.Current)))
 		}
 	}

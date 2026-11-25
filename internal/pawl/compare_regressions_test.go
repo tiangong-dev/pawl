@@ -185,6 +185,26 @@ func TestRegressionsOfPerKeyValue(t *testing.T) {
 	})
 }
 
+func TestRegressionsOfStrictPerKeyValueRejectsNewKeys(t *testing.T) {
+	spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GateMode("per-key-value-strict"), Tolerance: 100}
+	base := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"old.txt": 11, "same.txt:2": 3}}
+	cur := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"new.txt": 11, "same.txt:2": 104}}
+	want := []string{"new.txt  0 → 11", "same.txt:2  3 → 104"}
+	if got := pawl.RegressionsOf(spec, base, cur); !reflect.DeepEqual(got, want) {
+		t.Fatalf("RegressionsOf = %#v, want %#v", got, want)
+	}
+	structured := pawl.StructuredRegressions(spec, base, cur)
+	if len(structured) != 2 || structured[0].Kind != "per-key-value-strict" || structured[0].Key == nil || *structured[0].Key != "new.txt" || structured[1].Key == nil || *structured[1].Key != "same.txt:2" {
+		t.Fatalf("StructuredRegressions = %#v, want new-key regression", structured)
+	}
+	higher := pawl.GateSpec{Direction: pawl.HigherIsBetter, Gate: pawl.GateMode("per-key-value-strict"), Tolerance: 100}
+	higherBase := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"old.txt": 11}}
+	higherCurrent := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"new.txt": 0}}
+	if got := pawl.RegressionsOf(higher, higherBase, higherCurrent); !reflect.DeepEqual(got, []string{"new.txt  0 → 0"}) {
+		t.Fatalf("new key under higher-is-better = %#v, want unconditional regression", got)
+	}
+}
+
 func assertLines(t *testing.T, got, want []string) {
 	t.Helper()
 	sort.Strings(got)

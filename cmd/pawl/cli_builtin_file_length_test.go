@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -149,5 +152,79 @@ func TestFileLengthTotalPlusPerKeyValuePair(t *testing.T) {
 	total, _ = metricByID(r, "file-length")
 	if total.Status != "worse" {
 		t.Errorf("total gate status = %q, want worse (new over-limit file)", total.Status)
+	}
+}
+
+func TestFileLengthStrictPerKeyRejectsNewPathDespiteToleranceAndSince(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "old.txt", nLines(11))
+	tolerance := 100.0
+	config := buildConfig("", dimDef{
+		id: "length", direction: "lower-is-better", gate: "per-key-value-strict", tolerance: &tolerance,
+		builtin: "file-length", optionLines: []string{"threshold = 10", `include = ["*.txt"]`},
+	})
+	writeFile(t, dir, "pawl.yaml", config)
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record exit=%d\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	base := gitCommitAll(t, dir, homeDir, "strict per-key baseline")
+	if err := os.Remove(filepath.Join(dir, "old.txt")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "new.txt", nLines(11))
+	for _, args := range [][]string{{"check"}, {"check", "--since", base}} {
+		res := runPawl(t, dir, gitEnv(homeDir), args...)
+		if res.exit != 1 || !strings.Contains(res.stdout, "new.txt") {
+			t.Fatalf("%v exit=%d, want strict new-key regression despite tolerance\nstdout=%s\nstderr=%s", args, res.exit, res.stdout, res.stderr)
+		}
+	}
+}
+
+func TestFileLengthStrictPerKeyRejectsCopiedPath(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "old.txt", nLines(11))
+	tolerance := 100.0
+	config := buildConfig("", dimDef{
+		id: "length", direction: "lower-is-better", gate: "per-key-value-strict", tolerance: &tolerance,
+		builtin: "file-length", optionLines: []string{"threshold = 10", `include = ["*.txt"]`},
+	})
+	mustRecord(t, dir, config)
+	writeFile(t, dir, "copy.txt", nLines(11))
+	res := runPawl(t, dir, baseEnv(), "check")
+	if res.exit != 1 || !strings.Contains(res.stdout, "copy.txt") {
+		t.Fatalf("copy exit=%d, want strict new-key regression despite scalar tolerance\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+func TestGuardStrictPerKeyTreatsRenamedPathAsNew(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "old.txt", nLines(11))
+	config := buildConfig("", dimDef{
+		id: "length", direction: "lower-is-better", gate: "per-key-value-strict",
+		builtin: "file-length", optionLines: []string{"threshold = 10", `include = ["*.txt"]`},
+	})
+	writeFile(t, dir, "pawl.yaml", config)
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record exit=%d\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	base := gitCommitAll(t, dir, homeDir, "strict per-key baseline")
+	snapshotPath := filepath.Join(dir, "pawl.snapshot.json")
+	snapshot, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(snapshot), "old.txt", "new.txt", 1)
+	if updated == string(snapshot) {
+		t.Fatal("baseline snapshot had no old path key")
+	}
+	updated = strings.Replace(updated, `"new.txt": 11`, `"new.txt": 12`, 1)
+	if err := os.WriteFile(snapshotPath, []byte(updated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 || !strings.Contains(res.stdout, "new.txt 0 → 12") {
+		t.Fatalf("renamed key exit=%d, want strict new-key guard failure\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 }

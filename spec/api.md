@@ -7,7 +7,7 @@ judgment the CLI uses — one source of truth for "did this get worse":
 
 ```go
 type Direction string   // "lower-is-better" | "higher-is-better"
-type GateMode string    // "total" | "per-file-count" | "per-key-value"
+type GateMode string    // "total" | "per-file-count" | "per-key-value" | "per-key-value-strict"
 
 type Metric struct {
     Direction  Direction          `json:"direction"`
@@ -74,8 +74,10 @@ tree's config; a snapshot records no gate). On a `per-file-count` gate a metric
 whose scalar did not worsen is still a violation when any file's summed offender
 count rose — the same per-file predicate `check`, `record` and `--since` read,
 with no tolerance — and `Files` carries those rises, capped at 10 entries with
-the rest summarized as `and N more`. An absent id or any other gate mode
-compares the scalar alone. `GuardViolations` is `GuardViolationsWithGates` with
+the rest summarized as `and N more`. On a `per-key-value-strict` gate, shared
+keys use the recorded direction/tolerance and current-only keys fail from zero,
+regardless of tolerance. Other gates and absent ids compare the scalar alone.
+`GuardViolations` is `GuardViolationsWithGates` with
 no gate map: the same scalar-only comparison it has always been.
 
 `GuardViolationsWithGatesAndRenames` adds `renames`: git's detected renames for
@@ -85,5 +87,6 @@ count recorded against a rename source is compared as the count for its
 destination, and `Files` names the source in `RenamedFrom`. The mapping is
 conservative: a count is moved only when the pair is 1:1, the destination has no
 count of its own, and the source is present — any other pair is skipped and the
-paths are compared as they are. Total and per-key-value gates ignore `renames`
-entirely. `GuardViolationsWithGates` is this function with no rename map.
+paths are compared as they are. Total and both per-key-value gates ignore
+`renames` entirely; strict per-key compares literal keys and reports current-only
+keys from zero. `GuardViolationsWithGates` is this function with no rename map.

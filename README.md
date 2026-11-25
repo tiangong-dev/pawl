@@ -169,6 +169,7 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 | `total` | coverage, bundle size, total findings | compares the single value |
 | `per-file-count` | lint findings, suppressions, TODOs | findings in one file cannot be offset by fixes in another |
 | `per-key-value` | per-package coverage, size by bundle | each key already present in the baseline is protected |
+| `per-key-value-strict` | path-keyed values where renames/copies must fail | every new key fails, independent of total and tolerance |
 
 `lower-is-better` is for debt counts and size. `higher-is-better` is for coverage, passing tests, and similar floors. `tolerance` adds absolute slack in the worse direction for noisy measurements.
 
@@ -176,7 +177,7 @@ The scalar total is always compared. `gate` can add a more precise comparison:
 
 | builtin | reads or runs | typical gate |
 |---|---|---|
-| `file-length`, `file-bytes` | repository files | `total` + `per-key-value` |
+| `file-length`, `file-bytes` | repository files | `total` + `per-key-value` (or strict mode when new paths must fail) |
 | `pattern-count` | regular-expression matches | `per-file-count` |
 | `eslint`, `oxlint` | native linter output | `per-file-count` |
 | `jscpd`, `swift-complexity` | tool-specific JSON | `total` / `per-file-count` |

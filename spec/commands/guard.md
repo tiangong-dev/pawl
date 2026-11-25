@@ -58,6 +58,12 @@ Then:
   to 10 worsening keys, then `and N more`. `Pawl-Accept` remains metric-level:
   its declared value is checked against the scalar total, and a covering trailer
   accepts the metric's keyed regressions too.
+- A metric under `per-key-value-strict` applies the same direction and tolerance
+  predicate as `per-key-value` to shared keys, and also fails for each key
+  present only in the current snapshot, reported as `key 0 → current` regardless
+  of tolerance. The mode uses literal key identity and does not query Git for
+  rename mapping: a renamed or copied path is new, and a rename that grows is
+  also a failure.
 - Otherwise: consistency message, exit 0.
 
 A metric present only in the working tree (newly added dimension) is ignored.
@@ -98,7 +104,8 @@ base counts git attributes to the same file — it never widens what passes:
   That is the stricter reading: every file is compared under its own path.
 
 Renames reach only a `per-file-count` metric; `total` and `per-key-value`
-compare breakdown keys without rename remapping.
+compare breakdown keys without rename remapping. `per-key-value-strict` compares
+literal breakdown keys, so path changes appear as new keys without rename detection.
 
 Legacy snapshots without a definition fingerprint cannot prove which measurement
 semantics produced their values. Guard keeps them comparable for migration and
@@ -107,9 +114,10 @@ cannot retroactively identify or reinterpret those old values.
 
 ### Where guard gets a gate mode
 
-Guard's per-file comparison resolves each metric's gate mode from the working
+Guard resolves each metric's gate mode from the working
 tree's `pawl.yaml`: a snapshot records `direction` and `tolerance` but no gate.
-When both snapshots have definition fingerprints, `gate` is part of that fingerprint, so relaxing
+When both snapshots have definition fingerprints, `gate` is part of that
+fingerprint, so relaxing
 a dimension from `per-file-count` to `total` redefines it — guard then demands
 the `Pawl-Redefine` trailer instead of silently comparing under the weaker
 predicate — and a snapshot whose recorded definition no longer matches the

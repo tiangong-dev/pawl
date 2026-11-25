@@ -191,13 +191,13 @@ when nothing was accepted as worse.
   number moves.
   Text mode prints the same fact to **stderr**, next to the `measuring <id>…`
   progress lines and only when `generated` is false; stdout stays the table.
-- Each regression: `kind` (`total`/`per-file-count`/`per-key-value`), `key`
+- Each regression: `kind` (`total`/`per-file-count`/`per-key-value`/`per-key-value-strict`), `key`
   (the breakdown key, `null` for a `total` regression), `path` and `line`
   (parsed from `key`; both `null` for `total`, `line` `null` when the key has no
   numeric line), `base` and `current` (the two compared numbers — for `total`
   the scalar values, for `per-file-count` the contributing location key's
   finding counts (the message also carries the file totals), for
-  `per-key-value` the key's values), `message` (a human-readable detail line),
+  `per-key-value` the key's values; for a strict-mode new key, base is 0), `message` (a human-readable detail line),
   and `suppressed` (bool — `true` only in `--since` mode when this regression was
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are
