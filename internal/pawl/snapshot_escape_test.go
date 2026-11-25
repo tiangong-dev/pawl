@@ -137,3 +137,25 @@ func TestDefinitionFingerprintIgnoresSnapshotStringRendering(t *testing.T) {
 		})
 	}
 }
+
+func TestStrictPerKeyGateChangesDefinitionFingerprint(t *testing.T) {
+	cfg := &Config{}
+	standard := Dimension{ID: "length", Direction: LowerIsBetter, Gate: GatePerKeyValue, Command: "measure"}
+	strict := standard
+	strict.Gate = GatePerKeyValueStrict
+	standardFingerprint, err := definitionFingerprint(cfg, standard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const existingFingerprint = "v1:sha256:88d4c6a252901d9c6c0c30bb78a2908ea93aa793b22d70cc1f7de305acce4f69"
+	if standardFingerprint != existingFingerprint {
+		t.Fatalf("existing per-key-value fingerprint changed: got %q, want %q", standardFingerprint, existingFingerprint)
+	}
+	strictFingerprint, err := definitionFingerprint(cfg, strict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if standardFingerprint == strictFingerprint {
+		t.Fatalf("strict gate reused the per-key-value fingerprint %q", strictFingerprint)
+	}
+}

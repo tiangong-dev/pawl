@@ -70,6 +70,14 @@ func TestGitHubAnnotationsPerKeyValueToleranceBoundary(t *testing.T) {
 	assertAnnotationsExact(t, got, want)
 }
 
+func TestGitHubAnnotationsStrictPerKeyNewKey(t *testing.T) {
+	spec := pawl.GateSpec{Direction: pawl.LowerIsBetter, Gate: pawl.GatePerKeyValueStrict, Tolerance: 100}
+	base := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"old.txt": 11}}
+	cur := pawl.MetricSample{Value: 1, Breakdown: map[string]float64{"new.txt": 11}}
+	want := []string{"::error file=new.txt,title=pawl: pk::Per key: new key 0 → 11"}
+	assertAnnotationsExact(t, pawl.GitHubAnnotations("pk", "Per key", spec, base, cur), want)
+}
+
 // The total gate emits exactly one file-less annotation when the scalar
 // worsened beyond tolerance.
 func TestGitHubAnnotationsTotalGateRegressed(t *testing.T) {

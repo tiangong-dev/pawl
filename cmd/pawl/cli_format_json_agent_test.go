@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -56,6 +58,84 @@ func TestCheckJSONNextActionOnImprovement(t *testing.T) {
 	}
 	if m.NextAction != "pawl record --only m" {
 		t.Errorf("next_action = %q, want %q", m.NextAction, "pawl record --only m")
+	}
+}
+
+func TestCheckJSONImprovementWithStrictRegressionOmitsNextAction(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("", dimDef{
+		id: "length", direction: "lower-is-better", gate: "per-key-value-strict",
+		builtin: "file-length", optionLines: []string{"threshold = 10", `include = ["*.txt"]`},
+	})
+	writeFile(t, dir, "old-a.txt", nLines(11))
+	writeFile(t, dir, "old-b.txt", nLines(11))
+	mustRecord(t, dir, config)
+	if err := os.Remove(filepath.Join(dir, "old-a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "old-b.txt")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "new.txt", nLines(11))
+
+	res := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if res.exit != 1 {
+		t.Fatalf("exit = %d, want strict new-key regression\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	r := parseReport(t, res.stdout)
+	m, ok := metricByID(r, "length")
+	if !ok {
+		t.Fatal("metric length absent")
+	}
+	if !m.Improved || m.Status != "worse" || m.NextAction != "" {
+		t.Errorf("metric improved/status/next_action = %v/%q/%q, want true/worse/omitted", m.Improved, m.Status, m.NextAction)
+	}
+	if !strings.Contains(res.stdout, `"new_key": true`) || strings.Contains(res.stdout, `"next_action"`) {
+		t.Errorf("JSON must mark the strict regression and omit the refused record action: %s", res.stdout)
+	}
+	textRes := runPawl(t, dir, baseEnv(), "check")
+	if textRes.exit != 1 || strings.Contains(textRes.stdout, "pawl record --only length") {
+		t.Errorf("text output must report the regression without a record hint (exit=%d): %s", textRes.exit, textRes.stdout)
+	}
+	ciRes := runPawl(t, dir, baseEnv("GITHUB_ACTIONS=true"), "check")
+	if ciRes.exit != 1 || strings.Contains(ciRes.stdout, "::notice::pawl improved:") {
+		t.Errorf("CI output must not announce a record action for a regressed metric (exit=%d): %s", ciRes.exit, ciRes.stdout)
+	}
+}
+
+func TestCheckJSONMultiMetricImprovementHintsOnlyCleanMetric(t *testing.T) {
+	dir := t.TempDir()
+	config := buildConfig("", dimDef{
+		id: "clean", direction: "lower-is-better", command: `echo '{"value":5}'`,
+	}, dimDef{
+		id: "regressed", direction: "lower-is-better", gate: "per-key-value-strict",
+		command: `echo '{"value":10,"breakdown":{"old":10}}'`,
+	})
+	mustRecord(t, dir, config)
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "clean", direction: "lower-is-better", command: `echo '{"value":3}'`,
+	}, dimDef{
+		id: "regressed", direction: "lower-is-better", gate: "per-key-value-strict",
+		command: `echo '{"value":5,"breakdown":{"old":0,"new":5}}'`,
+	}))
+
+	res := runPawl(t, dir, baseEnv(), "check", "--format", "json")
+	if res.exit != 1 {
+		t.Fatalf("check exit=%d, want strict regression\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	report := parseReport(t, res.stdout)
+	clean, cleanOK := metricByID(report, "clean")
+	regressed, regressedOK := metricByID(report, "regressed")
+	if !cleanOK || clean.NextAction != "pawl record --only clean" || !regressedOK || !regressed.Improved || regressed.NextAction != "" {
+		t.Fatalf("clean/regressed metrics = %+v / %+v", clean, regressed)
+	}
+	textRes := runPawl(t, dir, baseEnv(), "check")
+	if !strings.Contains(textRes.stdout, "pawl record --only clean") || strings.Contains(textRes.stdout, "pawl record --only regressed") {
+		t.Errorf("text hints should include only the clean metric: %s", textRes.stdout)
+	}
+	ciRes := runPawl(t, dir, baseEnv("GITHUB_ACTIONS=true"), "check")
+	if !strings.Contains(ciRes.stdout, "::notice::pawl improved: clean") || strings.Contains(ciRes.stdout, "improved: clean, regressed") {
+		t.Errorf("CI notice should include only the clean metric: %s", ciRes.stdout)
 	}
 }
 

@@ -24,10 +24,12 @@ type FileGrowth struct {
 	RenamedFrom string
 }
 
-// KeyGrowth is a shared breakdown key whose value worsened under per-key-value.
+// KeyGrowth is a shared breakdown key that worsened under a per-key gate or a
+// new key under the strict per-key gate.
 type KeyGrowth struct {
 	Key           string
 	Base, Current float64
+	NewKey        bool
 }
 
 // GuardViolation is one metric that worsened between two recorded snapshots,
@@ -39,11 +41,10 @@ type GuardViolation struct {
 	Base      float64
 	Current   float64
 	Tolerance float64
-	// Files lists the per-file rises behind the violation of a
-	// per-file-count metric; empty for every other gate mode and for a
-	// purely scalar regression.
+	// Files lists per-file rises behind a per-file-count metric.
 	Files []FileGrowth
-	Keys  []KeyGrowth
+	// Keys lists keyed rises behind per-key-value gate modes.
+	Keys []KeyGrowth
 }
 
 func (v GuardViolation) String() string {
@@ -64,7 +65,11 @@ func formatKeyGrowth(keys []KeyGrowth) string {
 			parts = append(parts, fmt.Sprintf("and %d more", len(keys)-keyGrowthShown))
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s %s → %s", k.Key, FormatNumber(k.Base), FormatNumber(k.Current)))
+		prefix := ""
+		if k.NewKey {
+			prefix = "new key: "
+		}
+		parts = append(parts, fmt.Sprintf("%s%s %s → %s", prefix, k.Key, FormatNumber(k.Base), FormatNumber(k.Current)))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -152,7 +157,8 @@ func rekeyedLocation(to string, line *int) string {
 // the same single source of truth check, record and --since read — so guard
 // cannot disagree with the gate it protects. renames re-keys the base by git's
 // detected renames before that comparison (empty for every other gate, which
-// renames cannot affect). Other gate predicates are handled separately.
+// renames cannot affect). A metric gated total, gated per-key-value, or absent
+// from the config is compared on the scalar alone.
 func guardFileGrowth(gate GateMode, base, cur map[string]float64, renames map[string]string) []FileGrowth {
 	if gate != GatePerFileCount {
 		return nil
@@ -166,12 +172,12 @@ func guardFileGrowth(gate GateMode, base, cur map[string]float64, renames map[st
 }
 
 func guardKeyGrowth(gate GateMode, direction Direction, tolerance float64, base, cur map[string]float64) []KeyGrowth {
-	if gate != GatePerKeyValue {
+	if gate != GatePerKeyValue && gate != GatePerKeyValueStrict {
 		return nil
 	}
 	var out []KeyGrowth
-	for _, r := range perKeyRegressions(direction, tolerance, base, cur) {
-		out = append(out, KeyGrowth{Key: r.Key, Base: r.Base, Current: r.Current})
+	for _, r := range perKeyRegressions(gate, direction, tolerance, base, cur) {
+		out = append(out, KeyGrowth{Key: r.Key, Base: r.Base, Current: r.Current, NewKey: r.NewKey})
 	}
 	return out
 }
@@ -183,15 +189,15 @@ func guardKeyGrowth(gate GateMode, direction Direction, tolerance float64, base,
 // in base but missing from pr. A metric only in pr has no baseline to
 // violate and is ignored. Both lists are sorted by id.
 //
-// It is the scalar-only comparison; GuardViolationsWithGates adds the configured
-// per-file-count or per-key-value predicate on top.
+// It is the scalar-only comparison; GuardViolationsWithGates adds configured
+// per-file-count and per-key-value predicates on top.
 func GuardViolations(base, pr map[string]Metric) (violations []GuardViolation, removed []string) {
 	return GuardViolationsWithGates(base, pr, nil)
 }
 
-// GuardViolationsWithGates is GuardViolations plus the configured gate
-// predicate: per-file-count checks file totals and per-key-value checks shared
-// breakdown keys using the baseline direction and tolerance. gates comes from
+// GuardViolationsWithGates is GuardViolations plus configured gate predicates:
+// per-file-count checks file totals, and per-key-value modes check shared
+// breakdown keys (strict mode also checks current-only keys). gates comes from
 // the working tree's config because a snapshot records direction and tolerance
 // but no gate; a config that changes a gate
 // changes the metric's definition fingerprint, so the metric is redefined for
@@ -206,8 +212,8 @@ func GuardViolationsWithGates(base, pr map[string]Metric, gates map[string]GateM
 // the path git says the same file has in pr, both relative to the config dir
 // (the form breakdown keys use). Applying it stops a purely renamed file from
 // reading as a brand-new offender while still catching a rename that also added
-// one. It changes nothing for a total or per-key-value gate, and a nil map is
-// the plain comparison.
+// one. It changes nothing for a total or per-key-value gate, including the
+// strict variant which compares literal keys; a nil map is the plain comparison.
 func GuardViolationsWithGatesAndRenames(base, pr map[string]Metric, gates map[string]GateMode, renames map[string]string) (violations []GuardViolation, removed []string) {
 	for _, id := range sortedMetricKeys(base) {
 		b := base[id]

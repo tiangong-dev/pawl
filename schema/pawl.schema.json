@@ -108,8 +108,8 @@
           },
           "gate": {
             "type": "string",
-            "enum": ["total", "per-file-count", "per-key-value"],
-            "description": "Optional comparison mode; default total. total compares the single value, per-file-count refuses to let a fix in one file offset new findings in another, per-key-value protects each key already present in the baseline."
+            "enum": ["total", "per-file-count", "per-key-value", "per-key-value-strict"],
+            "description": "Optional comparison mode; default total. total compares the single value, per-file-count refuses to let a fix in one file offset new findings in another, per-key-value protects each key already present in the baseline, and per-key-value-strict also rejects every newly appearing key."
           },
           "tolerance": {
             "type": "number",

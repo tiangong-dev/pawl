@@ -17,10 +17,18 @@ file-length          3          4      +1  ❌ worse
   slack) / `🎉 better` / `✅ same`.
 - After the table, `check`/`diff` print a `❌ regressions:` block (dimension id,
   title, detail lines) when any, and a `🎉 improved: <ids>` block plus a hint to
-  run `pawl record --only <ids>` when any dimension's scalar strictly improved.
+  run `pawl record --only <ids>` only for dimensions whose scalar strictly
+  improved, whose full comparison has no regressions, and only for a working
+  snapshot comparison (not `--base`). A scalar improvement
+  can coexist with a gate regression; in that case it remains an improvement in
+  the structured `improved` field but does not produce a record hint, because
+  `record --only` would refuse it. Suppressed regressions under `--since` remain
+  in `regressions` and also prevent a record hint; `--base` never produces one
+  because `record` writes relative to the working snapshot.
 - `check` under `GITHUB_ACTIONS=…` (env var set non-empty) additionally prints
   `::notice::pawl improved: <ids> — run \`pawl record --only <ids>\` to lock in the gains.`
-  so an unrecorded win surfaces on the PR itself.
+  for those same fully passing improvements so an unrecorded win surfaces on
+  the PR itself.
 - `check` under `GITHUB_ACTIONS` also prints a GitHub `::error::` annotation per
   regression, so violations land inline on the PR diff. A `per-file-count`
   dimension emits one `::error file=<path>,line=<line>,title=pawl: <id>::…` per
@@ -168,7 +176,8 @@ when nothing was accepted as worse.
   (`new`/`worse`/`within-tolerance`/`better`/`same`/`preserved`,
   the emoji-free form of the table status), `improved` (bool — scalar strictly
   improved), `next_action` (on `check`/`diff` only, and only when `improved` is
-  true: the exact command `pawl record --only <id>`; omitted otherwise),
+  true, `regressions` is empty, and `base_ref` is absent: the exact command
+  `pawl record --only <id>`; omitted otherwise),
   `regressions` (array, empty when none), and optional `artifact`.
 - `artifact` (present only when the measurement read a file off disk) is
   `{path, modified, age_seconds, generated}`: the path as configured (relative
@@ -193,13 +202,15 @@ when nothing was accepted as worse.
   number moves.
   Text mode prints the same fact to **stderr**, next to the `measuring <id>…`
   progress lines and only when `generated` is false; stdout stays the table.
-- Each regression: `kind` (`total`/`per-file-count`/`per-key-value`), `key`
+- Each regression: `kind` (`total`/`per-file-count`/`per-key-value`/`per-key-value-strict`), `key`
   (the breakdown key, `null` for a `total` regression), `path` and `line`
   (parsed from `key`; both `null` for `total`, `line` `null` when the key has no
   numeric line), `base` and `current` (the two compared numbers — for `total`
   the scalar values, for `per-file-count` the contributing location key's
   finding counts (the message also carries the file totals), for
-  `per-key-value` the key's values), `message` (a human-readable detail line),
+  `per-key-value` the key's values; for a strict-mode new key, base is 0),
+  optional `new_key` (`true` only for a current-only key in strict mode),
+  `message` (a human-readable detail line),
   and `suppressed` (bool — `true` only in `--since` mode when this regression was
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are

@@ -106,6 +106,38 @@ func TestSinceFormatJSONExemptedSuppressed(t *testing.T) {
 	}
 }
 
+func TestSinceImprovementWithSuppressedRegressionHasNoNextAction(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+		id: "nolint", direction: "higher-is-better", gate: "per-file-count",
+		builtin: "pattern-count", optionLines: []string{`pattern = "NOLINT"`, `include = ["**/*.go"]`},
+	}))
+	writeFile(t, dir, "a.go", "package a\n// NOLINT keep\n")
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record exit=%d\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	// A stale snapshot and pre-existing offender are committed together.
+	writeFile(t, dir, "a.go", "package a\n// NOLINT keep\n// NOLINT preexisting\n")
+	base := gitCommitAll(t, dir, homeDir, "pre-existing offender")
+	writeFile(t, dir, "a.go", "package a\n// NOLINT keep\n// NOLINT preexisting\nplain tail\n")
+	gitCommitAll(t, dir, homeDir, "unrelated edit")
+
+	res := runPawl(t, dir, gitEnv(homeDir), "check", "--since", base, "--format", "json")
+	if res.exit != 0 {
+		t.Fatalf("check --since exit=%d, want suppressed regression to pass\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	report := parseReport(t, res.stdout)
+	metric, ok := metricByID(report, "nolint")
+	if !ok || metric.Status != "better" || !metric.Improved || metric.NextAction != "" || len(metric.Regressions) == 0 || !metric.Regressions[0].Suppressed {
+		t.Fatalf("--since metric = %+v, want scalar improvement with suppressed regression and no next_action", metric)
+	}
+	refused := runPawl(t, dir, gitEnv(homeDir), "record", "--only", "nolint")
+	if refused.exit != 1 || !strings.Contains(refused.stdout, "record --only refused") {
+		t.Fatalf("full record --only exit=%d, want refusal for suppressed regression\nstdout=%s\nstderr=%s", refused.exit, refused.stdout, refused.stderr)
+	}
+}
+
 // Diff scoping must handle the config dir being a SUBDIRECTORY of the git repo
 // root: breakdown keys are config-relative ("a.go:3") while git diff paths are
 // repo-relative ("proj/a.go"). A new offender on an added line in the subdir is

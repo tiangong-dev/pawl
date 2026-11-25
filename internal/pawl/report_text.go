@@ -11,7 +11,7 @@ import (
 // renderCheckTextLegacy is the byte-for-byte human default output for
 // non-diff-scoped check/diff: the table, the regression block, the improvement
 // hint, and (for check under CI) the GitHub annotations and notice.
-func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, current map[string]Metric, excluded []string, stdout io.Writer) int {
+func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, current map[string]Metric, excluded []string, allowRecordHint bool, stdout io.Writer) int {
 	type regression struct {
 		dim    Dimension
 		detail []string
@@ -35,7 +35,7 @@ func renderCheckTextLegacy(cfg *Config, command string, baseline *Snapshot, curr
 			regressions = append(regressions, regression{dim: dim, detail: detail})
 			regressedIDs[dim.ID] = true
 		}
-		if Better(dim.Direction, base.Value, cur.Value) {
+		if allowRecordHint && len(detail) == 0 && Better(dim.Direction, base.Value, cur.Value) {
 			improved = append(improved, dim.ID)
 		}
 	}

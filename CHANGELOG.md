@@ -9,6 +9,13 @@ Release notes and upgrade instructions. Review the breaking changes before updat
   metric is missing from the working snapshot. Breakdown keys present in only
   one snapshot remain outside this comparison.
 
+- Added opt-in `per-key-value-strict`: shared keys use the ordinary direction
+  and tolerance check, while every current-only key fails from zero regardless
+  of tolerance. Keys are literal identities, so path renames and copies count as
+  new; `--since` enforces this mode at full strength. Selecting it changes the
+  metric definition and requires an explicit redefinition of an existing
+  baseline.
+
 ## 0.9.0 — 2026-11-24
 
 ### Upgrade notes

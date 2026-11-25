@@ -76,11 +76,11 @@ func (s *sinceScope) scopeMetric(m *MetricReport, dim Dimension, base, cur Metri
 	}
 	// Only per-file-count is cleanly line-attributable: its scalar is the count /
 	// sum of a `path:line` breakdown, so every contributor to a regression has a
-	// line. `total` (no breakdown) and `per-key-value` (a scalar that is not a sum
-	// of its breakdown, and which ignores new keys) cannot be scoped without
-	// diverging from the full-mode verdict — inventing a regression full mode
-	// wouldn't raise, or dropping one it would — so they are enforced at full
-	// strength: the full-mode verdict stands, unscoped. A per-file-count dimension
+	// line. `total` has no breakdown; per-key-value has a scalar that is not a sum
+	// of its breakdown; strict per-key treats literal keys as identities, so path
+	// changes are meaningful regardless of Git's diff/rename context. These gates
+	// cannot be scoped without diverging from full mode, so they are enforced at
+	// full strength: the full-mode verdict stands, unscoped. A per-file-count dimension
 	// with no breakdown to attribute is treated the same way.
 	if gate != GatePerFileCount || len(cur.Breakdown) == 0 ||
 		!sameFindingTotal(base.Value, base.Breakdown) || !sameFindingTotal(cur.Value, cur.Breakdown) {

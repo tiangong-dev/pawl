@@ -231,8 +231,11 @@ func annotateReport(rep *Report) {
 	if rep.Command != "check" {
 		return
 	}
+	if rep.BaseRef != nil {
+		return
+	}
 	for i := range rep.Metrics {
-		if rep.Metrics[i].Improved {
+		if rep.Metrics[i].Improved && len(rep.Metrics[i].Regressions) == 0 {
 			rep.Metrics[i].NextAction = "pawl record --only " + rep.Metrics[i].ID
 		}
 	}

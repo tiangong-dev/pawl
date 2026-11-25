@@ -175,6 +175,7 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 | `total`（默认） | 覆盖率、打包体积、问题总数 | 仅比对整体单一数值 |
 | `per-file-count` | lint 问题、类型抑制、TODO 标记 | 精确到单文件计数：修好文件 A 绝不能抵消文件 B 新增的问题 |
 | `per-key-value` | 分包/模块覆盖率、各 chunk 体积 | 分别保护基线中已存在的每一个 key，防止局部恶化 |
+| `per-key-value-strict` | 路径作为身份，重命名或复制也会失败 | 每个新 key 都会失败，不受总数和容差影响 |
 
 **指标好坏方向：**
 - `lower-is-better`：用于技术债计数、缺陷标记与产物体积（越小越好）；
@@ -186,7 +187,7 @@ schema 只在编辑时提供提示；配置是否可用，仍以 `pawl validate`
 
 | 内置适配器 | 数据来源 | 常用 Gate |
 |---|---|---|
-| `file-length`、`file-bytes` | 仓库源码文件 | `total` + `per-key-value` |
+| `file-length`、`file-bytes` | 仓库源码文件 | `total` + `per-key-value`（新路径也必须失败时用 strict） |
 | `pattern-count` | 正则文本匹配 | `per-file-count` |
 | `eslint`、`oxlint` | linter 原生 JSON 输出 | `per-file-count` |
 | `jscpd`、`swift-complexity` | 专用工具导出的 JSON | `total` / `per-file-count` |

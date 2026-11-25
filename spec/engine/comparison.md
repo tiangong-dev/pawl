@@ -40,6 +40,10 @@ improves, file B worsens, total unchanged).
   (with tolerance, same `worse` predicate). Keys missing from the current
   breakdown are ignored (removal is legitimate); keys new in current are ignored
   (they had no baseline).
+- **`per-key-value-strict`** — applies the same direction and tolerance check to
+  shared keys, and treats every key present only in current as a regression from
+  zero, regardless of direction or tolerance. Keys are identities: for path
+  breakdowns, a renamed or copied path is new. This mode never maps Git renames.
 
 **Known limits (choose the gate accordingly).** `per-file-count` is the strong
 net-zero defense for *issue-count* dimensions: swapping a fix in file A for a new
@@ -54,12 +58,19 @@ key's identity — so `per-key-value` is a fit for **stable-key numeric**
 dimensions (a fixed set of keys whose *values* move), while `per-file-count` is
 the fit for **issue-count** dimensions (offenders coming and going). Neither gate
 is a total net-zero proof; they are targeted defenses for their intended shape.
+`per-key-value-strict` closes the new-key hole by making path identity strict;
+that also means a path rename or copy is treated as a new key and fails even
+when its contents and length are unchanged. Use it when path continuity is part
+of the policy, such as long-file limits where moving an existing long file
+should require explicit review.
 
 Regression detail lines (exact formats, `<n>` in minimal decimal notation):
 
 - scalar: `total <base> → <cur>`
 - per-file-count: `<file>  <baseCount> → <curCount>` (two spaces)
 - per-key-value: `<key>  <baseValue> → <curValue>` (two spaces)
+- per-key-value-strict: `new key: <key>  0 → <curValue>` for a new key; shared-key
+  regressions keep `<key>  <baseValue> → <curValue>`
 
 A dimension present in config but absent from the snapshot is `new` — it cannot
 regress. (It enters the gate at the next `record`.)
