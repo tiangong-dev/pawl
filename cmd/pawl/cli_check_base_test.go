@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +44,88 @@ func TestCheckBaseIgnoresWorkingSnapshotAndAcceptedDebt(t *testing.T) {
 	deleted := runPawl(t, dir, gitEnv(home), "check", "--base", base)
 	if deleted.exit != 1 {
 		t.Fatalf("check --base after deleting the working snapshot = %d, want 1\nstdout=%s\nstderr=%s", deleted.exit, deleted.stdout, deleted.stderr)
+	}
+}
+
+func TestCheckBaseWorksFromSymlinkedPWD(t *testing.T) {
+	dir := t.TempDir()
+	home := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`}))
+	mustRecord(t, dir, readFile(t, filepath.Join(dir, "pawl.yaml")))
+	base := gitCommitAll(t, dir, home, "base")
+	link := filepath.Join(t.TempDir(), "repo-link")
+	if err := os.Symlink(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	env := append(gitEnv(home), "PWD="+link)
+	res := runPawl(t, link, env, "check", "--base", base, "--format", "json")
+	if res.exit != 0 {
+		t.Fatalf("check --base through symlink cwd exit=%d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+func TestCheckBaseRejectsSnapshotOutsideThroughSymlinkedDirectory(t *testing.T) {
+	dir := t.TempDir()
+	home := initGitRepo(t, dir)
+	external := t.TempDir()
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`}))
+	if err := os.Remove(filepath.Join(dir, "pawl.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "pawl.yaml", "snapshot: snap/pawl.json\ndimensions:\n  - id: a\n    title: A\n    direction: lower-is-better\n    command: \"echo '{\\\"value\\\": 1}'\"\n")
+	if err := os.Symlink(external, filepath.Join(dir, "snap")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, external, "pawl.json", `{"metrics":{"a":{"direction":"lower-is-better","value":1,"unit":"count","breakdown":null}}}`+"\n")
+	base := gitCommitAll(t, dir, home, "snapshot directory symlink points outside")
+	res := runPawl(t, dir, gitEnv(home), "check", "--base", base, "--format", "json")
+	if res.exit != 2 || !strings.Contains(res.stdout, "outside the git repository") {
+		t.Fatalf("outside snapshot path exit=%d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+func TestCheckBaseDoesNotFollowSnapshotFileSymlink(t *testing.T) {
+	dir := t.TempDir()
+	home := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`}))
+	external := filepath.Join(t.TempDir(), "trusted.json")
+	if err := os.WriteFile(external, []byte(`{"metrics":{"a":{"direction":"lower-is-better","value":1,"unit":"count","breakdown":null}}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(dir, "pawl.snapshot.json")); err != nil {
+		t.Fatal(err)
+	}
+	base := gitCommitAll(t, dir, home, "snapshot file symlinks outside")
+	res := runPawl(t, dir, gitEnv(home), "check", "--base", base, "--format", "json")
+	if res.exit != 2 || !strings.Contains(res.stdout, "snapshot") {
+		t.Fatalf("outside snapshot file symlink exit=%d, want 2\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+}
+
+func TestCheckBaseSupportsOldGitWithoutEndOfOptions(t *testing.T) {
+	dir := t.TempDir()
+	home := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{id: "a", direction: "lower-is-better", command: `echo '{"value": 1}'`}))
+	mustRecord(t, dir, readFile(t, filepath.Join(dir, "pawl.yaml")))
+	base := gitCommitAll(t, dir, home, "base")
+	actualGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shimDir := t.TempDir()
+	shim := "#!/bin/sh\nfor arg do\n  if [ \"$arg\" = \"--end-of-options\" ]; then echo 'unknown option' >&2; exit 129; fi\ndone\nexec '" + strings.ReplaceAll(actualGit, "'", "'\\''") + "' \"$@\"\n"
+	writeFile(t, shimDir, "git", shim)
+	if err := os.Chmod(filepath.Join(shimDir, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"PATH=" + shimDir + string(os.PathListSeparator) + os.Getenv("PATH"), "HOME=" + home, "GIT_CONFIG_NOSYSTEM=1"}
+	res := runPawl(t, dir, env, "check", "--base", base, "--format", "json")
+	if res.exit != 0 {
+		t.Fatalf("old Git shim check --base exit=%d, want 0\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	badRef := runPawl(t, dir, env, "check", "--base", "--help", "--format", "json")
+	if badRef.exit != 2 || !strings.Contains(badRef.stdout, "must not begin with '-'") {
+		t.Fatalf("option-like ref should be rejected safely: exit=%d\nstdout=%s\nstderr=%s", badRef.exit, badRef.stdout, badRef.stderr)
 	}
 }
 
@@ -238,6 +321,9 @@ func TestCheckBaseDefinitionMismatchIsCouldNotMeasure(t *testing.T) {
 	}
 	if strings.Contains(report.Error, "Pawl-Redefine") {
 		t.Errorf("Pawl-Redefine must not waive check --base definition mismatch: %s", report.Error)
+	}
+	if !strings.Contains(strings.ToLower(report.Error), "trusted") || strings.Contains(report.Error, "run a full `pawl record`") {
+		t.Errorf("definition mismatch guidance must direct review and recording on a trusted base branch: %s", report.Error)
 	}
 }
 

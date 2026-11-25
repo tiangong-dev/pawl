@@ -67,7 +67,11 @@ func runMeasureCommand(full, measure *Config, command, format, since, baseRef st
 			}
 		}
 		if mismatches := definitionMismatches(measure, baseline.Metrics); len(mismatches) > 0 {
-			return abortCouldNotMeasure(runScope, format, definitionMismatchMessage(mismatches), nil, stdout, stderr)
+			message := definitionMismatchMessage(mismatches)
+			if baseRef != "" {
+				message = checkBaseDefinitionMismatchMessage(mismatches)
+			}
+			return abortCouldNotMeasure(runScope, format, message, nil, stdout, stderr)
 		}
 	}
 
