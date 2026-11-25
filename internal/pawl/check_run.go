@@ -120,7 +120,7 @@ func runMeasureCommand(full, measure *Config, command, format, since, baseRef st
 		hintJSONIfPiped(command, quiet, stdout, stderr)
 		return exit
 	}
-	textExit := renderCheckTextLegacy(measure, command, baseline, current, excluded, stdout)
+	textExit := renderCheckTextLegacy(measure, command, baseline, current, excluded, baseRef == "", stdout)
 	hintJSONIfPiped(command, quiet, stdout, stderr)
 	return textExit
 }

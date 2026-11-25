@@ -17,10 +17,18 @@ file-length          3          4      +1  ❌ worse
   slack) / `🎉 better` / `✅ same`.
 - After the table, `check`/`diff` print a `❌ regressions:` block (dimension id,
   title, detail lines) when any, and a `🎉 improved: <ids>` block plus a hint to
-  run `pawl record --only <ids>` when any dimension's scalar strictly improved.
+  run `pawl record --only <ids>` only for dimensions whose scalar strictly
+  improved, whose full comparison has no regressions, and only for a working
+  snapshot comparison (not `--base`). A scalar improvement
+  can coexist with a gate regression; in that case it remains an improvement in
+  the structured `improved` field but does not produce a record hint, because
+  `record --only` would refuse it. Suppressed regressions under `--since` remain
+  in `regressions` and also prevent a record hint; `--base` never produces one
+  because `record` writes relative to the working snapshot.
 - `check` under `GITHUB_ACTIONS=…` (env var set non-empty) additionally prints
   `::notice::pawl improved: <ids> — run \`pawl record --only <ids>\` to lock in the gains.`
-  so an unrecorded win surfaces on the PR itself.
+  for those same fully passing improvements so an unrecorded win surfaces on
+  the PR itself.
 - `check` under `GITHUB_ACTIONS` also prints a GitHub `::error::` annotation per
   regression, so violations land inline on the PR diff. A `per-file-count`
   dimension emits one `::error file=<path>,line=<line>,title=pawl: <id>::…` per
@@ -168,7 +176,8 @@ when nothing was accepted as worse.
   (`new`/`worse`/`within-tolerance`/`better`/`same`/`preserved`,
   the emoji-free form of the table status), `improved` (bool — scalar strictly
   improved), `next_action` (on `check`/`diff` only, and only when `improved` is
-  true: the exact command `pawl record --only <id>`; omitted otherwise),
+  true, `regressions` is empty, and `base_ref` is absent: the exact command
+  `pawl record --only <id>`; omitted otherwise),
   `regressions` (array, empty when none), and optional `artifact`.
 - `artifact` (present only when the measurement read a file off disk) is
   `{path, modified, age_seconds, generated}`: the path as configured (relative

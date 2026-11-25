@@ -19,9 +19,14 @@ what a dimension *is* and never whether it got better.
    definition). Review a definition change before the explicit `record` the error
    names; unlike an improvement, its old and new numbers are not comparable.
    Never write a snapshot number by hand to make either go away.
-3. `"status": "better"` → run that metric's `next_action`, which is
-   `pawl record --only <id>`. Never a full `pawl record` to lock in one win: it
-   silently re-blesses every dimension you did not touch.
+3. `"status": "better"` → run that metric's `next_action` only when the field
+   is present; its usual value is `pawl record --only <id>`. If it is absent,
+   inspect `regressions` and the comparison mode
+   first; a scalar improvement may still have a gate regression, be suppressed
+   by `--since`, or come from `--base`, where recording against the working
+   snapshot may not match the trusted comparison. Never run a full
+   `pawl record` to lock in one win: it silently re-blesses every dimension you
+   did not touch.
 4. A verdict carrying a top-level `only` array measured just those dimensions,
    and `excluded` names the ones it skipped. Exit 0 there is not a green gate —
    say what was actually measured. CI runs a full `pawl check` with no `--only`.

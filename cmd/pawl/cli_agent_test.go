@@ -66,15 +66,18 @@ func TestAgentBlockCarriesTheLoadBearingRules(t *testing.T) {
 	out := strings.Join(strings.Fields(runPawl(t, dir, baseEnv(), "agent").stdout), " ")
 
 	for _, want := range []string{
-		"pawl check --format json", // the inner loop itself
-		"failure_class",            // branch on why, not just on non-zero
-		"could-not-measure",        // exit 2 is an environment problem
-		"pawl record --only",       // never re-bless untouched dimensions
-		"excluded",                 // a scoped verdict is not a green gate
-		"watch",                    // headroom is advisory, judging it is the agent's job
-		"pawl rank --format json",  // measure headroom before the edit, not after
-		"artifact",                 // a stale report is not the current tree
-		"not `pawl measure`",       // the closest miss: numbers without a baseline
+		"pawl check --format json",       // the inner loop itself
+		"failure_class",                  // branch on why, not just on non-zero
+		"could-not-measure",              // exit 2 is an environment problem
+		"pawl record --only",             // never re-bless untouched dimensions
+		"only when the field is present", // absent next_action needs inspection first
+		"--since",                        // scoped suppression can still be refused by record
+		"--base",                         // trusted-ref comparisons differ from working snapshots
+		"excluded",                       // a scoped verdict is not a green gate
+		"watch",                          // headroom is advisory, judging it is the agent's job
+		"pawl rank --format json",        // measure headroom before the edit, not after
+		"artifact",                       // a stale report is not the current tree
+		"not `pawl measure`",             // the closest miss: numbers without a baseline
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("agent block never mentions %q:\n%s", want, out)

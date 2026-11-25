@@ -79,6 +79,7 @@ type jsonRegression struct {
 	Current    float64 `json:"current"`
 	Message    string  `json:"message"`
 	Suppressed bool    `json:"suppressed"`
+	NewKey     bool    `json:"new_key"`
 }
 
 // parseReport asserts stdout is exactly one JSON object (nothing else) and
