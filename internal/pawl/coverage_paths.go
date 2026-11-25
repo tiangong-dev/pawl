@@ -33,93 +33,110 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 	}
 	bases := sourceRoots
 	sourceWasAbsolute := filepath.IsAbs(source)
-	if filepath.IsAbs(source) {
+	if sourceWasAbsolute {
 		bases = []string{""}
 	} else if len(bases) == 0 {
 		bases = []string{root}
 	}
 	paths := map[string]struct{}{}
-	for _, base := range bases {
-		base = strings.TrimSpace(base)
-		if isForeignAbsoluteCoveragePath(base) {
+	for _, rawBase := range bases {
+		rawBase = strings.TrimSpace(rawBase)
+		if isForeignAbsoluteCoveragePath(rawBase) {
 			continue
 		}
-		baseWasAbsolute := filepath.IsAbs(filepath.FromSlash(base))
-		base = filepath.FromSlash(base)
-		if filepath.IsAbs(source) {
-			base = ""
-		} else if !filepath.IsAbs(base) {
-			base = filepath.Join(root, base)
-		}
-		candidate := filepath.Clean(filepath.Join(base, source))
-		candidate, inRoot, err := coverageContainedCandidate(root, candidate, resolver, sourceWasAbsolute || baseWasAbsolute)
-		if err != nil {
-			return nil, err
-		}
-		if !inRoot {
-			continue
-		}
-		if runtime.GOOS != "windows" && strings.Contains(source, `\`) {
-			alternate := filepath.Clean(filepath.Join(base, strings.ReplaceAll(source, `\`, "/")))
-			literal := canonicalPath(candidate)
-			literal, literalInRoot, literalContainmentErr := coverageContainedCandidate(root, literal, resolver, false)
-			if literalContainmentErr != nil {
-				return nil, literalContainmentErr
+		baseWasAbsolute := filepath.IsAbs(filepath.FromSlash(rawBase))
+		baseVariants := []string{filepath.FromSlash(rawBase)}
+		sourceVariants := []string{source}
+		if runtime.GOOS != "windows" {
+			if strings.Contains(rawBase, `\`) {
+				baseVariants = append(baseVariants, filepath.FromSlash(strings.ReplaceAll(rawBase, `\`, "/")))
 			}
-			alternate = canonicalPath(alternate)
-			alternate, alternateInRoot, err := coverageContainedCandidate(root, alternate, resolver, false)
-			if err != nil {
-				return nil, err
+			if strings.Contains(source, `\`) {
+				sourceVariants = append(sourceVariants, strings.ReplaceAll(source, `\`, "/"))
 			}
-			var literalInfo os.FileInfo
-			var literalExists bool
-			if literalInRoot {
-				var literalErr error
-				literalInfo, literalExists, literalErr = resolver.statResult(literal)
-				if literalErr != nil {
-					return nil, fmt.Errorf("could not verify backslash path candidate %q: %w", literal, literalErr)
+		}
+		if sourceWasAbsolute {
+			baseVariants = []string{""}
+		}
+		candidates := make([]string, 0, len(baseVariants)*len(sourceVariants))
+		preferred := ""
+		for baseIndex, base := range baseVariants {
+			if !sourceWasAbsolute && !filepath.IsAbs(base) {
+				base = filepath.Join(root, base)
+			}
+			for sourceIndex, name := range sourceVariants {
+				candidate := filepath.Clean(filepath.Join(base, name))
+				if baseIndex == 0 && sourceIndex == 0 {
+					preferred = candidate
 				}
-			}
-			var alternateInfo os.FileInfo
-			var alternateExists bool
-			if alternateInRoot {
-				var alternateErr error
-				alternateInfo, alternateExists, alternateErr = resolver.statResult(alternate)
-				if alternateErr != nil {
-					return nil, fmt.Errorf("could not verify slash path candidate %q: %w", alternate, alternateErr)
-				}
-			}
-			literalExists = literalExists && literalInfo.Mode().IsRegular()
-			alternateExists = alternateExists && alternateInfo.Mode().IsRegular()
-			if literalExists && alternateExists && !os.SameFile(literalInfo, alternateInfo) {
-				return nil, fmt.Errorf("ambiguous backslash path %q resolves to multiple files", source)
-			}
-			if alternateExists {
-				candidate = alternate
-			} else if literalInRoot {
-				candidate = literal
-			} else {
-				continue
+				candidates = append(candidates, candidate)
 			}
 		}
-		resolved, err := canonicalCoveragePathWithResolver(candidate, resolver)
+		resolved, err := resolveCoverageCandidateVariants(root, candidates, preferred, sourceWasAbsolute || baseWasAbsolute, resolver)
 		if err != nil {
 			return nil, err
 		}
-		_, stillInRoot, err := coverageContainedCandidate(root, resolved, resolver, false)
-		if err != nil {
-			return nil, err
+		if resolved != "" {
+			paths[resolved] = struct{}{}
 		}
-		if !stillInRoot {
-			continue
-		}
-		paths[resolved] = struct{}{}
 	}
 	out := make([]string, 0, len(paths))
 	for path := range paths {
 		out = append(out, path)
 	}
 	return out, nil
+}
+
+func resolveCoverageCandidateVariants(root string, candidates []string, preferred string, resolveAlias bool, resolver *coveragePathResolver) (string, error) {
+	var existing []string
+	var preferredPath string
+	for _, candidate := range candidates {
+		isPreferred := filepath.Clean(candidate) == filepath.Clean(preferred)
+		candidate, inRoot, err := coverageContainedCandidate(root, candidate, resolver, resolveAlias)
+		if err != nil {
+			return "", err
+		}
+		if !inRoot {
+			continue
+		}
+		canonical := canonicalPath(candidate)
+		canonical, inRoot, err = coverageContainedCandidate(root, canonical, resolver, false)
+		if err != nil {
+			return "", err
+		}
+		if !inRoot {
+			continue
+		}
+		if isPreferred {
+			preferredPath = canonical
+		}
+		info, exists, err := resolver.statResult(canonical)
+		if err != nil {
+			return "", fmt.Errorf("could not verify coverage source candidate %q: %w", canonical, err)
+		}
+		if !exists || !info.Mode().IsRegular() {
+			continue
+		}
+		resolved, err := canonicalCoveragePathWithResolver(canonical, resolver)
+		if err != nil {
+			return "", err
+		}
+		existing = append(existing, resolved)
+	}
+	unique := make(map[string]struct{}, len(existing))
+	for _, path := range existing {
+		unique[path] = struct{}{}
+	}
+	if len(unique) > 1 {
+		return "", fmt.Errorf("ambiguous backslash path %q resolves to multiple in-root files", preferred)
+	}
+	for path := range unique {
+		return path, nil
+	}
+	if preferredPath != "" {
+		return preferredPath, nil
+	}
+	return "", nil
 }
 
 func coverageContainedCandidate(root, candidate string, resolver *coveragePathResolver, resolveAlias bool) (string, bool, error) {
