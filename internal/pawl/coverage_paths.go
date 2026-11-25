@@ -32,6 +32,7 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 		return nil, err
 	}
 	bases := sourceRoots
+	sourceWasAbsolute := filepath.IsAbs(source)
 	if filepath.IsAbs(source) {
 		bases = []string{""}
 	} else if len(bases) == 0 {
@@ -43,6 +44,7 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 		if isForeignAbsoluteCoveragePath(base) {
 			continue
 		}
+		baseWasAbsolute := filepath.IsAbs(filepath.FromSlash(base))
 		base = filepath.FromSlash(base)
 		if filepath.IsAbs(source) {
 			base = ""
@@ -50,7 +52,7 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 			base = filepath.Join(root, base)
 		}
 		candidate := filepath.Clean(filepath.Join(base, source))
-		candidate, inRoot, err := coverageContainedCandidate(root, candidate, resolver)
+		candidate, inRoot, err := coverageContainedCandidate(root, candidate, resolver, sourceWasAbsolute || baseWasAbsolute)
 		if err != nil {
 			return nil, err
 		}
@@ -60,12 +62,12 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 		if runtime.GOOS != "windows" && strings.Contains(source, `\`) {
 			alternate := filepath.Clean(filepath.Join(base, strings.ReplaceAll(source, `\`, "/")))
 			literal := canonicalPath(candidate)
-			literal, literalInRoot, literalContainmentErr := coverageContainedCandidate(root, literal, resolver)
+			literal, literalInRoot, literalContainmentErr := coverageContainedCandidate(root, literal, resolver, false)
 			if literalContainmentErr != nil {
 				return nil, literalContainmentErr
 			}
 			alternate = canonicalPath(alternate)
-			alternate, alternateInRoot, err := coverageContainedCandidate(root, alternate, resolver)
+			alternate, alternateInRoot, err := coverageContainedCandidate(root, alternate, resolver, false)
 			if err != nil {
 				return nil, err
 			}
@@ -104,7 +106,7 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 		if err != nil {
 			return nil, err
 		}
-		_, stillInRoot, err := coverageContainedCandidate(root, resolved, resolver)
+		_, stillInRoot, err := coverageContainedCandidate(root, resolved, resolver, false)
 		if err != nil {
 			return nil, err
 		}
@@ -120,7 +122,7 @@ func coverageSourcePathsWithResolver(root string, sourceRoots []string, source s
 	return out, nil
 }
 
-func coverageContainedCandidate(root, candidate string, resolver *coveragePathResolver) (string, bool, error) {
+func coverageContainedCandidate(root, candidate string, resolver *coveragePathResolver, resolveAlias bool) (string, bool, error) {
 	abs, err := filepath.Abs(candidate)
 	if err != nil {
 		return "", false, err
@@ -129,6 +131,12 @@ func coverageContainedCandidate(root, candidate string, resolver *coveragePathRe
 	rel, err := filepath.Rel(root, abs)
 	if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return abs, true, nil
+	}
+	if resolveAlias {
+		canonical := canonicalPath(abs)
+		if rel, err := filepath.Rel(root, canonical); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return canonical, true, nil
+		}
 	}
 	if len(abs) <= len(root) || !strings.EqualFold(abs[:len(root)], root) || !strings.HasPrefix(abs[len(root):], string(filepath.Separator)) {
 		return abs, false, nil
