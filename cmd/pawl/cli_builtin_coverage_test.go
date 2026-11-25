@@ -209,6 +209,23 @@ func TestBuiltinCoverageZeroFoundDataIsMeasurementFailureNotSilentZeroOrHundred(
 	}
 }
 
+func TestBuiltinCoverageRejectsInvalidCompletenessFloors(t *testing.T) {
+	for _, option := range []string{"min_files = -1", "min_files = 1.5", `min_files = "2"`, "min_found = -1", "min_found = 1.5"} {
+		t.Run(option, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "coverage.info", lcovTwoRecordFixture)
+			options := append(coverageOptionLines("", "coverage.info", "lcov", ""), option)
+			writeFile(t, dir, "pawl.yaml", buildConfig("", dimDef{
+				id: "coverage", direction: "higher-is-better", builtin: "coverage", optionLines: options,
+			}))
+			res := runPawl(t, dir, baseEnv(), "validate")
+			if res.exit != 2 || !strings.Contains(res.stderr+res.stdout, "non-negative integer") {
+				t.Fatalf("exit=%d stdout=%s stderr=%s; want config error about non-negative integer", res.exit, res.stdout, res.stderr)
+			}
+		})
+	}
+}
+
 // Config errors are rejected at load time, before any measurement runs, and
 // must name coverage as the recognized builtin (not fall through to
 // "unknown builtin"): missing file, missing/invalid format, and metric

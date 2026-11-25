@@ -69,7 +69,7 @@ func semanticOptions(builtin string, options map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, value := range options {
 		switch key {
-		case "command", "file", "report", "verify", "verify_rules", "min_files", "valid_exit_codes":
+		case "command", "file", "report", "verify", "verify_rules", "min_files", "min_found", "valid_exit_codes":
 			// Acquisition, completeness and failure policy affect whether pawl can
 			// measure honestly, not what a successful number means.
 			continue
