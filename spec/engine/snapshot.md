@@ -43,7 +43,9 @@ malformed snapshot. Shape errors, checked in this order per snapshot:
 4. per metric: not an object → `metric "<id>" is not an object`;
    `value` missing or not a finite number → `metric "<id>" has no numeric value`;
    a present `definition` that is not a valid versioned SHA-256 fingerprint →
-   `metric "<id>" has an invalid definition fingerprint`
+   `metric "<id>" has an invalid definition fingerprint`; present `direction`
+   and `unit` fields must be strings; `breakdown` must be null or an object of
+   finite numbers; `tolerance` must be null or a finite number.
 
 JSON.parse succeeding only proves valid JSON, not that the gate can trust the
 shape — a truncated or hand-corrupted snapshot must not read as "consistent".

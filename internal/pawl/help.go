@@ -45,12 +45,13 @@ Global flags:
 Command flags:
   record --only <ids>     re-record only comma-separated dimensions
   check --only <ids>      measure and gate only those dimensions
+  check --base <ref>      compare with the committed snapshot at <ref>
   measure --only <ids>    measure only those dimensions
   check --current <path>  judge a measure document instead of measuring (- = stdin)
   record --current <path> record a measure document instead of measuring (- = stdin)
   record --dry-run        preview what record would write, without writing
   record --accept-worse   record a dimension even if it comes back worse
-  check --since <ref>     scope located findings to the working tree since <ref>
+  check --since <ref>     scope located findings to the working tree since <ref> (not with --base)
   trend --limit <n>       limit history entries
   agent --write <target>  install the block into AGENTS.md (agent) or CLAUDE.md (claude)`)
 		return
@@ -61,7 +62,7 @@ Command flags:
 		"agent":    "pawl agent [--write agent|claude]",
 		"measure":  "pawl measure [--only <id>[,<id>…]] [-q]",
 		"record":   "pawl record [--only <id>[,<id>…]] [--current <path>|-] [--dry-run] [--accept-worse] [-q] [--format text|json]",
-		"check":    "pawl check [--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
+		"check":    "pawl check [--base <git-ref>|--since <ref>] [--only <id>[,<id>…]] [--current <path>|-] [-q] [--format text|json]",
 		"guard":    "pawl guard [<ref>]",
 		"trend":    "pawl trend [<id>] [--limit <n>] [--format text|json]",
 		"rank":     "pawl rank [--format text|json]",

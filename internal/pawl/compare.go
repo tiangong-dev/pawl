@@ -318,41 +318,6 @@ func WorseDimensions(dims []Dimension, baseline, current map[string]Metric) []Wo
 	return out
 }
 
-// SnapshotShapeErrors validates a parsed (json.Unmarshal into any) snapshot's
-// shape — valid JSON alone is not a trustworthy baseline: a truncated or
-// hand-corrupted snapshot must not read as "consistent" for free.
-func SnapshotShapeErrors(parsed any) []string {
-	obj, ok := parsed.(map[string]any)
-	if !ok {
-		return []string{"snapshot is not an object"}
-	}
-	metrics, ok := obj["metrics"].(map[string]any)
-	if !ok {
-		return []string{"snapshot.metrics is missing or not an object"}
-	}
-	if len(metrics) == 0 {
-		return []string{"snapshot.metrics is empty"}
-	}
-	var errs []string
-	for _, id := range sortedKeysAny(metrics) {
-		metric, ok := metrics[id].(map[string]any)
-		if !ok {
-			errs = append(errs, fmt.Sprintf("metric %q is not an object", id))
-			continue
-		}
-		if _, ok := metric["value"].(float64); !ok {
-			errs = append(errs, fmt.Sprintf("metric %q has no numeric value", id))
-		}
-		if raw, exists := metric["definition"]; exists {
-			definition, ok := raw.(string)
-			if !ok || !validDefinitionFingerprint(definition) {
-				errs = append(errs, fmt.Sprintf("metric %q has an invalid definition fingerprint", id))
-			}
-		}
-	}
-	return errs
-}
-
 // ImprovementNotice is the CI annotation naming every dimension that improved
 // since the snapshot — a developer who only looked at check's exit code still
 // finds out an improvement is sitting unrecorded. Empty off-CI or when

@@ -275,7 +275,7 @@ construction. Without that option pawl reports age as provenance only.
 | `pawl init` | write a starter `pawl.yaml` without overwriting an existing one; detects the project type from marker files and prefills `include` and a shared `exclude` |
 | `pawl validate` | check that `pawl.yaml` loads, without measuring anything |
 | `pawl record` | measure and write the snapshot |
-| `pawl check` | compare current measurements with the snapshot; the default command |
+| `pawl check` | compare current measurements with the snapshot; `--base <ref>` uses a committed snapshot instead |
 | `pawl measure` | print current measurements without reading a baseline or giving a verdict |
 | `pawl guard <ref>` | compare the snapshot with the version at `<ref>`, mapping git-detected renames in a per-file-count comparison |
 | `pawl trend [<id>]` | show committed snapshot history |
@@ -314,6 +314,18 @@ pawl check --since origin/main
 ```
 
 Line-addressable `per-file-count` findings are scoped to changed lines. Metrics that cannot be attributed to a line, such as total coverage, remain fully enforced and are labelled as such. Uncommitted and untracked changes are included.
+
+### Compare with a trusted base snapshot
+
+In a pull request, compare fresh measurements with the snapshot from the target branch:
+
+```bash
+pawl check --base origin/main
+```
+
+This reads the snapshot from Git and ignores the working tree snapshot, so changing or deleting that file cannot lower the comparison baseline. Invalid refs, missing or malformed base snapshots, and incompatible measurement definitions exit 2. `--base` cannot be combined with `--since`. `Pawl-Accept` and `Pawl-Redefine` trailers do not waive this check; accepted debt or a changed definition must first be recorded on a trusted base branch through review.
+
+This trusts the selected Git ref, Pawl binary, current config and measurement commands, CI workflow, and any supplied `--current` document. It does not protect against an arbitrary change to those inputs.
 
 ### Accept debt explicitly
 

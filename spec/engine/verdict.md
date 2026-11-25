@@ -101,6 +101,8 @@ when nothing was accepted as worse.
   (`record`/`check`/`diff`), `mode` (`full` or `since`), `since` (the ref string
   when `mode` is `since`, else `null`), `only` (array, present only under
   `--only`: the measured dimension ids, deduplicated and sorted — see below),
+  `base_ref` (the string supplied to `check --base`, present on its JSON
+  verdicts after config loading; omitted when `--base` was not used),
   `excluded` (array, present whenever `only` is: the configured dimension ids
   `--only` left *unmeasured*, sorted — see below),
   `dry_run` (bool, present only when

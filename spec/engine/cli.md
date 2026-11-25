@@ -3,7 +3,7 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## CLI
 
 ```
-pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids>] [--current <path|->] [--write <target>] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
+pawl [command] [-c <config>] [--format <text|json>] [[--base <git-ref>] | [--since <ref>]] [--only <ids>] [--current <path|->] [--write <target>] [--dry-run] [--accept-worse] [-q|--quiet] [-h|--help]
 
   init                 scaffold a starter pawl.yaml (never overwrites)
   validate             check the config loads, without measuring anything
@@ -87,6 +87,11 @@ pawl [command] [-c <config>] [--format <text|json>] [--since <ref>] [--only <ids
 - `--since <ref>` scopes `check` (only) to lines changed in the **working
   tree** since `<ref>`, specified in [§ Diff-scoped checking](../commands/since.md#diff-scoped-checking).
   `--since` on any command other than `check` is a usage error (exit 2).
+- `--base <git-ref>` makes `check` compare its current measurements with the
+  snapshot committed at that ref. The working tree snapshot is not read.
+  Invalid refs, missing or malformed ref snapshots, and incompatible recorded
+  definitions are exit 2. `--base` is valid only on `check` and cannot be
+  combined with `--since`; see [§ `check --base`](../commands/check.md).
 - Unknown command → stderr message naming valid commands, exit 2.
 - Extra positional operands are usage errors (exit 2): `trend` takes at most
   one operand (the metric id) and `guard` one (the ref); every other

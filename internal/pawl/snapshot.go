@@ -9,10 +9,73 @@ import (
 	"strings"
 )
 
+// SnapshotShapeErrors validates a parsed (json.Unmarshal into any) snapshot's
+// shape — valid JSON alone is not a trustworthy baseline: a truncated or
+// hand-corrupted snapshot must not read as "consistent" for free.
+func SnapshotShapeErrors(parsed any) []string {
+	obj, ok := parsed.(map[string]any)
+	if !ok {
+		return []string{"snapshot is not an object"}
+	}
+	metrics, ok := obj["metrics"].(map[string]any)
+	if !ok {
+		return []string{"snapshot.metrics is missing or not an object"}
+	}
+	if len(metrics) == 0 {
+		return []string{"snapshot.metrics is empty"}
+	}
+	var errs []string
+	for _, id := range sortedKeysAny(metrics) {
+		metric, ok := metrics[id].(map[string]any)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("metric %q is not an object", id))
+			continue
+		}
+		if _, ok := metric["value"].(float64); !ok {
+			errs = append(errs, fmt.Sprintf("metric %q has no numeric value", id))
+		}
+		if raw, exists := metric["definition"]; exists {
+			definition, ok := raw.(string)
+			if !ok || !validDefinitionFingerprint(definition) {
+				errs = append(errs, fmt.Sprintf("metric %q has an invalid definition fingerprint", id))
+			}
+		}
+		if raw, exists := metric["direction"]; exists {
+			if _, ok := raw.(string); !ok {
+				errs = append(errs, fmt.Sprintf("metric %q has a non-string direction", id))
+			}
+		}
+		if raw, exists := metric["unit"]; exists {
+			if _, ok := raw.(string); !ok {
+				errs = append(errs, fmt.Sprintf("metric %q has a non-string unit", id))
+			}
+		}
+		if raw, exists := metric["breakdown"]; exists && raw != nil {
+			breakdown, ok := raw.(map[string]any)
+			if !ok {
+				errs = append(errs, fmt.Sprintf("metric %q has an invalid breakdown", id))
+			} else {
+				for _, value := range breakdown {
+					if _, ok := value.(float64); !ok {
+						errs = append(errs, fmt.Sprintf("metric %q has an invalid breakdown", id))
+						break
+					}
+				}
+			}
+		}
+		if raw, exists := metric["tolerance"]; exists && raw != nil {
+			if _, ok := raw.(float64); !ok {
+				errs = append(errs, fmt.Sprintf("metric %q has an invalid tolerance", id))
+			}
+		}
+	}
+	return errs
+}
+
 // ParseSnapshot decodes snapshot JSON into both the typed form (for
-// comparison) and the untyped form (for shape validation). Invalid JSON is
-// an error; shape validation is the caller's second step — the two failure
-// modes carry different messages.
+// comparison) and the untyped form (for shape validation). Recognized shape
+// errors are returned for caller-specific diagnostics; invalid JSON or any
+// typed decode error not covered by shape validation is an error.
 func ParseSnapshot(data []byte) (*Snapshot, any, error) {
 	var parsed any
 	if err := json.Unmarshal(data, &parsed); err != nil {
@@ -22,6 +85,9 @@ func ParseSnapshot(data []byte) (*Snapshot, any, error) {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		// Valid JSON of the wrong shape (e.g. a bare array): keep the untyped
 		// form so SnapshotShapeErrors can name the problem precisely.
+		if len(SnapshotShapeErrors(parsed)) == 0 {
+			return nil, nil, fmt.Errorf("snapshot has fields with invalid types: %w", err)
+		}
 		return &Snapshot{}, parsed, nil
 	}
 	return &snap, parsed, nil
