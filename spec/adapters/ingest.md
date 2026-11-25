@@ -130,8 +130,10 @@ lcov-only, so `functions` + `cobertura` is a config error), `min_files` and
   counters for the selected metric; Cobertura counts non-empty `<class
   filename>` attributes. Paths are trimmed, cleaned, canonicalized through
   symlinks, and compared relative to the canonical config directory, so
-  equivalent relative, absolute, and symlinked names count once. Paths outside
-  that directory are ignored, including Windows drive and UNC paths reported on
+  equivalent relative, absolute, and symlinked names count once. An unresolved
+  or dangling symlink and a symlink loop fail measurement; an ordinary missing
+  path without a symlink remains eligible as written. Paths outside that
+  directory are ignored, including Windows drive and UNC paths reported on
   another operating system. On Unix, forward-slash `//...` paths use normal
   absolute-path containment. Single-backslash rooted paths and drive-relative
   paths are ignored on all platforms because they cannot be safely resolved
