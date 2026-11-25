@@ -69,7 +69,8 @@ Regression detail lines (exact formats, `<n>` in minimal decimal notation):
 - scalar: `total <base> → <cur>`
 - per-file-count: `<file>  <baseCount> → <curCount>` (two spaces)
 - per-key-value: `<key>  <baseValue> → <curValue>` (two spaces)
-- per-key-value-strict: `<key>  <baseValue> → <curValue>` (new keys have base 0)
+- per-key-value-strict: `new key: <key>  0 → <curValue>` for a new key; shared-key
+  regressions keep `<key>  <baseValue> → <curValue>`
 
 A dimension present in config but absent from the snapshot is `new` — it cannot
 regress. (It enters the gate at the next `record`.)

@@ -208,7 +208,7 @@ func TestGuardViolationsStrictPerKeyFindsNewPath(t *testing.T) {
 	base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 1, Tolerance: &tolerance, Breakdown: map[string]float64{"old.txt": 11}}}
 	current := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 1, Tolerance: &tolerance, Breakdown: map[string]float64{"new.txt": 11}}}
 	violations, _ := pawl.GuardViolationsWithGates(base, current, map[string]pawl.GateMode{"a": pawl.GatePerKeyValueStrict})
-	wantViolations(t, violations, []string{"a: 1 → 1 (new.txt 0 → 11)"})
+	wantViolations(t, violations, []string{"a: 1 → 1 (new key: new.txt 0 → 11)"})
 }
 
 // The per-file detail is capped so a wide regression stays one line, and a

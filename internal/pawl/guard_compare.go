@@ -29,6 +29,7 @@ type FileGrowth struct {
 type KeyGrowth struct {
 	Key           string
 	Base, Current float64
+	NewKey        bool
 }
 
 // GuardViolation is one metric that worsened between two recorded snapshots,
@@ -64,7 +65,11 @@ func formatKeyGrowth(keys []KeyGrowth) string {
 			parts = append(parts, fmt.Sprintf("and %d more", len(keys)-keyGrowthShown))
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s %s → %s", k.Key, FormatNumber(k.Base), FormatNumber(k.Current)))
+		prefix := ""
+		if k.NewKey {
+			prefix = "new key: "
+		}
+		parts = append(parts, fmt.Sprintf("%s%s %s → %s", prefix, k.Key, FormatNumber(k.Base), FormatNumber(k.Current)))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -172,7 +177,7 @@ func guardKeyGrowth(gate GateMode, direction Direction, tolerance float64, base,
 	}
 	var out []KeyGrowth
 	for _, r := range perKeyRegressions(gate, direction, tolerance, base, cur) {
-		out = append(out, KeyGrowth{Key: r.Key, Base: r.Base, Current: r.Current})
+		out = append(out, KeyGrowth{Key: r.Key, Base: r.Base, Current: r.Current, NewKey: r.NewKey})
 	}
 	return out
 }

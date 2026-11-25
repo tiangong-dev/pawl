@@ -76,7 +76,9 @@ count rose — the same per-file predicate `check`, `record` and `--since` read,
 with no tolerance — and `Files` carries those rises, capped at 10 entries with
 the rest summarized as `and N more`. On a `per-key-value-strict` gate, shared
 keys use the recorded direction/tolerance and current-only keys fail from zero,
-regardless of tolerance. Other gates and absent ids compare the scalar alone.
+regardless of tolerance. Current-only key details are marked `new key`; JSON
+regression entries set `new_key: true` for them. Other gates and absent ids
+compare the scalar alone.
 `GuardViolations` is `GuardViolationsWithGates` with
 no gate map: the same scalar-only comparison it has always been.
 

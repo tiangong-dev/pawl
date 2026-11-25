@@ -175,7 +175,7 @@ func TestFileLengthStrictPerKeyRejectsNewPathDespiteToleranceAndSince(t *testing
 	writeFile(t, dir, "new.txt", nLines(11))
 	for _, args := range [][]string{{"check"}, {"check", "--since", base}} {
 		res := runPawl(t, dir, gitEnv(homeDir), args...)
-		if res.exit != 1 || !strings.Contains(res.stdout, "new.txt") {
+		if res.exit != 1 || !strings.Contains(res.stdout, "new key: new.txt") {
 			t.Fatalf("%v exit=%d, want strict new-key regression despite tolerance\nstdout=%s\nstderr=%s", args, res.exit, res.stdout, res.stderr)
 		}
 	}
@@ -224,7 +224,7 @@ func TestGuardStrictPerKeyTreatsRenamedPathAsNew(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
-	if res.exit != 1 || !strings.Contains(res.stdout, "new.txt 0 → 12") {
+	if res.exit != 1 || !strings.Contains(res.stdout, "new key: new.txt 0 → 12") {
 		t.Fatalf("renamed key exit=%d, want strict new-key guard failure\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 }

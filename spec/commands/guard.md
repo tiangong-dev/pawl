@@ -60,8 +60,8 @@ Then:
   accepts the metric's keyed regressions too.
 - A metric under `per-key-value-strict` applies the same direction and tolerance
   predicate as `per-key-value` to shared keys, and also fails for each key
-  present only in the current snapshot, reported as `key 0 → current` regardless
-  of tolerance. The mode uses literal key identity and does not query Git for
+  present only in the current snapshot, marked `new key` and reported as
+  `new key: <key> 0 → current` regardless of tolerance. The mode uses literal key identity and does not query Git for
   rename mapping: a renamed or copied path is new, and a rename that grows is
   also a failure.
 - Otherwise: consistency message, exit 0.

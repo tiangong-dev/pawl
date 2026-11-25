@@ -197,7 +197,9 @@ when nothing was accepted as worse.
   numeric line), `base` and `current` (the two compared numbers — for `total`
   the scalar values, for `per-file-count` the contributing location key's
   finding counts (the message also carries the file totals), for
-  `per-key-value` the key's values; for a strict-mode new key, base is 0), `message` (a human-readable detail line),
+  `per-key-value` the key's values; for a strict-mode new key, base is 0),
+  optional `new_key` (`true` only for a current-only key in strict mode),
+  `message` (a human-readable detail line),
   and `suppressed` (bool — `true` only in `--since` mode when this regression was
   exempted for falling outside the changed lines; always `false` in `full` mode).
 - Regressions within a metric are ordered as in text mode; `suppressed` ones are

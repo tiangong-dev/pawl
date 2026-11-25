@@ -56,6 +56,7 @@ type perFileRegression struct {
 type perKeyRegression struct {
 	Key           string
 	Base, Current float64
+	NewKey        bool
 }
 
 // perKeyRegressions is the shared predicate for check, annotations and guard.
@@ -69,7 +70,7 @@ func perKeyRegressions(gate GateMode, direction Direction, tolerance float64, ba
 		if exists && present && Worse(direction, baseValue, currentValue, tolerance) {
 			out = append(out, perKeyRegression{Key: key, Base: baseValue, Current: currentValue})
 		} else if !exists && present && gate == GatePerKeyValueStrict {
-			out = append(out, perKeyRegression{Key: key, Current: currentValue})
+			out = append(out, perKeyRegression{Key: key, Current: currentValue, NewKey: true})
 		}
 	}
 	return out
@@ -120,7 +121,11 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 		}
 	case GatePerKeyValue, GatePerKeyValueStrict:
 		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
-			out = append(out, fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current)))
+			prefix := ""
+			if r.NewKey {
+				prefix = "new key: "
+			}
+			out = append(out, fmt.Sprintf("%s%s  %s → %s", prefix, r.Key, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
 	}
 	return out
@@ -142,6 +147,7 @@ type Regression struct {
 	Current    float64 `json:"current"`
 	Message    string  `json:"message"`
 	Suppressed bool    `json:"suppressed"`
+	NewKey     bool    `json:"new_key,omitempty"`
 }
 
 // StructuredRegressions is the machine-readable twin of RegressionsOf. It emits
@@ -175,8 +181,14 @@ func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 		}
 	case GatePerKeyValue, GatePerKeyValueStrict:
 		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
-			out = append(out, keyRegression(string(spec.Gate), r.Key, r.Base, r.Current,
-				fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current))))
+			prefix := ""
+			if r.NewKey {
+				prefix = "new key: "
+			}
+			regression := keyRegression(string(spec.Gate), r.Key, r.Base, r.Current,
+				fmt.Sprintf("%s%s  %s → %s", prefix, r.Key, FormatNumber(r.Base), FormatNumber(r.Current)))
+			regression.NewKey = r.NewKey
+			out = append(out, regression)
 		}
 	}
 	return out
@@ -372,7 +384,11 @@ func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) 
 		}
 	case GatePerKeyValue, GatePerKeyValueStrict:
 		for _, r := range perKeyRegressions(spec.Gate, spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
-			out = append(out, annotationLine(id, title, r.Key, FormatNumber(r.Base)+" → "+FormatNumber(r.Current)))
+			detail := FormatNumber(r.Base) + " → " + FormatNumber(r.Current)
+			if r.NewKey {
+				detail = "new key " + detail
+			}
+			out = append(out, annotationLine(id, title, r.Key, detail))
 		}
 	}
 	if len(out) == 0 && Worse(spec.Direction, base.Value, cur.Value, spec.Tolerance) {
