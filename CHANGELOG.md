@@ -4,6 +4,11 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
+- `pawl guard` now checks shared breakdown keys for `per-key-value` dimensions,
+  using the baseline direction and tolerance, and fails when a still-configured
+  metric is missing from the working snapshot. Breakdown keys present in only
+  one snapshot remain outside this comparison.
+
 ## 0.9.0 — 2026-11-24
 
 ### Upgrade notes

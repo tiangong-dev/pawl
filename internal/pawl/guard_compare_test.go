@@ -1,6 +1,7 @@
 package pawl_test
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 )
 
 // The scalar comparison keeps its own entry point: GuardViolations(base, pr)
-// never reads a breakdown, so a per-file rise behind a flat total is invisible
+// never reads a breakdown, so a gated rise behind a flat total is invisible
 // to it, and GuardViolationsWithGates with no gate map is that same comparison.
 func TestGuardViolationsStaysScalarOnly(t *testing.T) {
 	base := map[string]pawl.Metric{"a": {
@@ -44,9 +45,8 @@ func TestGuardViolationsStaysScalarOnly(t *testing.T) {
 	})
 }
 
-// A per-file-count metric is compared the way check compares it: a file whose
-// offender count rose is a violation even when the scalar total held, while a
-// metric under any other gate keeps the scalar-only comparison.
+// Configured gate predicates are compared the way check compares them, while
+// other gates retain their scalar-only comparison.
 func TestGuardViolationsPerFileCount(t *testing.T) {
 	gates := map[string]pawl.GateMode{"a": pawl.GatePerFileCount}
 
@@ -142,7 +142,7 @@ func TestGuardViolationsPerFileCount(t *testing.T) {
 		wantViolations(t, violations, nil)
 	})
 
-	t.Run("a per-key-value metric is compared on its scalar alone", func(t *testing.T) {
+	t.Run("a shared per-key-value that worsens is reported despite a flat scalar", func(t *testing.T) {
 		base := map[string]pawl.Metric{"p": {
 			Direction: pawl.LowerIsBetter, Value: 2,
 			Breakdown: map[string]float64{"k1": 1, "k2": 1},
@@ -152,7 +152,41 @@ func TestGuardViolationsPerFileCount(t *testing.T) {
 			Breakdown: map[string]float64{"k1": 3, "k2": 0},
 		}}
 		violations, _ := pawl.GuardViolationsWithGates(base, pr, map[string]pawl.GateMode{"p": pawl.GatePerKeyValue})
-		wantViolations(t, violations, nil)
+		wantViolations(t, violations, []string{"p: 2 → 2 (k1 1 → 3)"})
+	})
+
+	t.Run("per-key-value uses direction and recorded tolerance", func(t *testing.T) {
+		for _, tc := range []struct {
+			direction     pawl.Direction
+			base, current float64
+			want          bool
+		}{
+			{pawl.LowerIsBetter, 10, 12, false}, {pawl.LowerIsBetter, 10, 13, true},
+			{pawl.HigherIsBetter, 10, 8, false}, {pawl.HigherIsBetter, 10, 7, true},
+		} {
+			tolerance := 2.0
+			base := map[string]pawl.Metric{"a": {Direction: tc.direction, Value: 1, Tolerance: &tolerance, Breakdown: map[string]float64{"same": tc.base, "old": 4}}}
+			pr := map[string]pawl.Metric{"a": {Direction: tc.direction, Value: 1, Tolerance: &tolerance, Breakdown: map[string]float64{"same": tc.current, "new": 99}}}
+			got, _ := pawl.GuardViolationsWithGates(base, pr, map[string]pawl.GateMode{"a": pawl.GatePerKeyValue})
+			if (len(got) > 0) != tc.want {
+				t.Fatalf("direction %s, %v → %v: violations %#v, want=%v", tc.direction, tc.base, tc.current, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("per-key detail is capped", func(t *testing.T) {
+		baseBreakdown, currentBreakdown := map[string]float64{}, map[string]float64{}
+		for i := 0; i < 12; i++ {
+			key := fmt.Sprintf("f%02d.go:1", i)
+			baseBreakdown[key], currentBreakdown[key] = 1, 3
+		}
+		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 12, Breakdown: baseBreakdown}}
+		current := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 12, Breakdown: currentBreakdown}}
+		violations, _ := pawl.GuardViolationsWithGates(base, current, map[string]pawl.GateMode{"a": pawl.GatePerKeyValue})
+		line := violations[0].String()
+		if !strings.Contains(line, "and 2 more") || strings.Count(line, " → ") != 11 {
+			t.Fatalf("key detail should list ten entries and summary: %s", line)
+		}
 	})
 
 	t.Run("a redefined metric stays out of the comparison", func(t *testing.T) {
