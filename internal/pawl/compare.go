@@ -53,6 +53,25 @@ type perFileRegression struct {
 	Contributors []string
 }
 
+type perKeyRegression struct {
+	Key           string
+	Base, Current float64
+}
+
+// perKeyRegressions is the shared per-key predicate for check and guard. Only
+// keys present in both snapshots are comparable; output follows sorted baseline
+// keys.
+func perKeyRegressions(direction Direction, tolerance float64, base, cur map[string]float64) []perKeyRegression {
+	var out []perKeyRegression
+	for _, key := range sortedKeys(base) {
+		value, ok := cur[key]
+		if ok && Worse(direction, base[key], value, tolerance) {
+			out = append(out, perKeyRegression{Key: key, Base: base[key], Current: value})
+		}
+	}
+	return out
+}
+
 // perFileRegressions is the single source of truth for per-file-count
 // comparison. A file regresses when its summed finding count rises. The
 // contributors are the new or increased path:line keys that explain that
@@ -97,11 +116,8 @@ func RegressionsOf(spec GateSpec, base, cur MetricSample) []string {
 			out = append(out, fmt.Sprintf("%s  %s → %s", r.File, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
 	case GatePerKeyValue:
-		for _, k := range sortedKeys(base.Breakdown) {
-			cv, ok := cur.Breakdown[k]
-			if ok && Worse(spec.Direction, base.Breakdown[k], cv, spec.Tolerance) {
-				out = append(out, fmt.Sprintf("%s  %s → %s", k, FormatNumber(base.Breakdown[k]), FormatNumber(cv)))
-			}
+		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+			out = append(out, fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current)))
 		}
 	}
 	return out
@@ -155,11 +171,9 @@ func StructuredRegressions(spec GateSpec, base, cur MetricSample) []Regression {
 			}
 		}
 	case GatePerKeyValue:
-		for _, k := range sortedKeys(base.Breakdown) {
-			if cv, ok := cur.Breakdown[k]; ok && Worse(spec.Direction, base.Breakdown[k], cv, spec.Tolerance) {
-				out = append(out, keyRegression("per-key-value", k, base.Breakdown[k], cv,
-					fmt.Sprintf("%s  %s → %s", k, FormatNumber(base.Breakdown[k]), FormatNumber(cv))))
-			}
+		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+			out = append(out, keyRegression("per-key-value", r.Key, r.Base, r.Current,
+				fmt.Sprintf("%s  %s → %s", r.Key, FormatNumber(r.Base), FormatNumber(r.Current))))
 		}
 	}
 	return out
@@ -237,11 +251,21 @@ func RedefinedMetrics(base, current map[string]Metric) []string {
 	for _, id := range sortedMetricKeys(base) {
 		before := base[id]
 		after, ok := current[id]
-		if ok && !definitionsCompatible(before.Definition, after.Definition) {
+		if ok && !guardDefinitionsCompatible(before.Definition, after.Definition) {
 			out = append(out, id)
 		}
 	}
 	return out
+}
+
+// guardDefinitionsCompatible allows a legacy base without a fingerprint to be
+// upgraded, but once a base records its definition the working snapshot cannot
+// erase that evidence and fall back to the legacy state.
+func guardDefinitionsCompatible(base, current string) bool {
+	if base == "" {
+		return true
+	}
+	return current != "" && base == current
 }
 
 // WorseDimension is one configured dimension whose fresh measurement
@@ -318,10 +342,8 @@ func GitHubAnnotations(id, title string, spec GateSpec, base, cur MetricSample) 
 			}
 		}
 	case GatePerKeyValue:
-		for _, k := range sortedKeys(base.Breakdown) {
-			if cv, ok := cur.Breakdown[k]; ok && Worse(spec.Direction, base.Breakdown[k], cv, spec.Tolerance) {
-				out = append(out, annotationLine(id, title, k, FormatNumber(base.Breakdown[k])+" → "+FormatNumber(cv)))
-			}
+		for _, r := range perKeyRegressions(spec.Direction, spec.Tolerance, base.Breakdown, cur.Breakdown) {
+			out = append(out, annotationLine(id, title, r.Key, FormatNumber(r.Base)+" → "+FormatNumber(r.Current)))
 		}
 	}
 	if len(out) == 0 && Worse(spec.Direction, base.Value, cur.Value, spec.Tolerance) {

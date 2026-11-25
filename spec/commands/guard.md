@@ -3,10 +3,10 @@ Part of the pawl engine contract. See [spec/README.md](../README.md).
 ## guard
 
 `pawl guard <ref>` compares the working tree's snapshot file against the
-version committed at `<ref>` (in CI: the PR's base branch). This is what stops a
-hand-edited snapshot from faking a pass — `check` alone only verifies consistency
-between the snapshot on disk and a fresh measurement, not that the file's history
-is honest.
+version committed at `<ref>` (in CI: the PR's base branch). It detects comparable
+recorded regressions; `check` verifies consistency between the snapshot on disk
+and a fresh measurement. Neither proves that a snapshot's breakdown is complete:
+for example, removing a breakdown key can hide its growth from both comparisons.
 
 Two-stage git lookup (the stages must not be conflated):
 
@@ -21,16 +21,19 @@ Then:
 - Snapshot content at `<ref>` not valid JSON → exit 2.
 - No snapshot in the working tree → exit 2 (`run \`pawl record\` first`).
 - Shape errors on either side (prefixed `<ref>:` / `working tree:`) → exit 2.
-- A metric present at `<ref>` but missing from the working tree snapshot →
-  warning (`::warning::…` under `GITHUB_ACTIONS`, `⚠️  …` otherwise), not a
-  failure — deleting a dimension is legitimate; the orphan check covers honesty.
+- A metric present at `<ref>` but missing from the working tree snapshot is a
+  failure if it is still configured; guard names the missing configured metric.
+  If its dimension was removed from the current config, it remains a warning
+  (`::warning::…` under `GITHUB_ACTIONS`, `⚠️  …` otherwise).
 - A metric whose `definition` changed is reported as redefined and skipped for
   numeric comparison: values from different measurement semantics are not
   ordered. A redefined metric must be confirmed by a `Pawl-Redefine: <id>`
   trailer in `<ref>..HEAD` (one line may name several ids, separated by commas);
   without it guard prints the missing trailer and exits 1. A trailer line that
   names no id is ignored rather than treated as an error. Legacy metrics with no
-  definition compare as before.
+  definition in the base can be upgraded without a trailer. Once the base has a
+  definition, removing it from the current snapshot is a redefinition too; it
+  cannot turn a fingerprinted metric back into the legacy state.
 - A metric that worsened (per its recorded `direction`, default
   `lower-is-better` if missing; slack = its recorded `tolerance`) is a
   violation **unless** a `Pawl-Accept` trailer in `<ref>..HEAD` covers it (see
@@ -48,6 +51,17 @@ Then:
   author accepted that metric's debt, wherever inside it the count moved. Git's
   detected renames are mapped first — see
   [§ Renames in the per-file comparison](#renames-in-the-per-file-comparison).
+- A metric under a `per-key-value` gate is compared for each breakdown key
+  present in both snapshots. It uses the same per-key predicate as `check`, but
+  uses the baseline snapshot's recorded direction and tolerance; `check` uses
+  the current config's parameters. A worsening shared key fails even when the
+  scalar is unchanged or improves. Keys present in only one snapshot retain the
+  existing behavior and are ignored by this comparison. The violation lists up
+  to 10 worsening keys, then `and N more`. `Pawl-Accept` remains metric-level:
+  its declared value is checked against the scalar total, and a covering trailer
+  accepts the metric's keyed regressions too. Since `Pawl-Accept` is metric-level,
+  its scalar limit does not constrain individual key values or the number of
+  new keys when the scalar total stays within that limit.
 - Otherwise: consistency message, exit 0.
 
 A metric present only in the working tree (newly added dimension) is ignored.
@@ -88,16 +102,22 @@ base counts git attributes to the same file — it never widens what passes:
   That is the stricter reading: every file is compared under its own path.
 
 Renames reach only a `per-file-count` metric; `total` and `per-key-value`
-compare exactly as they always have.
+compare breakdown keys without rename remapping.
+
+Legacy snapshots without a definition fingerprint cannot prove which measurement
+semantics produced their values. Guard keeps them comparable for migration and
+uses the direction and tolerance stored in the baseline; a current config change
+cannot retroactively identify or reinterpret those old values.
 
 ### Where guard gets a gate mode
 
 Guard's per-file comparison resolves each metric's gate mode from the working
 tree's `pawl.yaml`: a snapshot records `direction` and `tolerance` but no gate.
-This is not a bypass. `gate` is part of the definition fingerprint, so relaxing
+When both snapshots have definition fingerprints, `gate` is part of that fingerprint, so relaxing
 a dimension from `per-file-count` to `total` redefines it — guard then demands
 the `Pawl-Redefine` trailer instead of silently comparing under the weaker
 predicate — and a snapshot whose recorded definition no longer matches the
-config is what `check` refuses (exit 2) as could-not-measure. A metric with no
+config is what `check` refuses (exit 2) as could-not-measure. Legacy snapshots
+without fingerprints cannot provide that protection. A metric with no
 configured dimension (an orphan) has no gate mode here and is compared on its
 scalar alone.
