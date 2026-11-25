@@ -421,24 +421,7 @@ func validateBuiltinOptions(builtin string, options map[string]any) error {
 			}
 		}
 	case builtinCoverage:
-		if file, _ := options["file"].(string); file == "" {
-			return fmt.Errorf("builtin %q requires a file option (the coverage report)", builtin)
-		}
-		format, _ := options["format"].(string)
-		switch format {
-		case "lcov", "cobertura":
-		default:
-			return fmt.Errorf("builtin %q requires a format option of lcov or cobertura, got %q", builtin, format)
-		}
-		metric, _ := options["metric"].(string)
-		switch metric {
-		case "", "lines", "branches", "functions":
-		default:
-			return fmt.Errorf("builtin %q metric must be lines, branches or functions, got %q", builtin, metric)
-		}
-		if metric == "functions" && format == "cobertura" {
-			return fmt.Errorf("builtin %q metric functions is lcov-only (cobertura has no functions rate)", builtin)
-		}
+		return validateCoverageBuiltinOptions(options)
 	case builtinLines:
 		// Only reachable from a dimension: validateAnalyzer handles the lines
 		// kind before it gets here. A dimension has nowhere to put the one run

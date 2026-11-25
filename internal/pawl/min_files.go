@@ -1,6 +1,21 @@
 package pawl
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
+
+func validateCoverageFloorOption(options map[string]any, key string) error {
+	value, exists := options[key]
+	if !exists {
+		return nil
+	}
+	n, ok := numberOption(options, key)
+	if !ok || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || math.Trunc(n) != n {
+		return fmt.Errorf("%s must be a non-negative integer, got %v", key, value)
+	}
+	return nil
+}
 
 // validateMinFilesOption verifies a completeness floor only where an adapter
 // can prove its scanned-file count.

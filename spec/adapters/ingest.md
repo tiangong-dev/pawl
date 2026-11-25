@@ -97,9 +97,10 @@ machine formats `json-value` cannot read (lcov's text, cobertura's XML). (A
 `coverage-summary.json` is already a `json-value` `total.lines.pct` read.)
 Options: `file` (string, required — the report, relative to the config dir),
 `format` (string, required — `"lcov"` or `"cobertura"`), `command` (optional —
-produces the file, with the stale-artifact guard), and `metric` (optional,
+produces the file, with the stale-artifact guard), `metric` (optional,
 default `"lines"` — `"lines"`, `"branches"`, or `"functions"`; `functions` is
-lcov-only, so `functions` + `cobertura` is a config error).
+lcov-only, so `functions` + `cobertura` is a config error), `min_files` and
+`min_found` (optional non-negative integer completeness floors).
 - **lcov**: sum the `LF`/`LH` (lines), `FNF`/`FNH` (functions), `BRF`/`BRH`
   (branches) records across the file; `value` = `hit / found × 100`. Counters
   must be **non-negative finite** numbers and `hit ≤ found`; a negative, `NaN`,
@@ -124,6 +125,28 @@ lcov-only, so `functions` + `cobertura` is a config error).
   attribute × 100. The root must be `<coverage>` and the rate must be a fraction
   in `[0,1]`; a non-`<coverage>` root, or a rate that is `NaN`/`Inf`/`<0`/`>1`,
   is a measurement failure.
+- `min_files` requires at least that many distinct valid source filenames in
+  the report. LCOV counts `SF:` paths only for records with a complete pair of
+  counters for the selected metric; Cobertura counts non-empty `<class
+  filename>` attributes. Paths are cleaned and compared as absolute paths
+  relative to the config directory, so equivalent relative and absolute names
+  count once. A report with no valid filename evidence fails even when the
+  configured floor is zero. Cobertura class filenames are resolved against the
+  report's root `<sources>` entries and any package-level `<sources>` entries
+  (relative roots start at the config directory); paths outside the config
+  directory are ignored. If one relative class name
+  resolves to multiple in-root paths, measurement fails as ambiguous.
+- `min_found` requires at least that many found units in the denominator for
+  the selected metric. LCOV uses its summed `LF`/`FNF`/`BRF` counters;
+  Cobertura uses root `lines-valid` or `branches-valid`. If the requested file
+  or denominator is absent or invalid, measurement fails. For Cobertura, a
+  present zero denominator is evidence and satisfies `min_found: 0`; a positive
+  floor fails. LCOV's existing zero-total-denominator failure remains in force
+  because the percentage cannot be computed.
+- These floors check report size, not project coverage scope. They cannot
+  prove that the report contains every expected source file or language; choose
+  the floor based on the project's expected report. Pawl does not infer a
+  language from paths or silently treat one language's report as complete.
 - A report with **zero** of the requested unit found (lcov `found` total 0, or a
   missing cobertura rate attribute) is a measurement failure (`no <metric>
   coverage data`) — never a silent 0 or 100.

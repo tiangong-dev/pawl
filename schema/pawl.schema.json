@@ -255,6 +255,11 @@
       "minimum": 0,
       "description": "Optional completeness floor: at least this many included regular files must be scanned after excludes apply, or the run is a measurement failure — never a recorded zero."
     },
+    "minFound": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional completeness floor: the report must prove at least this many found units for the selected metric, or the run is a measurement failure."
+    },
     "fileScanOptions": {
       "type": "object",
       "description": "Options of the file-length / file-bytes repository scan.",
@@ -458,7 +463,7 @@
     },
     "coverageOptions": {
       "type": "object",
-      "description": "Options of the coverage builtin: a coverage percentage from an lcov or cobertura report.",
+      "description": "Options of the coverage builtin: a coverage percentage from an lcov or cobertura report. Optional min_files and min_found completeness floors are checked against evidence in that report.",
       "properties": {
         "file": {
           "type": "string",
@@ -479,6 +484,14 @@
           "type": "string",
           "minLength": 1,
           "description": "Optional. Runs the tests that produce the report; a pre-existing file is deleted first."
+        },
+        "min_files": {
+          "$ref": "#/definitions/minFiles",
+          "description": "Optional completeness floor: distinct valid source filenames in the report. This proves report size, not that the expected project source scope is covered."
+        },
+        "min_found": {
+          "$ref": "#/definitions/minFound",
+          "description": "Optional completeness floor: found units (the denominator) for the selected metric."
         }
       },
       "required": ["file", "format"],
