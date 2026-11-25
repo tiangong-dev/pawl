@@ -266,11 +266,21 @@ func RedefinedMetrics(base, current map[string]Metric) []string {
 	for _, id := range sortedMetricKeys(base) {
 		before := base[id]
 		after, ok := current[id]
-		if ok && !definitionsCompatible(before.Definition, after.Definition) {
+		if ok && !guardDefinitionsCompatible(before.Definition, after.Definition) {
 			out = append(out, id)
 		}
 	}
 	return out
+}
+
+// guardDefinitionsCompatible allows a legacy base without a fingerprint to be
+// upgraded, but once a base records its definition the working snapshot cannot
+// erase that evidence and fall back to the legacy state.
+func guardDefinitionsCompatible(base, current string) bool {
+	if base == "" {
+		return true
+	}
+	return current != "" && base == current
 }
 
 // WorseDimension is one configured dimension whose fresh measurement

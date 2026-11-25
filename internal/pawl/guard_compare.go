@@ -222,7 +222,7 @@ func GuardViolationsWithGatesAndRenames(base, pr map[string]Metric, gates map[st
 			removed = append(removed, id)
 			continue
 		}
-		if !definitionsCompatible(b.Definition, p.Definition) {
+		if !guardDefinitionsCompatible(b.Definition, p.Definition) {
 			continue
 		}
 		direction := b.Direction
