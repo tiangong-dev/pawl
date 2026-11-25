@@ -4,17 +4,51 @@ Release notes and upgrade instructions. Review the breaking changes before updat
 
 ## Unreleased
 
-- `pawl guard` now checks shared breakdown keys for `per-key-value` dimensions,
-  using the baseline direction and tolerance, and fails when a still-configured
-  metric is missing from the working snapshot. Breakdown keys present in only
-  one snapshot remain outside this comparison.
+## 0.10.0 — 2026-11-25
 
-- Added opt-in `per-key-value-strict`: shared keys use the ordinary direction
-  and tolerance check, while every current-only key fails from zero regardless
-  of tolerance. Keys are literal identities, so path renames and copies count as
-  new; `--since` enforces this mode at full strength. Selecting it changes the
-  metric definition and requires an explicit redefinition of an existing
-  baseline.
+### Upgrade notes
+
+- `pawl guard` now checks shared breakdown keys for `per-key-value` dimensions
+  and fails if a still-configured metric is missing from the working snapshot.
+  This can expose regressions that the scalar total concealed. A
+  `Pawl-Accept: <id> <value>` trailer still accepts a metric as a whole: it
+  does not cap individual key values or the number of worsening keys. Keys
+  present in only one snapshot remain outside the ordinary `per-key-value`
+  comparison.
+- Guard now rejects removal of a measurement-definition fingerprint from a
+  metric that had one in the base snapshot. Confirm an intentional definition
+  change with `Pawl-Redefine: <id>`; this prevents reverting a fingerprint from
+  being treated as legacy compatibility.
+- `per-key-value-strict` is an opt-in gate for dimensions where every new key
+  must fail, even within tolerance. Shared keys use the usual direction and
+  tolerance. Keys are literal identities: renaming or copying a path counts as
+  a new key. Selecting this gate changes the metric definition fingerprint and
+  requires explicit redefinition when changing an existing baseline. With
+  `--since`, strict mode is enforced at full strength. With regressions
+  present, `check` no longer suggests a `record` command that would be
+  rejected; base-ref checks also do not produce record hints.
+- `pawl check --base <git-ref>` compares current measurements against the
+  snapshot committed at that ref, ignoring the working-tree snapshot. The
+  selected ref is trusted input, as are the current config, measurement
+  commands, any document supplied with `--current`, and CI workflow that
+  choose the ref and invoke Pawl; this option does not protect against
+  weakening those inputs. `--base` cannot be combined with `--since`, and
+  acceptance/redefinition trailers do not waive this check.
+- Coverage `min_files` and `min_found` options can reject unexpectedly small
+  LCOV or Cobertura reports. They check report size only; they cannot prove the
+  report includes every expected source file or language. With `min_found`,
+  duplicate LCOV records for the same resolved source fail because distinct
+  denominator units cannot be established; ambiguous Cobertura source
+  candidates also fail measurement.
+
+### Added
+
+- Added `per-key-value-strict`, an opt-in gate that fails on every current-only
+  breakdown key regardless of tolerance.
+- Added `pawl check --base <git-ref>` to compare current measurements with a
+  committed snapshot.
+- Added `min_files` and `min_found` completeness floors to LCOV and Cobertura
+  coverage reports.
 
 ## 0.9.0 — 2026-11-24
 
