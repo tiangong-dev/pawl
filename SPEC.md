@@ -15,6 +15,7 @@ change. Don't read the rest.
 |---|---|
 | Scope boundary (design decision) | [spec/engine/scope.md](spec/engine/scope.md) |
 | CLI | [spec/engine/cli.md](spec/engine/cli.md) |
+| Trusted-base checking (`check --base`) | [spec/commands/check.md](spec/commands/check.md) |
 | init | [spec/commands/init.md](spec/commands/init.md) |
 | Config — `pawl.yaml` | [spec/commands/config.md](spec/commands/config.md) |
 | Exec adapter contract | [spec/adapters/exec.md](spec/adapters/exec.md) |

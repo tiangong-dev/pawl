@@ -16,6 +16,7 @@ type jsonReport struct {
 	Command       string              `json:"command"`
 	Mode          string              `json:"mode"`
 	Since         *string             `json:"since"`
+	BaseRef       *string             `json:"base_ref"`
 	Only          []string            `json:"only"`
 	Excluded      []string            `json:"excluded"`
 	DryRun        bool                `json:"dry_run"`
