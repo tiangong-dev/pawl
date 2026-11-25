@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -115,7 +114,10 @@ func lcovCoverage(data []byte, metric, root string, collectFiles, requireFound b
 	// percentage). A record with neither counter of the selected metric is
 	// fine.
 	var found, hit float64
+	var foundEvidence float64
 	files := map[string]struct{}{}
+	seenEvidenceSources := map[string]struct{}{}
+	var pathResolver *coveragePathResolver
 	inRecord := false
 	recSource := ""
 	recFound, recHit := 0, 0
@@ -139,13 +141,26 @@ func lcovCoverage(data []byte, metric, root string, collectFiles, requireFound b
 			return fmt.Errorf("lcov report is malformed: a record has more %s hit (%v) than %s found (%v)",
 				metric, recHitVal, metric, recFoundVal)
 		}
-		if collectFiles && recFound == 1 && recSource != "" {
-			paths, err := coverageSourcePaths(root, nil, recSource)
+		if (collectFiles || requireFound) && recFound == 1 && recSource != "" {
+			if pathResolver == nil {
+				pathResolver = newCoveragePathResolver()
+			}
+			paths, err := coverageSourcePathsWithResolver(root, nil, recSource, pathResolver)
 			if err != nil {
 				return fmt.Errorf("lcov SF path %q: %w", recSource, err)
 			}
-			for _, path := range paths {
-				files[path] = struct{}{}
+			if len(paths) > 0 {
+				path := paths[0]
+				if collectFiles {
+					files[path] = struct{}{}
+				}
+				if requireFound {
+					if _, duplicate := seenEvidenceSources[path]; duplicate {
+						return fmt.Errorf("lcov report has duplicate source evidence for %q; min_found requires distinct source records", recSource)
+					}
+					seenEvidenceSources[path] = struct{}{}
+					foundEvidence += recFoundVal
+				}
 			}
 		}
 		recFound, recHit = 0, 0
@@ -199,6 +214,9 @@ func lcovCoverage(data []byte, metric, root string, collectFiles, requireFound b
 	if err := flushRecord(); err != nil {
 		return 0, 0, nil, err
 	}
+	if requireFound && len(seenEvidenceSources) == 0 {
+		return 0, 0, nil, fmt.Errorf("lcov report has no valid in-directory SF source evidence for min_found")
+	}
 	// Each counter is finite, but the cross-record sum can still overflow
 	// float64 — an overflowed found reads hit/Inf as a fabricated 0%.
 	if math.IsInf(found, 0) || math.IsInf(hit, 0) {
@@ -210,7 +228,11 @@ func lcovCoverage(data []byte, metric, root string, collectFiles, requireFound b
 	if hit > found {
 		return 0, 0, nil, fmt.Errorf("lcov report has more %s hit (%v) than found (%v)", metric, hit, found)
 	}
-	return hit / found * 100, found, files, nil
+	percentage := hit / found * 100
+	if requireFound {
+		found = foundEvidence
+	}
+	return percentage, found, files, nil
 }
 
 // coberturaPercent reads the root <coverage> element's line-rate / branch-rate
@@ -222,6 +244,7 @@ func coberturaPercent(data []byte, metric string) (float64, error) {
 }
 
 func coberturaCoverage(data []byte, metric, root string, collectFiles, requireFound bool) (float64, float64, map[string]struct{}, error) {
+	var pathResolver *coveragePathResolver
 	var cov struct {
 		XMLName       xml.Name
 		LineRate      *float64 `xml:"line-rate,attr"`
@@ -265,18 +288,28 @@ func coberturaCoverage(data []byte, metric, root string, collectFiles, requireFo
 	}
 	files := map[string]struct{}{}
 	if collectFiles {
+		pathResolver = newCoveragePathResolver()
 		for _, pkg := range cov.Packages {
 			sourceRoots := append(append([]string(nil), cov.Sources...), pkg.Sources...)
 			for _, class := range pkg.Classes {
 				if strings.TrimSpace(class.Filename) == "" {
 					continue
 				}
-				paths, err := coverageSourcePaths(root, sourceRoots, class.Filename)
+				paths, err := coverageSourcePathsWithResolver(root, sourceRoots, class.Filename, pathResolver)
 				if err != nil {
 					return 0, 0, nil, fmt.Errorf("cobertura class filename %q: %w", class.Filename, err)
 				}
 				if len(paths) > 1 {
-					return 0, 0, nil, fmt.Errorf("cobertura class filename %q resolves to multiple source files under <sources>", class.Filename)
+					paths, err = existingCoverageCandidatesWithResolver(paths, pathResolver)
+					if err != nil {
+						return 0, 0, nil, fmt.Errorf("cobertura class filename %q: %w", class.Filename, err)
+					}
+					if len(paths) == 0 {
+						return 0, 0, nil, fmt.Errorf("cobertura class filename %q has multiple source roots but no existing in-root source file", class.Filename)
+					}
+					if len(paths) > 1 {
+						return 0, 0, nil, fmt.Errorf("cobertura class filename %q resolves to multiple existing source files under <sources>", class.Filename)
+					}
 				}
 				for _, path := range paths {
 					files[path] = struct{}{}
@@ -298,45 +331,4 @@ func coberturaCoverage(data []byte, metric, root string, collectFiles, requireFo
 		return 0, 0, nil, fmt.Errorf("no %s coverage data: cobertura report has no %s-valid denominator", metric, metric)
 	}
 	return *rate * 100, found, files, nil
-}
-
-func coverageSourcePaths(root string, sourceRoots []string, source string) ([]string, error) {
-	source = filepath.FromSlash(strings.TrimSpace(source))
-	if source == "" {
-		return nil, nil
-	}
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
-	}
-	root = filepath.Clean(root)
-	bases := sourceRoots
-	if filepath.IsAbs(source) {
-		bases = []string{""}
-	} else if len(bases) == 0 {
-		bases = []string{root}
-	}
-	paths := map[string]struct{}{}
-	for _, base := range bases {
-		if filepath.IsAbs(source) {
-			base = ""
-		} else if !filepath.IsAbs(base) {
-			base = filepath.Join(root, filepath.FromSlash(base))
-		}
-		candidate := filepath.Clean(filepath.Join(base, source))
-		abs, err := filepath.Abs(candidate)
-		if err != nil {
-			return nil, err
-		}
-		rel, err := filepath.Rel(root, abs)
-		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			continue
-		}
-		paths[filepath.Clean(abs)] = struct{}{}
-	}
-	out := make([]string, 0, len(paths))
-	for path := range paths {
-		out = append(out, path)
-	}
-	return out, nil
 }

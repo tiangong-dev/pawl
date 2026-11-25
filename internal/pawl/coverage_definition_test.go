@@ -1,32 +1,8 @@
 package pawl
 
 import (
-	"path/filepath"
 	"testing"
 )
-
-func TestCoverageSourcePathsNormalizeAndStayWithinRoot(t *testing.T) {
-	root := t.TempDir()
-	inside := filepath.Join(root, "src", "a.c")
-	for _, source := range []string{"src/a.c", inside} {
-		paths, err := coverageSourcePaths(root, nil, source)
-		if err != nil {
-			t.Fatalf("coverageSourcePaths(%q): %v", source, err)
-		}
-		if len(paths) != 1 || paths[0] != inside {
-			t.Errorf("coverageSourcePaths(%q) = %v, want [%s]", source, paths, inside)
-		}
-	}
-	for _, source := range []string{"../outside.c", filepath.Join(filepath.Dir(root), "outside.c")} {
-		paths, err := coverageSourcePaths(root, nil, source)
-		if err != nil {
-			t.Fatalf("coverageSourcePaths(%q): %v", source, err)
-		}
-		if len(paths) != 0 {
-			t.Errorf("coverageSourcePaths(%q) = %v, want no paths outside root", source, paths)
-		}
-	}
-}
 
 func TestCoverageCompletenessFloorsDoNotRedefineMeasurement(t *testing.T) {
 	cfg := &Config{}
