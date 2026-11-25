@@ -31,7 +31,9 @@ Then:
   trailer in `<ref>..HEAD` (one line may name several ids, separated by commas);
   without it guard prints the missing trailer and exits 1. A trailer line that
   names no id is ignored rather than treated as an error. Legacy metrics with no
-  definition compare as before.
+  definition in the base can be upgraded without a trailer. Once the base has a
+  definition, removing it from the current snapshot is a redefinition too; it
+  cannot turn a fingerprinted metric back into the legacy state.
 - A metric that worsened (per its recorded `direction`, default
   `lower-is-better` if missing; slack = its recorded `tolerance`) is a
   violation **unless** a `Pawl-Accept` trailer in `<ref>..HEAD` covers it (see
@@ -57,7 +59,9 @@ Then:
   existing behavior and are ignored by this comparison. The violation lists up
   to 10 worsening keys, then `and N more`. `Pawl-Accept` remains metric-level:
   its declared value is checked against the scalar total, and a covering trailer
-  accepts the metric's keyed regressions too.
+  accepts the metric's keyed regressions too. Since `Pawl-Accept` is metric-level,
+  its scalar limit does not constrain individual key values or the number of
+  new keys when the scalar total stays within that limit.
 - Otherwise: consistency message, exit 0.
 
 A metric present only in the working tree (newly added dimension) is ignored.

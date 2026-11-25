@@ -64,14 +64,13 @@ func TestGuardViolations(t *testing.T) {
 		wantViolations(t, violations2, nil)
 	})
 
-	t.Run("legacy and fingerprinted metrics remain numerically comparable", func(t *testing.T) {
+	t.Run("legacy snapshots can upgrade but fingerprinted snapshots cannot downgrade", func(t *testing.T) {
 		fingerprint := "v1:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		for _, tc := range []struct {
 			name       string
 			base, next string
 		}{
 			{name: "legacy baseline upgraded", base: "", next: fingerprint},
-			{name: "legacy working snapshot", base: fingerprint, next: ""},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: tc.base, Value: 5}}
@@ -82,6 +81,12 @@ func TestGuardViolations(t *testing.T) {
 				wantLines(t, pawl.RedefinedMetrics(base, pr), nil)
 			})
 		}
+		base := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Definition: fingerprint, Value: 5}}
+		pr := map[string]pawl.Metric{"a": {Direction: pawl.LowerIsBetter, Value: 50}}
+		violations, removed := pawl.GuardViolations(base, pr)
+		wantViolations(t, violations, nil)
+		wantLines(t, removed, nil)
+		wantLines(t, pawl.RedefinedMetrics(base, pr), []string{"a"})
 	})
 
 	t.Run("a redefined metric is not numerically compared", func(t *testing.T) {

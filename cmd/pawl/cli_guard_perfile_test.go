@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -299,5 +300,48 @@ func TestGuardGateChangeLandsInRedefinition(t *testing.T) {
 	gitCommitAll(t, dir, homeDir, "the gate change is deliberate\n\nPawl-Redefine: markers\n")
 	if res2 := runPawl(t, dir, gitEnv(homeDir), "guard", base); res2.exit != 0 {
 		t.Fatalf("exit = %d, want 0 with the trailer\nstdout=%s\nstderr=%s", res2.exit, res2.stdout, res2.stderr)
+	}
+}
+
+func TestGuardRejectsRemovedDefinitionFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := initGitRepo(t, dir)
+	writeFile(t, dir, "pawl.yaml", guardPerFileConfig)
+	writeFile(t, dir, "a.go", "package a\n// MARKER one\n// MARKER two\n")
+	writeFile(t, dir, "b.go", "package b\n")
+	gitCommitAll(t, dir, homeDir, "two offenders in a.go")
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record exit = %d, want 0\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	base := gitCommitAll(t, dir, homeDir, "record the per-file-count baseline")
+
+	writeFile(t, dir, "pawl.yaml", strings.Replace(guardPerFileConfig, `gate: "per-file-count"`, `gate: "total"`, 1))
+	writeFile(t, dir, "a.go", "package a\n// MARKER one\n")
+	writeFile(t, dir, "b.go", "package b\n// MARKER two\n")
+	if rec := runPawl(t, dir, gitEnv(homeDir), "record"); rec.exit != 0 {
+		t.Fatalf("record after the gate change exit = %d, want 0\nstdout=%s\nstderr=%s", rec.exit, rec.stdout, rec.stderr)
+	}
+	current, err := os.ReadFile(dirJoin(dir, "pawl.snapshot.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition := readSnapshot(t, dirJoin(dir, "pawl.snapshot.json")).Metrics["markers"].Definition
+	withDefinition := `"definition": "` + definition + `",` + "\n"
+	if !strings.Contains(string(current), withDefinition) {
+		t.Fatalf("snapshot does not contain expected definition field %q:\n%s", definition, current)
+	}
+	writeFile(t, dir, "pawl.snapshot.json", strings.Replace(string(current), withDefinition, "", 1))
+
+	res := runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 1 {
+		t.Fatalf("exit = %d, want 1 after deleting a present baseline fingerprint\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "Pawl-Redefine: markers") {
+		t.Fatalf("stdout does not require confirmation for the removed fingerprint:\n%s", res.stdout)
+	}
+	gitCommitAll(t, dir, homeDir, "confirm the missing definition as a redefinition\n\nPawl-Redefine: markers\n")
+	res = runPawl(t, dir, gitEnv(homeDir), "guard", base)
+	if res.exit != 0 || !strings.Contains(res.stdout, "measurement definition changed") {
+		t.Fatalf("explicit redefinition should permit the legacy-shaped current snapshot: exit=%d\nstdout=%s\nstderr=%s", res.exit, res.stdout, res.stderr)
 	}
 }
